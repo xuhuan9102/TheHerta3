@@ -7,6 +7,7 @@ from ..utils.collection_utils import CollectionUtils, CollectionColor
 from ..utils.config_utils import ConfigUtils
 
 from ..common.migoto_format import M_Key, ObjDataModel, M_Condition, D3D11GameType
+from ..utils.tips_utils import TipUtils
 
 from .mesh_exporter import MeshExporter
 
@@ -113,9 +114,9 @@ class BranchModel:
                     m_key.initialize_vk_str = collection_name_splits[0]
                     m_key.initialize_value = int(collection_name_splits[1])
                 
-                # 如果未解析到人工设定的初始值，则从按键列表里默认选一个
+                # 如果未解析到人工设定的初始值，则提示
                 if m_key.initialize_vk_str == "":
-                    m_key.key_value = ConfigUtils.get_mod_switch_key(M_GlobalKeyCounter.global_key_index)
+                    TipUtils.raise_collection_name_parse_error(unknown_collection.name)
 
                 # 创建的key要加入全局key列表
                 self.keyname_mkey_dict[m_key.key_name] = m_key
@@ -170,10 +171,10 @@ class BranchModel:
                         m_key.initialize_vk_str = collection_name_splits[0]
                         m_key.initialize_value = int(collection_name_splits[1])
                         break
-                
-                # 如果未解析到人工设定的初始值，则从按键列表里默认选一个
+                    
+                # 如果未解析到人工设定的初始值，则提示
                 if m_key.initialize_vk_str == "":
-                    m_key.key_value = ConfigUtils.get_mod_switch_key(M_GlobalKeyCounter.global_key_index)
+                    TipUtils.raise_collection_name_parse_error("多个绿色按键切换")
 
 
                 # 创建的key要加入全局key列表

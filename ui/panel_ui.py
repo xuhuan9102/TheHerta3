@@ -24,7 +24,7 @@ class PanelBasicInformation(bpy.types.Panel):
         GlobalConfig.read_from_main_json()
 
         self.bl_label =  "TheHerta3 v" +  PluginConfig.get_version_string()
-        layout.label(text="SSMT缓存文件夹路径: " + GlobalConfig.dbmtlocation)
+        layout.label(text=TR.translate("SSMT缓存文件夹路径: ") + GlobalConfig.dbmtlocation)
         layout.label(text=TR.translate("当前游戏: ") + GlobalConfig.gamename)
         layout.label(text=TR.translate("当前逻辑: ") + GlobalConfig.logic_name)
         layout.label(text=TR.translate("当前工作空间: ") + GlobalConfig.workspacename)
@@ -45,7 +45,3 @@ class PanelBasicInformation(bpy.types.Panel):
             layout.label(text="RecalculateCOLOR: " + str(recalculate_color))
 
         
-
-
-
-    

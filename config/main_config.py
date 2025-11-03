@@ -39,53 +39,35 @@ class GlobalConfig:
     dbmtlocation = ""
     current_game_migoto_folder = ""
     logic_name = ""
-        
-    @classmethod
-    def save_dbmt_path(cls):
-        # 获取当前脚本文件的路径
-        script_path = os.path.abspath(__file__)
-
-        # 获取当前插件的工作目录
-        plugin_directory = os.path.dirname(script_path)
-
-        # 构建保存文件的路径
-        config_path = os.path.join(plugin_directory, 'Config.json')
-
-        # 创建字典对象
-        config = {'dbmt_path': bpy.context.scene.dbmt_path.path}
-
-        # 将字典对象转换为 JSON 格式的字符串
-        json_data = json.dumps(config)
-
-        # 保存到文件
-        with open(config_path, 'w') as file:
-            file.write(json_data)
 
     @classmethod
     def read_from_main_json(cls) :
-        main_json_path = GlobalConfig.path_main_json()
+        try:
+            main_json_path = GlobalConfig.path_main_json()
 
-        # 先从main_json_path里读取dbmt位置，也就是dbmt总工作空间的位置
-        # 在新架构中，总工作空间位置已不会再发生改变，所以用户只需要选择一次就可以了
-        if os.path.exists(main_json_path):
-            main_setting_file = open(main_json_path)
-            main_setting_json = json.load(main_setting_file)
-            main_setting_file.close()
-            cls.workspacename = main_setting_json.get("CurrentWorkSpace","")
-            cls.gamename = main_setting_json.get("CurrentGameName","")
-            cls.dbmtlocation = main_setting_json.get("DBMTWorkFolder","") + "\\"
-        else:
-            print("Can't find: " + main_json_path)
-        
-        game_config_json_path = os.path.join(cls.dbmtlocation,"Games\\" + cls.gamename + "\\Config.json")
-        if os.path.exists(game_config_json_path):
-            game_config_json_file = open(game_config_json_path)
-            game_config_json = json.load(game_config_json_file)
-            game_config_json_file.close()
+            # 先从main_json_path里读取dbmt位置，也就是dbmt总工作空间的位置
+            # 在新架构中，总工作空间位置已不会再发生改变，所以用户只需要选择一次就可以了
+            if os.path.exists(main_json_path):
+                main_setting_file = open(main_json_path)
+                main_setting_json = json.load(main_setting_file)
+                main_setting_file.close()
+                cls.workspacename = main_setting_json.get("CurrentWorkSpace","")
+                cls.gamename = main_setting_json.get("CurrentGameName","")
+                cls.dbmtlocation = main_setting_json.get("DBMTWorkFolder","") + "\\"
+            else:
+                print("Can't find: " + main_json_path)
+            
+            game_config_json_path = os.path.join(cls.dbmtlocation,"Games\\" + cls.gamename + "\\Config.json")
+            if os.path.exists(game_config_json_path):
+                game_config_json_file = open(game_config_json_path)
+                game_config_json = json.load(game_config_json_file)
+                game_config_json_file.close()
 
-            cls.current_game_migoto_folder = game_config_json.get("3DmigotoPath","")
-            cls.logic_name = game_config_json.get("LogicName","")
-
+                cls.current_game_migoto_folder = game_config_json.get("3DmigotoPath","")
+                cls.logic_name = game_config_json.get("LogicName","")
+        except Exception as e:
+            print(e)
+            
     @classmethod
     def base_path(cls):
         return cls.dbmtlocation
