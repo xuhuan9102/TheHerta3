@@ -653,7 +653,8 @@ class MeshImporter:
                     tex_image.image = bpy.data.images.load(texture_path)
 
                     # 因为tga格式贴图有alpha通道，所以必须用CHANNEL_PACKED才能显示正常颜色
-                    tex_image.image.alpha_mode = "CHANNEL_PACKED"
+                    # PxncAcd: 然而材质预览时通道打包/Channel Packed 也会坠机，改用 None
+                    tex_image.image.alpha_mode = "NONE"
 
                     # 放置节点位置
                     tex_image.location.x = bsdf.location.x - 400
