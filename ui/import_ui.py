@@ -155,6 +155,7 @@ class SSMTImportAllFromCurrentWorkSpaceV3(bpy.types.Operator):
     bl_idname = "ssmt.import_all_from_workspace_v3"
     bl_label = TR.translate("一键导入当前工作空间内容")
     bl_description = "一键导入当前工作空间文件夹下所有的DrawIB对应的模型为SSMT集合架构"
+    bl_options = {'REGISTER'}
 
     def execute(self, context):
         if GlobalConfig.workspacename == "":

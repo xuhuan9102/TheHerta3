@@ -206,6 +206,18 @@ def register():
         min=3
     )
 
+    # 添加快捷键
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon
+    if kc:
+        km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
+        kmi = km.keymap_items.new(SSMTImportAllFromCurrentWorkSpaceV3.bl_idname, 
+                                    type='I', value='PRESS', 
+                                    ctrl=True, alt=True, shift=False)
+        kmi = km.keymap_items.new(SSMTGenerateMod.bl_idname, 
+                                    type='O', value='PRESS',
+                                    ctrl=True, alt=True, shift=False)
+
 
     addon_updater_ops.register(bl_info)
     
@@ -241,6 +253,20 @@ def unregister():
 
     del bpy.types.Scene.submesh_start
     del bpy.types.Scene.submesh_count
+
+    # 移除快捷键
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon
+    if kc:
+        km = kc.keymaps.get('3D View')
+        if km:
+            for kmi in km.keymap_items:
+                if kmi.idname in [SSMTImportAllFromCurrentWorkSpaceV3.bl_idname, SSMTGenerateMod.bl_idname]:
+                    km.keymap_items.remove(kmi)
+    
+    for clss in reversed(cls):
+        bpy.utils.unregister_class(clss)
+
     
 
 if __name__ == "__main__":

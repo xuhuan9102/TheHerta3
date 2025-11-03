@@ -111,6 +111,7 @@ class SSMTGenerateMod(bpy.types.Operator):
     bl_idname = "ssmt.generate_mod"
     bl_label = TR.translate("生成Mod")
     bl_description = "一键导出当前工作空间集合中的Mod，隐藏显示的模型不会被导出，隐藏的DrawIB为名称的集合不会被导出。使用前确保取消隐藏所有要导出的模型以及集合"
+    bl_options = {'REGISTER'}
 
     def execute(self, context):
         TimerUtils.Start("GenerateMod Mod")

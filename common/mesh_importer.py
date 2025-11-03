@@ -628,6 +628,11 @@ class MeshImporter:
         texture_suffix = "_DiffuseMap.dds"
         texture_path = TextureUtils.find_texture(texture_prefix, texture_suffix, directory)
 
+        # 添加置换贴图
+        normal_path = None
+        normal_suffix = "_NormalMap.dds"
+        normal_path = TextureUtils.find_texture(texture_prefix, normal_suffix, directory)
+
         # Nico: 这里如果没有检测到对应贴图则不创建材质，也不新建BSDF
         # 否则会造成合并模型后，UV编辑界面选择不同材质的UV会跳到不同UV贴图界面导致无法正常编辑的问题
         if texture_path is not None:
@@ -667,6 +672,21 @@ class MeshImporter:
                     material.node_tree.links.new(bsdf.inputs['Base Color'], tex_image.outputs['Color'])
                     # 链接Alpha到Alpha
                     material.node_tree.links.new(bsdf.inputs['Alpha'], tex_image.outputs['Alpha'])
+
+                if normal_path is not None:
+                    norm_image = material.node_tree.nodes.new('ShaderNodeTexImage')
+                    norm_image.image = bpy.data.images.load(normal_path)
+                    norm_image.location.x = bsdf.location.x - 800
+                    norm_image.location.y = bsdf.location.y - 400
+
+                    norm_map = material.node_tree.nodes.new('ShaderNodeNormalMap')
+                    norm_map.location.x = bsdf.location.x - 400
+                    norm_map.location.y = bsdf.location.y - 400
+                    norm_map.uv_map = "TEXCOORD.xy"
+                    material.node_tree.links.new(norm_map.inputs['Color'], norm_image.outputs['Color'])
+                    material.node_tree.links.new(bsdf.inputs['Normal'], norm_map.outputs['Normal'])
+
+
 
                 # Применение материала к мешу (Materials applied to bags)
                 if obj.data.materials:
