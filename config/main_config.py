@@ -3,7 +3,6 @@ import os
 import json
 
 
-from ..config.properties_dbmt_path import Properties_DBMT_Path
 from ..config.properties_generate_mod import Properties_GenerateMod
 
 '''
@@ -159,10 +158,7 @@ class GlobalConfig:
     # 定义基础的Json文件路径
     @classmethod
     def path_main_json(cls):
-        if Properties_DBMT_Path.use_specified_dbmt():
-            return os.path.join(Properties_DBMT_Path.path(),"Configs\\SSMT3-Config.json")
-        else:
-            return os.path.join(GlobalConfig.path_appdata_local(), "SSMT3-Config.json")
+        return os.path.join(GlobalConfig.path_appdata_local(), "SSMT3-Config.json")
         
 
 

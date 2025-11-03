@@ -19,7 +19,6 @@ from bpy.types import SpaceView3D
 
 # 全局配置
 from .config.properties_global import Properties_Global
-from .config.properties_dbmt_path import Properties_DBMT_Path
 from .config.properties_import_model import Properties_ImportModel
 from .config.properties_generate_mod import Properties_GenerateMod
 from .config.properties_wwmi import Properties_WWMI
@@ -116,13 +115,10 @@ register_classes = (
     # 全局配置
     Properties_ImportModel,
     Properties_WWMI,
-    Properties_DBMT_Path,
     Properties_Global,
     Properties_GenerateMod,
     Properties_ExtractModel,
 
-    # DBMT所在位置
-    OBJECT_OT_select_dbmt_folder,
 
     # 导入3Dmigoto模型功能
     Import3DMigotoRaw,
@@ -192,7 +188,6 @@ def register():
     for cls in register_classes:
         bpy.utils.register_class(cls)
 
-    bpy.types.Scene.dbmt_path = bpy.props.PointerProperty(type=Properties_DBMT_Path)
     bpy.types.Scene.properties_wwmi = bpy.props.PointerProperty(type=Properties_WWMI)
     bpy.types.Scene.properties_import_model = bpy.props.PointerProperty(type=Properties_ImportModel)
     bpy.types.Scene.properties_generate_mod = bpy.props.PointerProperty(type=Properties_GenerateMod)
