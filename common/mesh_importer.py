@@ -248,14 +248,14 @@ class MeshImporter:
         MeshImporter.set_import_attributes(obj=obj, mbf=mbf)
         MeshImporter.initialize_mesh(mesh, mbf)
 
+        
+
         blend_indices = {}
         blend_weights = {}
         texcoords = {}
         shapekeys = {}
         use_normals = False
         normals = []
-
-
 
 
         for element in mbf.fmt_file.elements:
@@ -457,6 +457,9 @@ class MeshImporter:
         # 根据vb文件的顶点数设置mesh的顶点数
         mesh.vertices.add(mbf.vb_vertex_count)
 
+        # Blender 5.1 Alpha某次更新后，必须得加这么一句，不然的话导入就是点集，原理未知反正加上就行了，不管那么多了。
+        mesh.update()
+
     @classmethod
     def import_uv_layers(cls,mesh, obj, texcoords):
         # 预先获取所有循环的顶点索引并转换为numpy数组
@@ -651,9 +654,6 @@ class MeshImporter:
                     tex_image = material.node_tree.nodes.new('ShaderNodeTexImage')
 
                     tex_image.image = bpy.data.images.load(texture_path)
-
-                    # 因为tga格式贴图有alpha通道，所以必须用CHANNEL_PACKED才能显示正常颜色
-                    tex_image.image.alpha_mode = "CHANNEL_PACKED"
 
                     # 放置节点位置
                     tex_image.location.x = bsdf.location.x - 400
