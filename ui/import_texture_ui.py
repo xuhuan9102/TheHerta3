@@ -148,7 +148,7 @@ class SSMT_ImportTexture_WM_OT_AutoDetectTextureFolder(Operator):
         pcoll.clear()
         
         # 支持的图片格式
-        image_extensions = ('.jpg', '.jpeg', '.png', '.tiff', '.bmp', '.tga', '.exr', '.hdr')
+        image_extensions = ('.jpg', '.jpeg', '.png', '.tiff', '.bmp', '.tga', '.exr', '.hdr','.dds')
         
         # 遍历文件夹，收集图片文件
         image_count = 0
@@ -278,61 +278,46 @@ class SSMTImportAllReversed(bpy.types.Operator):
     bl_description = "把上一次一键逆向出来的所有模型全部导入到Blender，然后你可以手动筛选并删除错误的数据类型，流程上更加方便。"
 
     def execute(self, context):
-        if GlobalConfig.workspacename == "":
-            self.report({"ERROR"},"Please select your WorkSpace in SSMT before import.")
-        elif not os.path.exists(GlobalConfig.path_workspace_folder()):
-            self.report({"ERROR"},"WorkSpace Folder Didn't exists, Please create a WorkSpace in SSMT before import " + GlobalConfig.path_workspace_folder())
-        else:
-            reverse_result_config_path = GlobalConfig.path_reverse_result_config()
-            if not os.path.exists(reverse_result_config_path):
-                self.report({"ERROR"},"未找到ReverseResult.json，请先运行一键逆向生成此配置，此功能至少需要SSMT2.2.4或以上版本生效")
-                return {'FINISHED'}
+        reverse_output_folder_path = GlobalConfig.path_reverse_output_folder()
+        if not os.path.exists(reverse_output_folder_path):
+            self.report({"ERROR"},"当前一键逆向结果中标注的文件夹位置不存在，请重新运行一键逆向")
+            return {'FINISHED'}
+        print("测试导入")
+
+        total_folder_name = os.path.basename(reverse_output_folder_path)
+
+        reverse_collection = CollectionUtils.create_new_collection(collection_name=total_folder_name,color_tag=CollectionColor.Red)
+        bpy.context.scene.collection.children.link(reverse_collection)
+
+        # 获取所有子文件夹
+        subfolder_path_list = [f.path for f in os.scandir(reverse_output_folder_path) if f.is_dir()]
+
+        for subfolder_path in subfolder_path_list:
             
-            reverse_result_dict = JsonUtils.LoadFromFile(reverse_result_config_path)
-            reverse_output_folder_path = reverse_result_dict.get("ReverseOutputFolder",None)
-            if reverse_output_folder_path is None:
-                self.report({"ERROR"},"找到ReverseResult.json，但其中的ReverseOutputFolder字段为空")
-                return {'FINISHED'}
-            
-            if not os.path.exists(reverse_output_folder_path):
-                self.report({"ERROR"},"当前一键逆向结果中标注的文件夹位置不存在，请重新运行一键逆向")
-                return {'FINISHED'}
-            print("测试导入")
+            datatype_folder_name = os.path.basename(subfolder_path)
 
-            total_folder_name = os.path.basename(reverse_output_folder_path)
+            datatype_collection = CollectionUtils.create_new_collection(collection_name=datatype_folder_name,color_tag=CollectionColor.White, link_to_parent_collection_name=reverse_collection.name)
 
-            reverse_collection = CollectionUtils.create_new_collection(collection_name=total_folder_name,color_tag=CollectionColor.Red)
-            bpy.context.scene.collection.children.link(reverse_collection)
+            # 获取所有.fmt文件
+            fmt_files = []
+            for file in os.listdir(subfolder_path):
+                if file.endswith('.fmt'):
+                    fmt_files.append(os.path.join(subfolder_path, file))
 
-            # 获取所有子文件夹
-            subfolder_path_list = [f.path for f in os.scandir(reverse_output_folder_path) if f.is_dir()]
+            for fmt_filepath in fmt_files:
+                # 获取带后缀的文件名
+                filename_with_extension = os.path.basename(fmt_filepath)
+                # 去掉后缀
+                filename_without_extension = os.path.splitext(filename_with_extension)[0]
+                # 调用导入功能
+                mbf = MigotoBinaryFile(fmt_path=fmt_filepath,mesh_name=filename_without_extension)
+                obj_result = MeshImporter.create_mesh_obj_from_mbf(mbf=mbf)
 
-            for subfolder_path in subfolder_path_list:
-                
-                datatype_folder_name = os.path.basename(subfolder_path)
+                datatype_collection.objects.link(obj_result)
+                # 这里先链接SourceCollection，确保它在上面
 
-                datatype_collection = CollectionUtils.create_new_collection(collection_name=datatype_folder_name,color_tag=CollectionColor.White, link_to_parent_collection_name=reverse_collection.name)
-
-                # 获取所有.fmt文件
-                fmt_files = []
-                for file in os.listdir(subfolder_path):
-                    if file.endswith('.fmt'):
-                        fmt_files.append(os.path.join(subfolder_path, file))
-
-                for fmt_filepath in fmt_files:
-                    # 获取带后缀的文件名
-                    filename_with_extension = os.path.basename(fmt_filepath)
-                    # 去掉后缀
-                    filename_without_extension = os.path.splitext(filename_with_extension)[0]
-                    # 调用导入功能
-                    mbf = MigotoBinaryFile(fmt_path=fmt_filepath,mesh_name=filename_without_extension)
-                    obj_result = MeshImporter.create_mesh_obj_from_mbf(mbf=mbf)
-
-                    datatype_collection.objects.link(obj_result)
-                    # 这里先链接SourceCollection，确保它在上面
-
-            # 随后把图片路径指定为当前路径
-            reload_textures_from_folder(reverse_output_folder_path)
+        # 随后把图片路径指定为当前路径
+        reload_textures_from_folder(reverse_output_folder_path)
 
         return {'FINISHED'}
 
@@ -370,7 +355,7 @@ class SSMT_ImportTexture_VIEW3D_PT_ImageMaterialPanel(Panel):
         if scene.image_list:
             row = layout.row()
             row.template_list(
-                "SSMT_ImportTexture_IMAGE_UL_List",  # 修正为正确的类名
+                "SSMT_UL_FastImportTextureList",  # 修正为正确的类名
                 "Image List", 
                 scene, 
                 "image_list", 

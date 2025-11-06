@@ -77,8 +77,21 @@ class GlobalConfig:
         return os.path.join(GlobalConfig.base_path(),"Configs\\")
     
     @classmethod
-    def path_reverse_result_config(cls):
-        return os.path.join(GlobalConfig.path_configs_folder(),"ReverseResult.json")
+    def path_reverse_output_folder(cls):
+        sword_config_path = os.path.join(GlobalConfig.path_appdata_local(), "Sword-Config.json")
+
+        # 先从main_json_path里读取dbmt位置，也就是dbmt总工作空间的位置
+        # 在新架构中，总工作空间位置已不会再发生改变，所以用户只需要选择一次就可以了
+        if os.path.exists(sword_config_path):
+            main_setting_file = open(sword_config_path)
+            main_setting_json = json.load(main_setting_file)
+            main_setting_file.close()
+            reverse_output_folder = main_setting_json.get("ReverseOutputFolder","") + "\\"
+            
+            print(reverse_output_folder)
+            return reverse_output_folder
+        else:
+            return ""
 
     @classmethod
     def path_mods_folder(cls):
