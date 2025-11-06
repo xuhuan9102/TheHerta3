@@ -681,6 +681,8 @@ class MeshImporter:
                     norm_image.image = bpy.data.images.load(normal_path)
                     norm_image.location.x = bsdf.location.x - 800
                     norm_image.location.y = bsdf.location.y - 400
+                    norm_image.image.colorspace_settings.is_data = True
+                    norm_image.image.colorspace_settings.name = 'Non-Color'  # 设置为非颜色数据
 
                     norm_map = material.node_tree.nodes.new('ShaderNodeNormalMap')
                     norm_map.location.x = bsdf.location.x - 400
