@@ -28,7 +28,7 @@ bl_info = {
     "name": "TheHerta3",
     "description": "SSMT3.0 Series's Blender Plugin.",
     "blender": (5, 1, 0),
-    "version": (3, 0, 2),
+    "version": (3, 0, 3),
     "location": "View3D",
     "category": "Generic"
 }
