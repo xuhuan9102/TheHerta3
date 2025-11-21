@@ -18,7 +18,7 @@ from ..utils.shapekey_utils import ShapeKeyUtils
 
 
 from .extracted_object import ExtractedObject, ExtractedObjectHelper
-from ..common.migoto_format import M_DrawIndexed, TextureReplace,ObjDataModel
+from ..common.migoto_format import M_DrawIndexed,ObjDataModel
 from ..config.import_config import ImportConfig
 
 from .branch_model import BranchModel

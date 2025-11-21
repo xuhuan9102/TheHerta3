@@ -10,7 +10,7 @@ from ..utils.collection_utils import *
 from ..config.main_config import *
 from ..utils.json_utils import *
 from ..utils.timer_utils import *
-from ..common.migoto_format import M_DrawIndexed, TextureReplace,ObjDataModel
+from ..common.migoto_format import M_DrawIndexed,ObjDataModel
 from ..config.import_config import ImportConfig
 
 from .branch_model import BranchModel

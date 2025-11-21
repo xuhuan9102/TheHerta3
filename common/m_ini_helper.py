@@ -41,7 +41,7 @@ class M_IniHelperV2:
     @classmethod
     def generate_hash_style_texture_ini(cls,ini_builder:M_IniBuilder,drawib_drawibmodel_dict:dict[str,DrawIBModel]):
         '''
-        Generate Hash style TextureReplace.ini
+        Hash风格贴图
         '''
         if Properties_GenerateMod.forbid_auto_texture_ini():
             return
@@ -50,10 +50,10 @@ class M_IniHelperV2:
         # 先统计当前标记的具有Slot风格的Hash值，后续Render里搞图片的时候跳过这些
         slot_style_texture_hash_list = []
         for draw_ib_model in drawib_drawibmodel_dict.values():
-            for texture_file_name in draw_ib_model.import_config.TextureResource_Name_FileName_Dict.values():
-                if "_Slot_" in texture_file_name:
-                    texture_hash = texture_file_name.split("_")[2]
-                    slot_style_texture_hash_list.append(texture_hash)
+            for texture_markup_info_list in draw_ib_model.import_config.partname_texturemarkinfolist_dict.values():
+                for texture_markup_info in texture_markup_info_list:
+                    if texture_markup_info.mark_type == "Slot":
+                        slot_style_texture_hash_list.append(texture_markup_info.mark_hash)
                     
         repeat_hash_list = []
         # 遍历当前drawib的Render文件夹
@@ -63,33 +63,32 @@ class M_IniHelperV2:
             render_texture_files = os.listdir(render_texture_folder_path)
 
             # 添加标记的Hash风格贴图
-            for texture_file_name in draw_ib_model.import_config.TextureResource_Name_FileName_Dict.values():
-                if "_Hash_" in texture_file_name:
-                    texture_hash = texture_file_name.split("_")[2]
-
-                    if texture_hash in repeat_hash_list:
+            for texture_markup_info_list in draw_ib_model.import_config.partname_texturemarkinfolist_dict.values():
+                for texture_markup_info in texture_markup_info_list:
+                    if texture_markup_info.mark_type != "Hash":
                         continue
-                    repeat_hash_list.append(texture_hash)
 
-                    original_texture_file_path = GlobalConfig.path_extract_gametype_folder(draw_ib=draw_ib,gametype_name=draw_ib_model.d3d11GameType.GameTypeName) + texture_file_name
+                    if texture_markup_info.mark_hash in repeat_hash_list:
+                        continue
+                    else:
+                        repeat_hash_list.append(texture_markup_info.mark_hash)
 
-                    # same hash usually won't exists in two folder.
+                    original_texture_file_path = GlobalConfig.path_extract_gametype_folder(draw_ib=draw_ib,gametype_name=draw_ib_model.d3d11GameType.GameTypeName) + texture_markup_info.mark_filename
                     if not os.path.exists(original_texture_file_path):
                         continue
 
-                    
-                    target_texture_file_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib) + texture_file_name
+                    target_texture_file_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib) + texture_markup_info.get_hash_style_filename()
                     
                     resource_and_textureoverride_texture_section = M_IniSection(M_SectionType.ResourceAndTextureOverride_Texture)
-                    resource_and_textureoverride_texture_section.append("[Resource_Texture_" + texture_hash + "]")
-                    resource_and_textureoverride_texture_section.append("filename = Texture/" + texture_file_name)
+                    resource_and_textureoverride_texture_section.append("[Resource_Texture_" + texture_markup_info.mark_hash + "]")
+                    resource_and_textureoverride_texture_section.append("filename = Texture/" + texture_markup_info.get_hash_style_filename())
                     resource_and_textureoverride_texture_section.new_line()
 
-                    resource_and_textureoverride_texture_section.append("[TextureOverride_" + texture_hash + "]")
-                    resource_and_textureoverride_texture_section.append("; " + texture_file_name)
-                    resource_and_textureoverride_texture_section.append("hash = " + texture_hash)
+                    resource_and_textureoverride_texture_section.append("[TextureOverride_" + texture_markup_info.mark_hash + "]")
+                    resource_and_textureoverride_texture_section.append("; " + texture_markup_info.mark_filename)
+                    resource_and_textureoverride_texture_section.append("hash = " + texture_markup_info.mark_hash)
                     resource_and_textureoverride_texture_section.append("match_priority = 0")
-                    resource_and_textureoverride_texture_section.append("this = Resource_Texture_" + texture_hash)
+                    resource_and_textureoverride_texture_section.append("this = Resource_Texture_" + texture_markup_info.mark_hash)
                     resource_and_textureoverride_texture_section.new_line()
 
                     ini_builder.append_section(resource_and_textureoverride_texture_section)
@@ -156,17 +155,22 @@ class M_IniHelperV2:
         Move all textures from extracted game type folder to generate mod Texture folder.
         Only works in default slot style texture.
         '''
+        print("move_slot_style_textures::start")
         if Properties_GenerateMod.forbid_auto_texture_ini():
             return
         
-        for texture_filename in draw_ib_model.import_config.TextureResource_Name_FileName_Dict.values():
-            # 只有槽位风格会移动到目标位置
-            if "_Slot_" in texture_filename:
-                target_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib_model.draw_ib) + texture_filename
-                source_path = draw_ib_model.import_config.extract_gametype_folder_path + texture_filename
+        for texture_markup_info_list in draw_ib_model.import_config.partname_texturemarkinfolist_dict.values():
+            for texture_markup_info in texture_markup_info_list:
+                # 只有槽位风格会移动到目标位置
+                if texture_markup_info.mark_type != "Slot":
+                    continue
+
+                target_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib_model.draw_ib) + texture_markup_info.mark_filename
+                source_path = draw_ib_model.import_config.extract_gametype_folder_path + texture_markup_info.mark_filename
                 
                 # only overwrite when there is no texture file exists.
                 if not os.path.exists(target_path):
+                    print("Move Texture File: " + texture_markup_info.mark_filename)
                     shutil.copy2(source_path,target_path)
 
     @classmethod

@@ -15,8 +15,21 @@ from ..utils.format_utils import Fatal
 
 from .main_config import GlobalConfig
 
-from ..common.migoto_format import D3D11GameType, TextureReplace
+from ..common.migoto_format import D3D11GameType
 
+class TextureMarkUpInfo:
+    def  __init__(self):
+        self.mark_name:str = ""
+        self.mark_type:str = ""
+        self.mark_hash:str = ""
+        self.mark_slot:str = ""
+        self.mark_filename:str = ""
+    
+    def get_resource_name(self):
+        return "Resource-" + self.mark_filename.split(".")[0]
+    
+    def get_hash_style_filename(self):
+        return self.mark_hash + "-" + self.mark_name + "." + self.mark_filename.split(".")[1]
 
 @dataclass
 class ImportConfig:
@@ -37,8 +50,8 @@ class ImportConfig:
     vertex_limit_hash: str = ""
     work_game_type: str = ""
     
-    TextureResource_Name_FileName_Dict: Dict[str, str] = field(init=False,default_factory=dict)  # 自动贴图配置项
-    PartName_SlotTextureReplaceDict_Dict: Dict[str, Dict[str, TextureReplace]] = field(init=False,default_factory=dict)  # 自动贴图配置项
+    # 全新的贴图标记设计
+    partname_texturemarkinfolist_dict:Dict[str,list[TextureMarkUpInfo]] = field(init=False,default_factory=dict)
 
     def __post_init__(self):
         workspace_import_json_path = os.path.join(GlobalConfig.path_workspace_folder(), "Import.json")
@@ -73,29 +86,34 @@ class ImportConfig:
         self.original_vertex_count = tmp_json_dict.get("OriginalVertexCount",0)
 
         # 自动贴图依赖于这个字典
-        partname_textureresourcereplace_dict:dict[str,str] = tmp_json_dict["PartNameTextureResourceReplaceList"]
+        partname_texturemarkupinfolist_jsondict = tmp_json_dict["ComponentTextureMarkUpInfoListDict"]
+
 
         print("读取配置: " + tmp_json_path)
         # print(partname_textureresourcereplace_dict)
-        for partname, texture_resource_replace_list in partname_textureresourcereplace_dict.items():
-            slot_texture_replace_dict = {}
-            for texture_resource_replace in texture_resource_replace_list:
-                splits = texture_resource_replace.split("=")
-                slot_name = splits[0].strip()
-                texture_filename = splits[1].strip()
+        for partname, texture_markup_info_dict_list in partname_texturemarkupinfolist_jsondict.items():
 
-                resource_name = "Resource_" + os.path.splitext(texture_filename)[0]
+            texture_markup_info_list = []
 
-                filename_splits = os.path.splitext(texture_filename)[0].split("_")
-                texture_hash = filename_splits[2]
+            for texture_markup_info_dict in texture_markup_info_dict_list:
+                markup_info = TextureMarkUpInfo()
+                markup_info.mark_name = texture_markup_info_dict["MarkName"]
+                markup_info.mark_type = texture_markup_info_dict["MarkType"]
+                markup_info.mark_slot = texture_markup_info_dict["MarkSlot"]
+                markup_info.mark_hash = texture_markup_info_dict["MarkHash"]
+                markup_info.mark_filename = texture_markup_info_dict["MarkFileName"]
 
-                texture_replace = TextureReplace()
-                texture_replace.hash = texture_hash
-                texture_replace.resource_name = resource_name
-                texture_replace.style = filename_splits[3]
+                texture_markup_info_list.append(markup_info)
 
-                slot_texture_replace_dict[slot_name] = texture_replace
+            self.partname_texturemarkinfolist_dict[partname] = texture_markup_info_list
 
-                self.TextureResource_Name_FileName_Dict[resource_name] = texture_filename
 
-            self.PartName_SlotTextureReplaceDict_Dict[partname] = slot_texture_replace_dict
+
+
+
+                
+
+
+                
+
+

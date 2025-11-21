@@ -328,7 +328,7 @@ class SSMT_ImportTexture_VIEW3D_PT_ImageMaterialPanel(Panel):
     bl_idname = "VIEW3D_PT_image_material_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'TheHerta'
+    bl_category = 'Sword'
     bl_options = {'DEFAULT_CLOSED'}
     
     def draw(self, context):

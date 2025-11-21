@@ -29,6 +29,20 @@ class Properties_GenerateMod(bpy.types.PropertyGroup):
         '''
         return bpy.context.scene.properties_generate_mod.zzz_use_slot_fix
     
+    gimi_use_orfix: bpy.props.BoolProperty(
+        name="槽位风格贴图使用ORFix",
+        description="在使用槽位风格贴图标记时，如果偷懒不想在版本更新时维护由于贴图槽位变化导致的贴图损坏问题，可以勾选此选项将问题交给ORFix维护者来解决，仅GIMI可用",
+        default=False
+    ) # type: ignore
+
+    @classmethod
+    def gimi_use_orfix(cls):
+        '''
+        bpy.context.scene.properties_generate_mod.gimi_use_orfix
+        '''
+        return bpy.context.scene.properties_generate_mod.gimi_use_orfix
+    
+    
     forbid_auto_texture_ini: bpy.props.BoolProperty(
         name="禁止自动贴图流程",
         description="生成Mod时禁止生成贴图相关ini部分",
@@ -73,24 +87,7 @@ class Properties_GenerateMod(bpy.types.PropertyGroup):
         default=False
     ) # type: ignore
 
-    position_override_filter_draw_type :bpy.props.BoolProperty(
-        name="Position替换添加DRAW_TYPE = 1判断",
-        description="在NPC与VAT-PreSKinning的NPC冲突时会用到此技术，例如HSR匹诺康尼NPC\n格式：\nif DRAW_TYPE == 1\n  ........\nendif",
-        default=False
-    ) # type: ignore
 
-    vertex_limit_raise_add_filter_index:bpy.props.BoolProperty(
-        name="VertexLimitRaise添加filter_index过滤器",
-        description="在NPC与VAT-PreSKinning的NPC冲突时会用到此技术，例如HSR匹诺康尼NPC\n格式:\nfilter_index = 3000\n\n....\n\nif vb0 == 3000\n  ........\nendif",
-        default=False
-    ) # type: ignore
-
-
-    slot_style_texture_add_filter_index:bpy.props.BoolProperty(
-        name="槽位风格贴图添加filter_index过滤器",
-        description="可解决HSR知更鸟多层渲染问题，可解决ZZZ NPC贴图俯视仰视槽位不一致问题（生成的只是模板，仍需手动添加或更改槽位以适配具体情况）",
-        default=False
-    ) # type: ignore
 
     # use_specific_generate_mod_folder_path
     use_specific_generate_mod_folder_path:bpy.props.BoolProperty(
@@ -169,27 +166,3 @@ class Properties_GenerateMod(bpy.types.PropertyGroup):
         return bpy.context.scene.properties_generate_mod.recalculate_color
     
 
-    @classmethod
-    def position_override_filter_draw_type(cls):
-        '''
-        bpy.context.scene.properties_generate_mod.position_override_filter_draw_type
-        '''
-        return bpy.context.scene.properties_generate_mod.position_override_filter_draw_type
-    
-    @classmethod
-    def vertex_limit_raise_add_filter_index(cls):
-        '''
-        bpy.context.scene.properties_generate_mod.vertex_limit_raise_add_filter_index
-        '''
-        return bpy.context.scene.properties_generate_mod.vertex_limit_raise_add_filter_index
-
-    @classmethod
-    def slot_style_texture_add_filter_index(cls):
-        '''
-        bpy.context.scene.properties_generate_mod.slot_style_texture_add_filter_index
-        '''
-        return bpy.context.scene.properties_generate_mod.slot_style_texture_add_filter_index
-    
-
-    
-    

@@ -1,7 +1,7 @@
 import bpy
 import math
 
-from ..common.migoto_format import M_Key, M_DrawIndexed, M_Condition,D3D11GameType,TextureReplace
+from ..common.migoto_format import M_Key, M_DrawIndexed, M_Condition,D3D11GameType
 from ..config.main_config import GlobalConfig,LogicName
 from ..common.draw_ib_model import DrawIBModel
 
@@ -62,18 +62,11 @@ class ModModelYYSLS:
             
             # (1) 先初始化CommandList
             drawtype_indent_prefix = ""
-            if Properties_GenerateMod.position_override_filter_draw_type():
-                if category_name == d3d11GameType.CategoryDrawCategoryDict["Position"]:
-                    drawtype_indent_prefix = "  "
-                    texture_override_vb_section.append("if DRAW_TYPE == 1")
+
             
             # 如果出现了VertexLimitRaise，Texcoord槽位需要检测filter_index才能替换
             filterindex_indent_prefix = ""
-            if Properties_GenerateMod.vertex_limit_raise_add_filter_index():
-                if category_name == d3d11GameType.CategoryDrawCategoryDict["Texcoord"]:
-                    if self.vlr_filter_index_indent != "":
-                        texture_override_vb_section.append("if vb0 == " + str(3000 + M_GlobalKeyCounter.generated_mod_number))
-                        filterindex_indent_prefix = "  "
+     
 
             # 遍历获取所有在当前分类hash下进行替换的分类，并添加对应的资源替换
             for original_category_name, draw_category_name in d3d11GameType.CategoryDrawCategoryDict.items():
@@ -82,16 +75,9 @@ class ModModelYYSLS:
                     texture_override_vb_section.append(filterindex_indent_prefix + drawtype_indent_prefix + category_original_slot + " = Resource" + draw_ib + original_category_name)
 
 
-            if Properties_GenerateMod.position_override_filter_draw_type():
-                # 对应if DRAW_TYPE == 1的结束
-                if category_name == d3d11GameType.CategoryDrawCategoryDict["Position"]:
-                    texture_override_vb_section.append("endif")
+
             
-            if Properties_GenerateMod.vertex_limit_raise_add_filter_index():
-                # 对应if vb0 == 3000的结束
-                if category_name == d3d11GameType.CategoryDrawCategoryDict["Texcoord"]:
-                    if self.vlr_filter_index_indent != "":
-                        texture_override_vb_section.append("endif")
+    
             
             # 分支架构，如果是Position则需提供激活变量
             if category_name == d3d11GameType.CategoryDrawCategoryDict["Position"]:
@@ -156,21 +142,15 @@ class ModModelYYSLS:
 
             # Add slot style texture slot replace.
             if not Properties_GenerateMod.forbid_auto_texture_ini():
-                slot_texture_replace_dict:dict[str,TextureReplace] = draw_ib_model.import_config.PartName_SlotTextureReplaceDict_Dict.get(part_name,None)
+                slot_texture_replace_dict = draw_ib_model.import_config.PartName_SlotTextureReplaceDict_Dict.get(part_name,None)
                 # It may not have auto texture
                 if slot_texture_replace_dict is not None:
                     for slot,texture_replace in slot_texture_replace_dict.items():
 
                         if texture_replace.style == "Slot":
                             texture_filter_index_indent = ""
-                            if Properties_GenerateMod.slot_style_texture_add_filter_index():
-                                texture_override_ib_section.append("if " + slot + " == " + str(self.texture_hash_filter_index_dict[texture_replace.hash]))
-                                texture_filter_index_indent = "  "
 
                             texture_override_ib_section.append(texture_filter_index_indent + self.vlr_filter_index_indent + slot + " = " + texture_replace.resource_name)
-
-                            if Properties_GenerateMod.slot_style_texture_add_filter_index():
-                                texture_override_ib_section.append("endif")
 
             # 如果不使用GPU-Skinning即为Object类型，此时需要在ib下面替换对应槽位
             if not d3d11GameType.GPU_PreSkinning:
@@ -221,10 +201,7 @@ class ModModelYYSLS:
             vertexlimit_section.append("[TextureOverride_" + vertexlimit_section_name_suffix + "]")
             vertexlimit_section.append("hash = " + draw_ib_model.import_config.vertex_limit_hash)
             
-            if Properties_GenerateMod.vertex_limit_raise_add_filter_index():
-                # 用户可能已经习惯了3000
-                vertexlimit_section.append("filter_index = " + str(3000 + M_GlobalKeyCounter.generated_mod_number))
-                self.vlr_filter_index_indent = "  "
+     
 
             vertexlimit_section.append("override_byte_stride = " + str(d3d11GameType.CategoryStrideDict["Position"]))
             vertexlimit_section.append("override_vertex_count = " + str(draw_ib_model.draw_number))
@@ -352,30 +329,6 @@ class ModModelYYSLS:
             config_ini_builder.append_section(texture_override_vb_section)
             
 
-    def add_texture_filter_index(self,ini_builder:M_IniBuilder):
-        if not Properties_GenerateMod.slot_style_texture_add_filter_index():
-            return 
-
-        filter_index_count = 0
-        for draw_ib, draw_ib_model in self.drawib_drawibmodel_dict.items():
-            for partname,slot_texture_replace_dict in draw_ib_model.import_config.PartName_SlotTextureReplaceDict_Dict.items():
-                for slot, texture_replace in slot_texture_replace_dict.items():
-                    if texture_replace.hash in self.texture_hash_filter_index_dict:
-                        continue
-                    else:
-                        filter_index = 6000 + filter_index_count
-                        filter_index_count = filter_index_count + 1
-                        self.texture_hash_filter_index_dict[texture_replace.hash] = filter_index
-        
-
-        texture_filter_index_section = M_IniSection(M_SectionType.TextureOverrideTexture)
-        for hash_value, filter_index in self.texture_hash_filter_index_dict.items():
-            texture_filter_index_section.append("[TextureOverride_Texture_" + hash_value + "]")
-            texture_filter_index_section.append("hash = " + hash_value)
-            texture_filter_index_section.append("filter_index = " + str(filter_index))
-            texture_filter_index_section.new_line()
-
-        ini_builder.append_section(texture_filter_index_section)
 
     def generate_unity_vs_config_ini(self):
         '''
@@ -392,8 +345,6 @@ class ModModelYYSLS:
         M_IniHelperV2.generate_hash_style_texture_ini(ini_builder=config_ini_builder,drawib_drawibmodel_dict=self.drawib_drawibmodel_dict)
 
 
-        if Properties_GenerateMod.slot_style_texture_add_filter_index():
-            self.add_texture_filter_index(ini_builder= config_ini_builder)
 
         for draw_ib, draw_ib_model in self.drawib_drawibmodel_dict.items():
 

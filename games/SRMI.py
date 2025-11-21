@@ -1,7 +1,7 @@
 import bpy
 import math
 
-from ..common.migoto_format import M_Key, M_DrawIndexed, M_Condition,D3D11GameType,TextureReplace
+from ..common.migoto_format import M_Key, M_DrawIndexed, M_Condition,D3D11GameType
 from ..config.import_config import GlobalConfig
 from ..common.draw_ib_model import DrawIBModel
 
@@ -268,35 +268,6 @@ class ModModelSRMI:
     
 
 
-    def add_texture_filter_index(self,ini_builder:M_IniBuilder):
-        if not Properties_GenerateMod.slot_style_texture_add_filter_index():
-            return 
-
-        filter_index_count = 0
-        for draw_ib, draw_ib_model in self.drawib_drawibmodel_dict.items():
-            for partname,slot_texture_replace_dict in draw_ib_model.import_config.PartName_SlotTextureReplaceDict_Dict.items():
-                for slot, texture_replace in slot_texture_replace_dict.items():
-                    if texture_replace.hash in self.texture_hash_filter_index_dict:
-                        continue
-                    else:
-                        filter_index = 6000 + filter_index_count
-                        filter_index_count = filter_index_count + 1
-                        self.texture_hash_filter_index_dict[texture_replace.hash] = filter_index
-        
-
-        texture_filter_index_section = M_IniSection(M_SectionType.TextureOverrideTexture)
-        for hash_value, filter_index in self.texture_hash_filter_index_dict.items():
-            texture_filter_index_section.append("[TextureOverride_Texture_" + hash_value + "]")
-            texture_filter_index_section.append("hash = " + hash_value)
-            texture_filter_index_section.append("filter_index = " + str(filter_index))
-            texture_filter_index_section.new_line()
-
-        ini_builder.append_section(texture_filter_index_section)
-
-
-
-
-
     def generate_unity_cs_config_ini(self):
         '''
         test
@@ -306,8 +277,6 @@ class ModModelSRMI:
         M_IniHelperV2.generate_hash_style_texture_ini(ini_builder=config_ini_builder,drawib_drawibmodel_dict=self.drawib_drawibmodel_dict)
 
 
-        if Properties_GenerateMod.slot_style_texture_add_filter_index():
-            self.add_texture_filter_index(ini_builder= config_ini_builder)
 
         for draw_ib, draw_ib_model in self.drawib_drawibmodel_dict.items():
 

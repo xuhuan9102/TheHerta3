@@ -623,17 +623,17 @@ class MeshImporter:
         if len(mesh_name_split) < 2:
             return
         
-        texture_prefix = mesh_name_split[0] + "_" + mesh_name_split[1] + "_" # IB Hash
+        texture_prefix = mesh_name_split[0] + "-" + mesh_name_split[1] + "-" # IB Hash
         
         # 查找是否存在满足条件的转换好的tga贴图文件
         texture_path = None
         
-        texture_suffix = "_DiffuseMap.dds"
+        texture_suffix = "-DiffuseMap.dds"
         texture_path = TextureUtils.find_texture(texture_prefix, texture_suffix, directory)
 
         # 添加置换贴图
         normal_path = None
-        normal_suffix = "_NormalMap.dds"
+        normal_suffix = "-NormalMap.dds"
         normal_path = TextureUtils.find_texture(texture_prefix, normal_suffix, directory)
 
         # Nico: 这里如果没有检测到对应贴图则不创建材质，也不新建BSDF

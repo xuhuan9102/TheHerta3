@@ -43,12 +43,6 @@ class D3D11Element:
             return self.SemanticName + str(self.SemanticIndex)
 
 
-class TextureReplace:
-    def  __init__(self):
-        self.resource_name = ""
-        self.filter_index = 0
-        self.hash = ""
-        self.style = ""
 
 class M_DrawIndexed:
     def __init__(self) -> None:
