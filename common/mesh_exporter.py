@@ -1,6 +1,10 @@
+"""
+导出Mesh到二进制文件
+"""
+import collections
+
 import bpy
 import numpy
-import collections
 
 from ..utils.format_utils import FormatUtils, Fatal
 from ..utils.timer_utils import TimerUtils

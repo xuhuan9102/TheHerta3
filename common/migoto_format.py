@@ -1,13 +1,12 @@
+'''
+基础数据类型
+'''
+
 import json
 import os
 
-from ..utils.format_utils import FormatUtils
-from ..utils.timer_utils import TimerUtils
-
-from ..config.main_config import *
-
-from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Union
+from dataclasses import dataclass, field
+from typing import Dict
 
 
 @dataclass
@@ -84,8 +83,9 @@ class M_Key:
                 f"value_list={self.value_list}, initialize_value={self.initialize_value}, "
                 f"tmp_value={self.tmp_value})")
     
+
 class M_Condition:
-    def __init__(self,work_key_list:list[M_Key] = []):
+    def __init__(self,work_key_list:list[M_Key] = None):
         self.work_key_list = work_key_list
 
         # 计算出生效的ConditionStr

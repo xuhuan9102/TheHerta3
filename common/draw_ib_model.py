@@ -1,6 +1,5 @@
 import numpy
 import struct
-import re
 import copy
 
 from ..common.migoto_format import *

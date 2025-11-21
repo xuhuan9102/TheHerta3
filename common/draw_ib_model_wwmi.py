@@ -1,7 +1,5 @@
-import numpy
 import struct
-import re
-import copy
+import numpy
 
 from .mesh_exporter import MeshExporter
 
@@ -11,11 +9,11 @@ from ..utils.config_utils import ConfigUtils
 from ..utils.collection_utils import *
 from ..config.main_config import *
 from ..utils.json_utils import *
-from ..utils.timer_utils import *
+from ..utils.timer_utils import TimerUtils
 from ..utils.format_utils import Fatal
 from ..utils.obj_utils import *
 from ..utils.shapekey_utils import ShapeKeyUtils
-
+from ..utils.log_utils import LOG
 
 from .extracted_object import ExtractedObject, ExtractedObjectHelper
 from ..common.migoto_format import M_DrawIndexed,ObjDataModel
@@ -36,7 +34,7 @@ class DrawIBModelWWMI:
     这个代表了一个DrawIB的Mod导出模型
     Mod导出可以调用这个模型来进行业务逻辑部分
     每个游戏的DrawIBModel都是不同的，但是一部分是可以复用的
-    (例如WWMI就有自己的一套DrawIBModel)
+    (例如WWMI就有自己的一套DrawIBModel) 
     '''
 
     # 通过default_factory让每个类的实例的变量分割开来，不再共享类的静态变量
@@ -204,13 +202,14 @@ class DrawIBModelWWMI:
                     float_array.tofile(file)
 
     def build_merged_object(self,extracted_object:ExtractedObject):
-        print("build_merged_object::")
         '''
         extracted_object 用于读取配置
         
         这个代码有个问题就是，它只是面向一个DrawIB的，所以在调用的时候得在branch_model的drawib循环中调用，对每个drawib都生成临时obj
         然后生成mod
         '''
+        print("build_merged_object::")
+
         # 1.Initialize components
         components = []
         for component in extracted_object.components: 
