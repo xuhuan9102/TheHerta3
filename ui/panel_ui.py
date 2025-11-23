@@ -38,9 +38,9 @@ class PanelBasicInformation(bpy.types.Panel):
             obj = context.selected_objects[0]
 
             # 获取自定义属性
-            gametypename = obj.get("3DMigoto:GameTypeName", None)
-            recalculate_tangent = obj.get("3DMigoto:RecalculateTANGENT", None)
-            recalculate_color = obj.get("3DMigoto:RecalculateCOLOR", None)
+            gametypename = obj.get("3DMigoto:GameTypeName", "")
+            recalculate_tangent = obj.get("3DMigoto:RecalculateTANGENT", False)
+            recalculate_color = obj.get("3DMigoto:RecalculateCOLOR", False)
 
             layout.label(text="GameType: " + gametypename)
             layout.label(text="RecalculateTANGENT: " + str(recalculate_tangent))
