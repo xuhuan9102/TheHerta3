@@ -677,7 +677,7 @@ class MeshImporter:
                     material.node_tree.links.new(bsdf.inputs['Alpha'], tex_image.outputs['Alpha'])
 
                 if normal_path is not None and Properties_ImportModel.isUsingNormalMapWhileImporting():
-                    if not LogicName.ZZMI:
+                    if GlobalConfig.logic_name != LogicName.ZZMI:
                         norm_image = material.node_tree.nodes.new('ShaderNodeTexImage')
                         norm_image.image = bpy.data.images.load(normal_path)
                         norm_image.location.x = bsdf.location.x - 800
