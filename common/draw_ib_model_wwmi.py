@@ -2,6 +2,9 @@ import struct
 import numpy
 import os
 
+
+from dataclasses import dataclass, field
+
 from ..utils.config_utils import ConfigUtils
 from ..utils.collection_utils import *
 from ..config.main_config import *
@@ -31,7 +34,7 @@ DEFAULT_VG_SLOTS = 8          # 每顶点写多少个 VG id（与 Blend.buf 的�
 BLOCK_SIZE = 512       # forward/reverse block 大小（WWMI 默认为 512）
 REMAPP_SKIP_THRESHOLD = 256  # 超过多少个 VG 才启用 Remap（WWMI 默认为 256）
 
-
+@dataclass
 class DrawIBModelWWMI:
     '''
     这个代表了一个DrawIB的Mod导出模型
@@ -39,6 +42,104 @@ class DrawIBModelWWMI:
     每个游戏的DrawIBModel都是不同的，但是一部分是可以复用的
     (例如WWMI就有自己的一套DrawIBModel) 
     '''
+    draw_ib: str
+    branch_model: BranchModel
+
+    draw_ib_alias: str = field(init=False)
+    # ImportConfig 需要传入 draw_ib 参数，因此不要在这里用 default_factory 自动实例化
+    import_config: ImportConfig = field(init=False)
+    d3d11GameType: D3D11GameType = field(init=False)
+    extracted_object: ExtractedObject = field(init=False)
+
+    # 仅类的内部使用
+    _component_model_list: list[ObjDataModel] = field(init=False,default_factory=list)
+    
+    component_name_component_model_dict: dict[str, ComponentModel] = field(init=False,default_factory=dict)
+
+    mesh_vertex_count:int = field(init=False,default=0)
+
+    merged_object:MergedObject = field(init=False)
+    obj_name_drawindexed_dict:dict[str,M_DrawIndexed] = field(init=False,default_factory=dict)
+
+    blend_remap:bool = field(init=False,default=False)
+    
+
+    def __post_init__(self):
+        # (1) 读取工作空间下的Config.json来设置当前DrawIB的别名
+        draw_ib_alias_name_dict = ConfigUtils.get_draw_ib_alias_name_dict()
+        self.draw_ib_alias = draw_ib_alias_name_dict.get(self.draw_ib,self.draw_ib)
+        # (2) 读取工作空间中配置文件的配置项
+        self.import_config = ImportConfig(draw_ib=self.draw_ib)
+        self.d3d11GameType:D3D11GameType = self.import_config.d3d11GameType
+        # 读取WWMI专属配置
+        self.extracted_object:ExtractedObject = ExtractedObjectHelper.read_metadata(GlobalConfig.path_extract_gametype_folder(draw_ib=self.draw_ib,gametype_name=self.d3d11GameType.GameTypeName)  + "Metadata.json")
+
+        '''
+        这里是要得到每个Component对应的obj_data_model列表
+        '''
+        self.ordered_obj_data_model_list:list[ObjDataModel] = self.branch_model.get_obj_data_model_list_by_draw_ib(draw_ib=self.draw_ib)
+        
+        # (3) 组装成特定格式？
+        self._component_model_list:list[ComponentModel] = []
+        self.component_name_component_model_dict:dict[str,ComponentModel] = {}
+
+        for part_name in self.import_config.part_name_list:
+            print("part_name: " + part_name)
+            component_obj_data_model_list = []
+            for obj_data_model in self.ordered_obj_data_model_list:
+                if part_name == str(obj_data_model.component_count):
+                    component_obj_data_model_list.append(obj_data_model)
+                    print("obj_data_model: " + obj_data_model.obj_name)
+
+            component_model = ComponentModel(component_name="Component " + part_name,final_ordered_draw_obj_model_list=component_obj_data_model_list)
+            
+            self._component_model_list.append(component_model)
+            self.component_name_component_model_dict[component_model.component_name] = component_model
+        LOG.newline()
+
+
+        # (4) 根据之前解析集合架构的结果，读取obj对象内容到字典中
+        self.mesh_vertex_count = 0 # 每个DrawIB都有总的顶点数，对应CategoryBuffer里的顶点数。
+
+        # (5) 对所有obj进行融合，得到一个最终的用于导出的临时obj
+        self.merged_object = self.build_merged_object(
+            extracted_object=self.extracted_object
+        )
+
+        # (6) 填充每个obj的drawindexed值，给每个obj的属性统计好，后面就能直接用了。
+        self.obj_name_drawindexed_dict:dict[str,M_DrawIndexed] = {} 
+        for comp in self.merged_object.components:
+            for comp_obj in comp.objects:
+                draw_indexed_obj = M_DrawIndexed()
+                draw_indexed_obj.DrawNumber = str(comp_obj.index_count)
+                draw_indexed_obj.DrawOffsetIndex = str(comp_obj.index_offset)
+                draw_indexed_obj.AliasName = comp_obj.name
+                self.obj_name_drawindexed_dict[comp_obj.name] = draw_indexed_obj
+        
+        # (7) 填充到component_name为key的字典中，方便后续操作
+        for component_model in self._component_model_list:
+            new_ordered_obj_model_list = []
+            for obj_model in component_model.final_ordered_draw_obj_model_list:
+                obj_model.drawindexed_obj = self.obj_name_drawindexed_dict[obj_model.obj_name]
+                new_ordered_obj_model_list.append(obj_model)
+            component_model.final_ordered_draw_obj_model_list = new_ordered_obj_model_list
+            self.component_name_component_model_dict[component_model.component_name] = component_model
+        
+        # (8) 选中当前融合的obj对象，计算得到ib和category_buffer，以及每个IndexId对应的VertexId
+        merged_obj = self.merged_object.object
+
+        merged_obj.name
+        
+        # 构建ObjBufferModel
+        obj_buffer_model = ObjBufferModel(d3d11_game_type=self.d3d11GameType,obj_name=merged_obj.name)
+
+        # 写出到文件
+        self.write_out_index_buffer(ib=obj_buffer_model.ib)
+        self.write_out_category_buffer(category_buffer_dict=obj_buffer_model.category_buffer_dict)
+        self.write_out_shapekey_buffer(merged_obj=merged_obj, index_vertex_id_dict=obj_buffer_model.index_vertex_id_dict)
+
+        # 删除临时融合的obj对象
+        bpy.data.objects.remove(merged_obj, do_unlink=True)
 
     # 通过default_factory让每个类的实例的变量分割开来，不再共享类的静态变量
     def _detect_vg_slots_from_gametype(self, d3d11_game_type, default=DEFAULT_VG_SLOTS):
@@ -324,16 +425,22 @@ class DrawIBModelWWMI:
 
         # 如果存在 remap 数据则写出 remap 文件（Forward/Reverse/Layout）
         if blend_remap_forward.size > 0:
+
+            # 把全局remap开关设为True，这样后续写出ini时可以根据这个条件判断来写出不同的ini了。
+            self.blend_remap = True
+
             # 只有在存在 remap block 时才写出 VertexVG 文件
-            with open(os.path.join(out_dir, 'BlendRemapVertexVG.buf'), 'wb') as f:
+            with open(os.path.join(out_dir, self.draw_ib + '-BlendRemapVertexVG.buf'), 'wb') as f:
                 vg_out.tofile(f)
 
-            with open(os.path.join(out_dir, 'BlendRemapForward.buf'), 'wb') as f:
+            with open(os.path.join(out_dir, self.draw_ib + '-BlendRemapForward.buf'), 'wb') as f:
                 blend_remap_forward.tofile(f)
-            with open(os.path.join(out_dir, 'BlendRemapReverse.buf'), 'wb') as f:
+            with open(os.path.join(out_dir, self.draw_ib + '-BlendRemapReverse.buf'), 'wb') as f:
                 blend_remap_reverse.tofile(f)
-            with open(os.path.join(out_dir, 'BlendRemapLayout.buf'), 'wb') as f:
-                numpy.array(remapped_vgs_counts, dtype=numpy.uint32).tofile(f)
+
+            # 不需要这个文件，所以注释起来了，但是保留万一有用
+            # with open(os.path.join(out_dir, self.draw_ib + '-BlendRemapLayout.buf'), 'wb') as f:
+            #     numpy.array(remapped_vgs_counts, dtype=numpy.uint32).tofile(f)
             print(f'Wrote BlendRemapVertexVG.buf, BlendRemapForward.buf and BlendRemapReverse.buf with {int(len(blend_remap_forward)/BLOCK_SIZE)} blocks')
         else:
             print('No remap blocks required (all components have VG ids < 256).')
@@ -343,106 +450,7 @@ class DrawIBModelWWMI:
             'blocks_count': int(len(blend_remap_forward)/BLOCK_SIZE),
             'counts': remapped_vgs_counts
         }
-    def __init__(self,draw_ib:str,branch_model:BranchModel):
-        # (1) 读取工作空间下的Config.json来设置当前DrawIB的别名
-        draw_ib_alias_name_dict = ConfigUtils.get_draw_ib_alias_name_dict()
-        self.draw_ib = draw_ib
-        self.draw_ib_alias = draw_ib_alias_name_dict.get(draw_ib,draw_ib)
-
-        # (2) 读取工作空间中配置文件的配置项
-        self.import_config = ImportConfig(draw_ib=self.draw_ib)
-        self.d3d11GameType:D3D11GameType = self.import_config.d3d11GameType
-        # 读取WWMI专属配置
-        self.extracted_object:ExtractedObject = ExtractedObjectHelper.read_metadata(GlobalConfig.path_extract_gametype_folder(draw_ib=self.draw_ib,gametype_name=self.d3d11GameType.GameTypeName)  + "Metadata.json")
-
-        '''
-        这里是要得到每个Component对应的obj_data_model列表
-        '''
-        self.ordered_obj_data_model_list:list[ObjDataModel] = branch_model.get_obj_data_model_list_by_draw_ib(draw_ib=draw_ib)
-        
-        # (3) 组装成特定格式？
-        self._component_model_list:list[ComponentModel] = []
-        self.component_name_component_model_dict:dict[str,ComponentModel] = {}
-
-        for part_name in self.import_config.part_name_list:
-            print("part_name: " + part_name)
-            component_obj_data_model_list = []
-            for obj_data_model in self.ordered_obj_data_model_list:
-                if part_name == str(obj_data_model.component_count):
-                    component_obj_data_model_list.append(obj_data_model)
-                    print("obj_data_model: " + obj_data_model.obj_name)
-
-            component_model = ComponentModel(component_name="Component " + part_name,final_ordered_draw_obj_model_list=component_obj_data_model_list)
-            
-            self._component_model_list.append(component_model)
-            self.component_name_component_model_dict[component_model.component_name] = component_model
-        LOG.newline()
-
-
-        # (4) 根据之前解析集合架构的结果，读取obj对象内容到字典中
-        self.mesh_vertex_count = 0 # 每个DrawIB都有总的顶点数，对应CategoryBuffer里的顶点数。
-
-        # (5) 对所有obj进行融合，得到一个最终的用于导出的临时obj
-        self.merged_object = self.build_merged_object(
-            extracted_object=self.extracted_object
-        )
-
-        # (6) 填充每个obj的drawindexed值，给每个obj的属性统计好，后面就能直接用了。
-        self.obj_name_drawindexed_dict:dict[str,M_DrawIndexed] = {} 
-        for comp in self.merged_object.components:
-            for comp_obj in comp.objects:
-                draw_indexed_obj = M_DrawIndexed()
-                draw_indexed_obj.DrawNumber = str(comp_obj.index_count)
-                draw_indexed_obj.DrawOffsetIndex = str(comp_obj.index_offset)
-                draw_indexed_obj.AliasName = comp_obj.name
-                self.obj_name_drawindexed_dict[comp_obj.name] = draw_indexed_obj
-        
-        # (7) 填充到component_name为key的字典中，方便后续操作
-        for component_model in self._component_model_list:
-            new_ordered_obj_model_list = []
-            for obj_model in component_model.final_ordered_draw_obj_model_list:
-                obj_model.drawindexed_obj = self.obj_name_drawindexed_dict[obj_model.obj_name]
-                new_ordered_obj_model_list.append(obj_model)
-            component_model.final_ordered_draw_obj_model_list = new_ordered_obj_model_list
-            self.component_name_component_model_dict[component_model.component_name] = component_model
-        
-        # (8) 选中当前融合的obj对象，计算得到ib和category_buffer，以及每个IndexId对应的VertexId
-        merged_obj = self.merged_object.object
-
-        merged_obj.name
-        
-        TimerUtils.Start("构建ObjBufferModel")
-        obj_buffer_model = ObjBufferModel(d3d11_game_type=self.d3d11GameType,obj_name=merged_obj.name)
-        TimerUtils.End("构建ObjBufferModel")
-
-        # TODO 如果Merged架构下，顶点组数量超过了255，则必须使用Remap技术
-        # 在这里遍历获取每个Component的obj列表，然后对这些obj进行统计，统计BLENDINDICES和BLENDWEIGHTS
-        # 生成BlendRemapForward.buf中的内容
-        # 每个Component 每512个数字为一组，有几个Component就有几组 格式：R16_UINT
-        # 对应的位数就是局部顶点索引
-        # 对应的位上的内容就是原始的顶点组索引
-        
-        # 需要一个方法，能够获取指定obj的所有的d3d11Element内容。
-        # 其次就是可能要考虑到先声明数据类型，后进行执行的问题，比如WWMI就是把所有的数据类型提前全部声明好
-        # 最后需要的时候只执行一次就把所有的内容都拿到了，本质上是数据类型设计的比较好。
-
-        # 因为MergedObj已经全部合并在一起了
-        # 也许我们可以更改一下合并的流程，让它们先把每个Component的合并在一起，得到一个Obj列表
-        # 此时就可以根据这个obj列表，获取其属性，然后决定是否要使用remap技术
-        # 然后记录在mergedobj的属性里，然后再把这几个单独component的合并在一起
-        # 最后得到mergedobj，同时也把生成BlendRemapForward.buf和BlendRemapReverse.buf的信息获取到了
-        # 最后再根据mergedobj来获取生成BlendRemapVertexVG.buf的信息
-        # 大概就是这个思路，所以build_merged_obj这个流程还需要深入理解并且做一些修改，才能实现remap技术
-        
-
-        # 写出到文件
-        self.write_out_index_buffer(ib=obj_buffer_model.ib)
-        self.write_out_category_buffer(category_buffer_dict=obj_buffer_model.category_buffer_dict)
-        self.write_out_shapekey_buffer(merged_obj=merged_obj, index_vertex_id_dict=obj_buffer_model.index_vertex_id_dict)
-
-        # 删除临时融合的obj对象
-        bpy.data.objects.remove(merged_obj, do_unlink=True)
-
+    
 
     def write_out_index_buffer(self,ib):
         buf_output_folder = GlobalConfig.path_generatemod_buffer_folder()
