@@ -14,9 +14,9 @@ class TimerUtils:
         cls.run_start = datetime.now()
         cls.run_end = None
         cls.methodname_runstart_dict[func_name] = cls.run_start
-        LOG.newline()
-        print("[" + func_name + f"] 开始于: {cls.run_start} ")
-        LOG.newline()
+        # LOG.newline()
+        # print("[" + func_name + f"] 开始于: {cls.run_start} ")
+        # LOG.newline()
 
     @classmethod
     def End(cls,func_name:str = ""):
@@ -27,7 +27,7 @@ class TimerUtils:
         # 将run_end设为当前时间
         cls.run_end = datetime.now()
 
-        LOG.newline()
+        # LOG.newline()
         if func_name == "":
             # 计算时间差
             time_diff = cls.run_end - cls.run_start
@@ -38,8 +38,8 @@ class TimerUtils:
             time_diff = cls.run_end - cls.methodname_runstart_dict.get(func_name,0)
 
             # 打印时间差
-            print("[" + func_name + f"] 总耗时: {time_diff} ")
-        LOG.newline()
+            print("[" + func_name + f"]已完成,总耗时: {time_diff} ")
+        # LOG.newline()
         # 将run_start更新为当前时间
         cls.run_start = cls.run_end
         # print(f"Timer updated start to: {cls.run_start}")

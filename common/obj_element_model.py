@@ -56,6 +56,13 @@ class ObjElementModel:
         # 前提是有UVMap，前面的步骤应该保证了模型至少有一个TEXCOORD.xy
         mesh.calc_tangents()
         self.mesh = mesh
+        # Cache frequently accessed mesh collections/lengths to avoid repeated attribute lookups
+        self.mesh_loops = mesh.loops
+        self.mesh_loops_length = len(self.mesh_loops)
+        self.mesh_vertices = mesh.vertices
+        self.mesh_vertices_length = len(self.mesh_vertices)
+        self.vertex_colors = mesh.vertex_colors
+        self.uv_layers = mesh.uv_layers
     
         # 读取并解析数据
         self.parse_elementname_ravel_ndarray_dict()
@@ -95,10 +102,10 @@ class ObjElementModel:
         - 所以后续使用的时候要用mesh.loop里的索引来进行获取数据
         '''
 
-        mesh_loops = self.mesh.loops
-        mesh_loops_length = len(mesh_loops)
-        mesh_vertices = self.mesh.vertices
-        mesh_vertices_length = len(self.mesh.vertices)
+        mesh_loops = self.mesh_loops
+        mesh_loops_length = self.mesh_loops_length
+        mesh_vertices = self.mesh_vertices
+        mesh_vertices_length = self.mesh_vertices_length
 
         loop_vertex_indices = numpy.empty(mesh_loops_length, dtype=int)
         mesh_loops.foreach_get("vertex_index", loop_vertex_indices)
@@ -341,12 +348,12 @@ class ObjElementModel:
                     
                 self.element_vertex_ndarray[d3d11_element_name] = result
             elif d3d11_element_name.startswith('COLOR'):
-                if d3d11_element_name in self.mesh.vertex_colors:
+                if d3d11_element_name in self.vertex_colors:
                     # 因为COLOR属性存储在Blender里固定是float32类型所以这里只能用numpy.float32
                     result = numpy.zeros(mesh_loops_length, dtype=(numpy.float32, 4))
                     # result = numpy.zeros((mesh_loops_length,4), dtype=(numpy.float32))
 
-                    self.mesh.vertex_colors[d3d11_element_name].data.foreach_get("color", result.ravel())
+                    self.vertex_colors[d3d11_element_name].data.foreach_get("color", result.ravel())
                     
                     if d3d11_element.Format == 'R16G16B16A16_FLOAT':
                         result = result.astype(numpy.float16)
@@ -371,9 +378,9 @@ class ObjElementModel:
             elif d3d11_element_name.startswith('TEXCOORD') and d3d11_element.Format.endswith('FLOAT'):
                 # TimerUtils.Start("GET TEXCOORD")
                 for uv_name in ('%s.xy' % d3d11_element_name, '%s.zw' % d3d11_element_name):
-                    if uv_name in self.mesh.uv_layers:
+                    if uv_name in self.uv_layers:
                         uvs_array = numpy.empty(mesh_loops_length ,dtype=(numpy.float32,2))
-                        self.mesh.uv_layers[uv_name].data.foreach_get("uv",uvs_array.ravel())
+                        self.uv_layers[uv_name].data.foreach_get("uv",uvs_array.ravel())
                         uvs_array[:,1] = 1.0 - uvs_array[:,1]
 
                         if d3d11_element.Format == 'R16G16_FLOAT':
@@ -456,9 +463,12 @@ class ObjElementModel:
                 elif d3d11_element.Format == 'R16G16B16A16_FLOAT':
                     self.element_vertex_ndarray[d3d11_element_name] = blendweights.astype(numpy.float16)
                 elif d3d11_element.Format == "R8_UNORM" and d3d11_element.ByteWidth == 8:
+                    TimerUtils.Start("WWMI BLENDWEIGHT R8_UNORM特殊处理")
                     blendweights = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
                     self.element_vertex_ndarray[d3d11_element_name] = blendweights
                     print("WWMI R8_UNORM特殊处理")
+                    TimerUtils.End("WWMI BLENDWEIGHT R8_UNORM特殊处理")
+
                 else:
                     print(blendweights.shape)
                     raise Fatal("未知的BLENDWEIGHTS格式")

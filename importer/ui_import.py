@@ -16,7 +16,7 @@ from ..utils.translate_utils import TR
 
 from ..config.main_config import GlobalConfig, LogicName
 
-from ..common.mesh_importer import MeshImporter,MigotoBinaryFile
+from .mesh_importer import MeshImporter,MigotoBinaryFile
 
 
 class PanelModelImportConfig(bpy.types.Panel):

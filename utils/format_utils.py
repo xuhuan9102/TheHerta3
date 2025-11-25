@@ -310,7 +310,6 @@ class FormatUtils:
         
         # 将结果存回
         result[valid_mask] = output.astype(numpy.uint8)
-        
         return result
     
     @classmethod

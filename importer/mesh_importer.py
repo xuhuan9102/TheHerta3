@@ -23,8 +23,8 @@ from ..common.extracted_object import ExtractedObjectHelper
 # 用于解决 AttributeError: 'IMPORT_MESH_OT_migoto_raw_buffers_mmt' object has no attribute 'filepath'
 from bpy_extras.io_utils import unpack_list, axis_conversion
 
-from ..base.fmt_file import FMTFile
-from ..base.migoto_binary_file import MigotoBinaryFile
+from .fmt_file import FMTFile
+from .migoto_binary_file import MigotoBinaryFile
 
 
 class MeshImporter:

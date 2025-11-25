@@ -6,7 +6,7 @@ from bpy.types import Operator, Panel, PropertyGroup, UIList
 from bpy_extras.io_utils import ImportHelper
 import bpy.utils.previews
 
-from ..common.mesh_importer import MigotoBinaryFile, MeshImporter
+from .mesh_importer import MigotoBinaryFile, MeshImporter
 from ..config.main_config import GlobalConfig
 
 from ..utils.translate_utils import TR

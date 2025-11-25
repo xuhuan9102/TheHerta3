@@ -4,9 +4,9 @@
 from .ui.panel_ui import * 
 from .ui.panel_model_ui import *
 from .ui.collection_rightclick_ui import *
-from .ui.migoto_sword_ui import *
+from .importer.ui_sword import *
 from .ui.export_ui import SSMTGenerateMod, PanelGenerateModConfig, SSMTSelectGenerateModFolder
-from .ui.import_ui import Import3DMigotoRaw, SSMTImportAllFromCurrentWorkSpaceV3, PanelModelImportConfig
+from .importer.ui_import import Import3DMigotoRaw, SSMTImportAllFromCurrentWorkSpaceV3, PanelModelImportConfig
 from .ui.fast_texture_ui import *
 
 # 自动更新功能

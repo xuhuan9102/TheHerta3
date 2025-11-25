@@ -20,6 +20,11 @@ from .obj_element_model import ObjElementModel
 
 @dataclass
 class ObjBufferModel:
+    '''
+    这个类应该是导出前的最后一步，负责把所有的mesh属性以及d3d11Element属性
+    转换成最终要输出的格式
+    然后交给ObjWriter去写入文件
+    '''
 
     obj_element_model:ObjElementModel
     

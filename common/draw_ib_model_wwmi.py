@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from ..utils.config_utils import ConfigUtils
 from ..utils.collection_utils import *
+from ..utils.timer_utils import TimerUtils
 from ..config.main_config import *
 # removed unused imports: json utils, timer utilities and Fatal formatter
 from ..utils.obj_utils import *
@@ -142,8 +143,21 @@ class DrawIBModelWWMI:
         merged_obj = self.merged_object.object
 
         # 构建ObjBufferModel
+        TimerUtils.Start("ObjElementModel")
         obj_element_model = ObjElementModel(d3d11_game_type=self.d3d11GameType,obj_name=merged_obj.name)
+        TimerUtils.End("ObjElementModel")
+
+        TimerUtils.Start("ObjBufferModel")
         obj_buffer_model = ObjBufferModel(obj_element_model=obj_element_model)
+        TimerUtils.End("ObjBufferModel")
+
+        # TODO 这里的写出Buffer文件和获取ShapeKey应该分开
+        # 在ObjBufferModel中就应该把所有需要写出的东西都获取完毕了
+        # 然后这里的三个写出Buffer方法改为一个写出Buffer方法就行了
+        # 甚至这个写出Buffer的方法，理论上也应该在ObjBufferModel中实现
+        # 因为到了BufferModel这一步理论上就应该直接落地文件了
+        # 但是由于每个游戏的Buffer写出方式可能不一样
+        # 所以最好是专门开一个类，专门负责Buffer写出到文件
 
         # 写出到文件
         self.write_out_index_buffer(ib=obj_buffer_model.ib)
