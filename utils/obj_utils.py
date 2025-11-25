@@ -153,7 +153,7 @@ def copy_object(context, obj, name=None, collection=None):
         new_obj = obj.copy()
         new_obj.data = obj.data.copy()
         if name:
-            rename_object(new_obj, name)
+            ObjUtils.rename_object(new_obj, name)
         if collection:
             link_object_to_collection(new_obj, collection)
         return new_obj
@@ -640,8 +640,8 @@ class ObjUtils:
         else:
             return False
 
-    @classmethod
-    def copy_object(cls,context, obj, name=None, collection=None):
+    @staticmethod
+    def copy_object(context, obj, name=None, collection=None):
         '''
         collection指的是复制后链接到哪个collection里
         '''
@@ -649,7 +649,7 @@ class ObjUtils:
             new_obj = obj.copy()
             new_obj.data = obj.data.copy()
             if name:
-                rename_object(new_obj, name)
+                ObjUtils.rename_object(new_obj, name)
             if collection:
                 link_object_to_collection(new_obj, collection)
             return new_obj

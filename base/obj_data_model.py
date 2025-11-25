@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 class ObjDataModel:
     obj_name:str
 
-    component_count:int = field(init=False,repr=False)
-    draw_ib:str = field(init=False,repr=False)
+    component_count:int = field(init=False,repr=False,default=0)
+    draw_ib:str = field(init=False,repr=False,default="")
     obj_alias_name:str = field(init=False,repr=False)
 
     ib:list = field(init=False,repr=False,default_factory=list)

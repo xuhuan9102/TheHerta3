@@ -1,5 +1,6 @@
 import struct
 import numpy
+import os
 
 
 
@@ -28,6 +29,214 @@ from .branch_model import BranchModel
 from ..config.properties_wwmi import Properties_WWMI
 
 
+# 配置常量（按项目实际情况调整）
+VG_SLOTS = 4           # 每顶点写多少个 VG id（与 Blend.buf 的槽数一致）
+BLOCK_SIZE = 512       # forward/reverse block 大小（WWMI 默认为 512）
+REMAPP_SKIP_THRESHOLD = 256  # 超过多少个 VG 才启用 Remap（WWMI 默认为 256）
+
+
+# 辅助函数
+def unique_preserve_order(seq):
+    seen = set()
+    out = []
+    for x in seq:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+def collect_component_mesh_data(obj, vg_slots=VG_SLOTS):
+    """
+    输入：一个 component 的已合并对象（component_obj），返回：
+    - vertex_count
+    - index_data (list of vertex indices, flattened triangles)
+    - vg_ids (list of lists) 每顶点 vg_slots 个 uint (原始 group indices)
+    - vg_weights (list of lists) 每顶点对应权重 0..255
+    """
+    mesh = ObjUtils.get_mesh_evaluate_from_obj(obj)
+    mesh.calc_loop_triangles()
+
+    # index_data: flatten all triangles' vertex indices
+    index_list = []
+    for tri in mesh.loop_triangles:
+        index_list.extend(list(tri.vertices))
+    index_data = index_list
+    vertex_count = len(mesh.vertices)
+
+    # Build per-vertex vg id and weights, fixed vg_slots
+    vg_ids = [[0]*vg_slots for _ in range(vertex_count)]
+    vg_weights = [[0]*vg_slots for _ in range(vertex_count)]
+
+    for vi, v in enumerate(mesh.vertices):
+        slot = 0
+        # v.groups: Blender's collection of vertex group weights for this vertex
+        for g in v.groups:
+            if slot >= vg_slots:
+                break
+            # g.group is the group index (int), g.weight is 0..1
+            vg_ids[vi][slot] = int(g.group)
+            vg_weights[vi][slot] = int(round(max(0.0, min(1.0, g.weight)) * 255))
+            slot += 1
+
+    return vertex_count, index_data, vg_ids, vg_weights
+
+def build_remap_blocks_per_component(index_layout, index_data, vg_ids, vg_weights):
+    """
+    根据 component 的 index_layout（list）和 per-vertex vg 数据生成 forward/reverse block。
+    这里我们假设 index_layout 的每一项对应一个 component 在合并大对象里的 index count。
+    但是在本示例中我们将为每个 component 单独调用 collect_component_mesh_data，
+    即 index_layout 通常为 [len(index_data)]（单组件内部）。
+    返回：
+    - remapped_counts: list of N per component (int)
+    - forward_all: list of uint16 concatenated forward blocks
+    - reverse_all: list of uint16 concatenated reverse blocks
+    """
+    remapped_counts = []
+    forward_all = []
+    reverse_all = []
+
+    idx_offset = 0
+    for idx_count in index_layout:
+        segment = index_data[idx_offset: idx_offset + idx_count]
+        idx_offset += idx_count
+        # get unique vertex indices (preserve order)
+        vertex_ids = unique_preserve_order(segment)
+        if not vertex_ids:
+            remapped_counts.append(0)
+            continue
+
+        # collect vg ids + weights for those vertex_ids
+        obj_vg_ids = []
+        obj_vg_weights = []
+        for vid in vertex_ids:
+            # guard out-of-range
+            if vid < 0 or vid >= len(vg_ids):
+                continue
+            row_ids = vg_ids[vid]
+            row_ws = vg_weights[vid]
+            # flatten row
+            for i in range(len(row_ids)):
+                obj_vg_ids.append(int(row_ids[i]))
+                obj_vg_weights.append(int(row_ws[i]))
+
+        # Quick skip: if all ids < REMAPP_SKIP_THRESHOLD => no remap needed
+        if not obj_vg_ids:
+            remapped_counts.append(0)
+            continue
+        try:
+            if max(obj_vg_ids) < REMAPP_SKIP_THRESHOLD:
+                remapped_counts.append(0)
+                continue
+        except ValueError:
+            remapped_counts.append(0)
+            continue
+
+        # filter by weight > 0
+        non_zero_ids = [orig for orig, w in zip(obj_vg_ids, obj_vg_weights) if w > 0]
+        if not non_zero_ids:
+            remapped_counts.append(0)
+            continue
+
+        unique_ids = unique_preserve_order(non_zero_ids)
+        # again check threshold
+        if max(unique_ids) < REMAPP_SKIP_THRESHOLD:
+            remapped_counts.append(0)
+            continue
+
+        # guard: ids must be < BLOCK_SIZE to index reverse array
+        if max(unique_ids) >= BLOCK_SIZE:
+            # policy: skip remap for this component and warn
+            print(f'WARNING: component has VG id >= {BLOCK_SIZE}, skipping remap for that component.')
+            remapped_counts.append(0)
+            continue
+
+        N = len(unique_ids)
+        remapped_counts.append(N)
+
+        # build forward block and reverse block of length BLOCK_SIZE
+        forward_block = [0] * BLOCK_SIZE
+        for i, orig in enumerate(unique_ids):
+            forward_block[i] = int(orig)
+
+        reverse_block = [0] * BLOCK_SIZE
+        for i, orig in enumerate(unique_ids):
+            reverse_block[orig] = int(i)
+
+        forward_all.extend(forward_block)
+        reverse_all.extend(reverse_block)
+
+    return remapped_counts, forward_all, reverse_all
+
+def write_uint16_file(path, values):
+    with open(path, 'wb') as f:
+        for v in values:
+            f.write(struct.pack('<H', int(v) & 0xFFFF))
+
+def write_uint32_file(path, values):
+    with open(path, 'wb') as f:
+        for v in values:
+            f.write(struct.pack('<I', int(v) & 0xFFFFFFFF))
+
+def write_vertex_vg_file(path, all_vg_ids, vg_slots=VG_SLOTS):
+    """
+    all_vg_ids: list of per-vertex lists (concatenated across components in the same order as they will be joined)
+    """
+    with open(path, 'wb') as f:
+        for row in all_vg_ids:
+            row2 = (list(row) + [0]*vg_slots)[:vg_slots]
+            for id_val in row2:
+                f.write(struct.pack('<H', int(id_val) & 0xFFFF))
+
+# ---------------------------------------------------------
+# 集成示例：在你的组件循环之后调用（伪调用）
+# 假设 components_objs 是你在循环里得到的每个 component_obj 列表（顺序与后续 join 顺序一致）
+# ---------------------------------------------------------
+
+def export_blendremap_for_components(components_objs, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 存放所有组件的 per-vertex vg ids（按组件顺序串接，确保与 join 操作顺序相同）
+    concatenated_vg_ids = []
+
+    # per-component concatenated forward/reverse blocks and counts
+    all_remapped_counts = []
+    all_forward_blocks = []
+    all_reverse_blocks = []
+
+    # For each component object, collect its data and compute remap (component-level)
+    for comp_obj in components_objs:
+        vertices_count, index_data, vg_ids, vg_weights = collect_component_mesh_data(comp_obj, vg_slots=VG_SLOTS)
+
+        # append per-vertex vg ids to global list (in same order as comp_obj vertices)
+        concatenated_vg_ids.extend(vg_ids)
+
+        # For a single component object, index_layout is a single-element [len(index_data)]
+        index_layout = [len(index_data)]
+        remapped_counts, forward_all, reverse_all = build_remap_blocks_per_component(index_layout, index_data, vg_ids, vg_weights)
+
+        # extend global lists
+        all_remapped_counts.extend(remapped_counts)
+        all_forward_blocks.extend(forward_all)
+        all_reverse_blocks.extend(reverse_all)
+
+    # Write files
+
+    write_vertex_vg_file(os.path.join(out_dir, 'BlendRemapVertexVG.buf'), concatenated_vg_ids, vg_slots=VG_SLOTS)
+    print(f'Wrote BlendRemapVertexVG.buf ({len(concatenated_vg_ids)} vertices, {VG_SLOTS} slots each)')
+
+    if all_forward_blocks:
+        write_uint16_file(os.path.join(out_dir, 'BlendRemapForward.buf'), all_forward_blocks)
+        write_uint16_file(os.path.join(out_dir, 'BlendRemapReverse.buf'), all_reverse_blocks)
+        write_uint32_file(os.path.join(out_dir, 'BlendRemapLayout.buf'), all_remapped_counts)  # 可选，便于 debug
+        print(f'Wrote BlendRemapForward.buf and BlendRemapReverse.buf with {len(all_forward_blocks)//BLOCK_SIZE} blocks')
+    else:
+        print('No remap blocks required (all components have VG ids < 256).')
+
+    return {
+        'vertex_vg_count': len(concatenated_vg_ids),
+        'blocks_count': len(all_forward_blocks)//BLOCK_SIZE,
+        'counts': all_remapped_counts
+    }
 
 class DrawIBModelWWMI:
     '''
@@ -242,33 +451,34 @@ class DrawIBModelWWMI:
         # 2.import_objects_from_collection
         # 这里是获取所有的obj，需要用咱们的方法来进行集合架构的遍历获取所有的obj
         # Nico: 添加缓存机制，一个obj只处理一次
+        workspace_collection = bpy.context.collection
+
         processed_obj_name_list:list[str] = []
         for component_model in self._component_model_list:
+            component_count = str(component_model.component_name)[10:]
+            print("ComponentCount: " + component_count)
+
+            # 这里减去1是因为我们的Compoennt是从1开始的,但是WWMITools的逻辑是从0开始的
+            component_id = int(component_count) - 1 
+            print("component_id: " + str(component_id))
+            
             for obj_data_model in component_model.final_ordered_draw_obj_model_list:
                 obj_name = obj_data_model.obj_name
+                print("obj_name: " + obj_name)
                 
                 # Nico: 如果已经处理过这个obj，则跳过
                 if obj_name in processed_obj_name_list:
                     print(f"Skipping already processed object: {obj_name}")
                     continue
-
                 processed_obj_name_list.append(obj_name)
 
-                obj = bpy.data.objects.get(obj_name)
-                # 跳过不满足component开头的对象
+                obj = ObjUtils.get_obj_by_name(obj_name)
 
-                print("obj_name: " + obj_name)
-                component_count = str(component_model.component_name)[10:]
-                print("ComponentCount: " + component_count)
-
-                component_id = int(component_count) - 1 # 这里减去1是因为我们的Compoennt是从1开始的
-                print("component_id: " + str(component_id))
-
-                workspace_collection = bpy.context.collection
-
+                # 复制出一个TEMP_为前缀的obj出来
                 # 这里我们设置collection为None，不链接到任何集合中，防止干扰
                 temp_obj = ObjUtils.copy_object(bpy.context, obj, name=f'TEMP_{obj.name}', collection=workspace_collection)
 
+                # 添加到当前component的objects列表中，添加的是复制出来的TEMP_的obj
                 try:
                     components[component_id].objects.append(TempObject(
                         name=obj.name,
@@ -283,7 +493,7 @@ class DrawIBModelWWMI:
         # 这里的component_id是从0开始的，务必注意
         for component_id, component in enumerate(components):
             
-            # TODO 为什么排序？
+            # 排序以确保obj的命名符合规范而不是根据集合中的位置来进行
             component.objects.sort(key=lambda x: x.name)
 
             for temp_object in component.objects:
@@ -344,19 +554,47 @@ class DrawIBModelWWMI:
                 component.vertex_count += temp_object.vertex_count
                 component.index_count += temp_object.index_count
 
+        # 上面的内容为每个component里的每个obj都移除了不必要的顶点组，以及统计好了vertex_count和index_count
+        # TODO 感觉可以再遍历一次来获取ReMap技术所需的信息
+
+
+
+
         # build_merged_object:
+        drawib_merged_object = []
+        drawib_vertex_count, drawib_index_count = 0, 0
 
-        merged_object = []
-        vertex_count, index_count = 0, 0
+        component_obj_list = []
         for component in components:
-            for temp_object in component.objects:
-                merged_object.append(temp_object.object)
-            vertex_count += component.vertex_count
-            index_count += component.index_count
             
-        ObjUtils.join_objects(bpy.context, merged_object)
+            component_merged_object:list[bpy.types.Object] = []
 
-        obj = merged_object[0]
+            # for temp_object in component.objects:
+            #     drawib_merged_object.append(temp_object.object)
+            # 改为先把component的obj组合在一起，得到当前component的obj
+            # 然后就能获取每个component是否使用remap技术的信息了
+            # 然后最后再融合到drawib级别的mergedobj中，也不影响最终结果
+            for temp_object in component.objects:
+                component_merged_object.append(temp_object.object)
+
+            ObjUtils.join_objects(bpy.context, component_merged_object)
+
+            component_obj = component_merged_object[0]
+            component_obj_list.append(component_obj)
+            
+            drawib_merged_object.append(component_obj)
+
+            drawib_vertex_count += component.vertex_count
+            drawib_index_count += component.index_count
+            
+        # component_obj_list 写出
+        # components_objs 是你在循环中得到的每个 component_obj 的列表（顺序与 drawib_merged_object 一致）
+        summary = export_blendremap_for_components(component_obj_list, GlobalConfig.path_generatemod_buffer_folder())
+        print('BlendRemap export summary:', summary)
+
+        ObjUtils.join_objects(bpy.context, drawib_merged_object)
+
+        obj = drawib_merged_object[0]
 
         ObjUtils.rename_object(obj, 'TEMP_EXPORT_OBJECT')
 
@@ -366,7 +604,7 @@ class DrawIBModelWWMI:
 
         mesh = ObjUtils.get_mesh_evaluate_from_obj(obj)
 
-        merged_object = MergedObject(
+        drawib_merged_object = MergedObject(
             object=obj,
             mesh=mesh,
             components=components,
@@ -376,11 +614,13 @@ class DrawIBModelWWMI:
             shapekeys=MergedObjectShapeKeys(),
         )
 
-        if vertex_count != merged_object.vertex_count:
+        if drawib_vertex_count != drawib_merged_object.vertex_count:
             raise ValueError('vertex_count mismatch between merged object and its components')
 
-        if index_count != merged_object.index_count:
+        if drawib_index_count != drawib_merged_object.index_count:
             raise ValueError('index_count mismatch between merged object and its components')
         
         LOG.newline()
-        return merged_object
+        return drawib_merged_object
+    
+
