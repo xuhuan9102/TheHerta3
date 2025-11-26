@@ -46,7 +46,7 @@ class ObjBufferModelUnity:
         self.mesh = self.obj_element_model.mesh
         self.d3d11_game_type = self.obj_element_model.d3d11_game_type
         self.obj_name = self.obj_element_model.obj_name
-        self.dtype = self.obj_element_model.dtype
+        self.dtype = self.obj_element_model.total_structured_dtype
         self.element_vertex_ndarray = self.obj_element_model.element_vertex_ndarray
 
         # 因为只有存在TANGENT时，顶点数才会增加，所以如果是GF2并且存在TANGENT才使用共享TANGENT防止增加顶点数

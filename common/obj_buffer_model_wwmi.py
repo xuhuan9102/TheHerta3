@@ -53,7 +53,7 @@ class ObjBufferModelWWMI:
         self.mesh = self.obj_element_model.mesh
         self.d3d11_game_type = self.obj_element_model.d3d11_game_type
         self.obj_name = self.obj_element_model.obj_name
-        self.dtype = self.obj_element_model.dtype
+        self.dtype = self.obj_element_model.total_structured_dtype
         self.element_vertex_ndarray = self.obj_element_model.element_vertex_ndarray
 
         # 计算IB和分类缓冲区以及索引映射表

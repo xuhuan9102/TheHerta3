@@ -55,7 +55,12 @@ class ObjElementModel:
     # 外用字段
     obj:bpy.types.Object = field(init=False,repr=False)
     mesh:bpy.types.Mesh = field(init=False,repr=False)
-    dtype:numpy.dtype = field(init=False, repr=False)
+    total_structured_dtype:numpy.dtype = field(init=False, repr=False)
+
+    # 数据先从obj中提取出来，先按ElementName放到这个Dict中
+    elementname_data_dict:dict = field(init=False,repr=False,default_factory=dict)
+
+    # 然后再把数据写入
     element_vertex_ndarray:numpy.ndarray = field(init=False,repr=False)
 
     def __post_init__(self) -> None:
@@ -82,7 +87,10 @@ class ObjElementModel:
         self.uv_layers = mesh.uv_layers
     
         # 读取并解析数据
-        self.parse_elementname_ravel_ndarray_dict()
+        self.parse_elementname_data_dict()
+
+        # 然后赋值到指定格式
+        self.fill_into_element_vertex_ndarray()
 
     def check_and_verify_attributes(self):
         '''
@@ -113,7 +121,18 @@ class ObjElementModel:
                 if not self.obj.vertex_groups:
                     raise Fatal("your object [" +self.obj.name + "] need at leat one valid Vertex Group, Please check if your model's Vertex Group is correct.")
 
-    def parse_elementname_ravel_ndarray_dict(self) -> dict:
+
+    def fill_into_element_vertex_ndarray(self):
+        
+        # Create the element array with the original dtype (matching ByteWidth)
+        self.element_vertex_ndarray = numpy.zeros(self.mesh_loops_length, dtype=self.total_structured_dtype)
+
+        for d3d11_element_name, data in self.elementname_data_dict.items():
+            # d3d11_element = self.d3d11_game_type.ElementNameD3D11ElementDict[d3d11_element_name]
+            self.element_vertex_ndarray[d3d11_element_name] = data
+
+    
+    def parse_elementname_data_dict(self):
         '''
         - 注意这里是从mesh.loops中获取数据，而不是从mesh.vertices中获取数据
         - 所以后续使用的时候要用mesh.loop里的索引来进行获取数据
@@ -128,7 +147,7 @@ class ObjElementModel:
         mesh_loops.foreach_get("vertex_index", loop_vertex_indices)
 
 
-        self.dtype = numpy.dtype([])
+        self.total_structured_dtype = numpy.dtype([])
 
         # 预设的权重个数，也就是每个顶点组受多少个权重影响
         blend_size = 4
@@ -137,22 +156,23 @@ class ObjElementModel:
             d3d11_element = self.d3d11_game_type.ElementNameD3D11ElementDict[d3d11_element_name]
             np_type = FormatUtils.get_nptype_from_format(d3d11_element.Format)
 
+            
+
             format_len = int(d3d11_element.ByteWidth / numpy.dtype(np_type).itemsize)
 
             if d3d11_element_name.startswith("BLENDINDICES") or d3d11_element_name.startswith("BLENDWEIGHT"):
                 blend_size = format_len
-
+                
             # XXX 长度为1时必须手动指定为(1,)否则会变成1维数组
             if format_len == 1:
-                self.dtype = numpy.dtype(self.dtype.descr + [(d3d11_element_name, (np_type, (1,)))])
+                self.total_structured_dtype = numpy.dtype(self.total_structured_dtype.descr + [(d3d11_element_name, (np_type, (1,)))])
             else:
-                self.dtype = numpy.dtype(self.dtype.descr + [(d3d11_element_name, (np_type, format_len))])
+                self.total_structured_dtype = numpy.dtype(self.total_structured_dtype.descr + [(d3d11_element_name, (np_type, format_len))])
 
 
         normalize_weights = "Blend" in self.d3d11_game_type.OrderedCategoryNameList
 
         # normalize_weights = False
-
 
         if GlobalConfig.logic_name == LogicName.WWMI:
             print("鸣潮专属测试版权重处理：")
@@ -192,30 +212,6 @@ class ObjElementModel:
                 pass
 
 
-        # Preserve the structured dtype layout defined by the D3D11 config.
-        # Changing the scalar type for BLENDINDICES would change the total
-        # row byte size and break the category-byte slicing later on. Instead
-        # keep the original dtype and record whether any raw blend index
-        # exceeds 255 so callers can handle it (remap, larger index types,
-        # or fail explicitly).
-        self._blendindices_overflow = False
-        if self.raw_blendindices is not None:
-            try:
-                max_index = int(numpy.max(self.raw_blendindices))
-            except Exception:
-                max_index = 0
-
-            if max_index > 255:
-                self._blendindices_overflow = True
-                if max_index > 65535:
-                    print(f"BLENDINDICES max value {max_index} > 65535; needs uint32 handling")
-                else:
-                    print(f"BLENDINDICES max value {max_index} > 255; needs uint16 handling")
-
-        # Create the element array with the original dtype (matching ByteWidth)
-        self.element_vertex_ndarray = numpy.zeros(mesh_loops_length, dtype=self.dtype)
-
-
         # 对每一种Element都获取对应的数据
         for d3d11_element_name in self.d3d11_game_type.OrderedFullElementList:
             d3d11_element = self.d3d11_game_type.ElementNameD3D11ElementDict[d3d11_element_name]
@@ -234,7 +230,7 @@ class ObjElementModel:
                     new_array[:, :3] = positions
                     positions = new_array
 
-                self.element_vertex_ndarray[d3d11_element_name] = positions
+                self.elementname_data_dict[d3d11_element_name] = positions
 
             elif d3d11_element_name == 'NORMAL':
                 if d3d11_element.Format == 'R16G16B16A16_FLOAT':
@@ -247,7 +243,7 @@ class ObjElementModel:
                     result = result.reshape(-1, 4)
 
                     result = result.astype(numpy.float16)
-                    self.element_vertex_ndarray[d3d11_element_name] = result
+                    self.elementname_data_dict[d3d11_element_name] = result
                 elif d3d11_element.Format == 'R32G32B32A32_FLOAT':
                     
                     result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
@@ -259,7 +255,7 @@ class ObjElementModel:
                     result = result.reshape(-1, 4)
 
                     result = result.astype(numpy.float32)
-                    self.element_vertex_ndarray[d3d11_element_name] = result
+                    self.elementname_data_dict[d3d11_element_name] = result
                 elif d3d11_element.Format == 'R8G8B8A8_SNORM':
                     # WWMI 这里已经确定过NORMAL没问题
 
@@ -279,7 +275,7 @@ class ObjElementModel:
                     
                     result = result.reshape(-1, 4)
 
-                    self.element_vertex_ndarray[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(result)
+                    self.elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(result)
 
 
                 elif d3d11_element.Format == 'R8G8B8A8_UNORM':
@@ -308,14 +304,14 @@ class ObjElementModel:
                         result[i][1] = DeConvert(result[i][1])
                         result[i][2] = DeConvert(result[i][2])
 
-                    self.element_vertex_ndarray[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
+                    self.elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
                 
                 else:
                     result = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
                     mesh_loops.foreach_get('normal', result)
                     # 将一维数组 reshape 成 (mesh_loops_length, 3) 形状的二维数组
                     result = result.reshape(-1, 3)
-                    self.element_vertex_ndarray[d3d11_element_name] = result
+                    self.elementname_data_dict[d3d11_element_name] = result
 
 
             elif d3d11_element_name == 'TANGENT':
@@ -375,7 +371,7 @@ class ObjElementModel:
                     result = FormatUtils.convert_4x_float32_to_r16g16b16a16_snorm(result)
                     
 
-                self.element_vertex_ndarray[d3d11_element_name] = result
+                self.elementname_data_dict[d3d11_element_name] = result
 
             #  YYSLS需要BINORMAL导出，前提是先把这些代码差分简化，因为YYSLS的TANGENT和NORMAL的.w都是固定的1
             elif d3d11_element_name.startswith('BINORMAL'):
@@ -397,7 +393,7 @@ class ObjElementModel:
                     #  燕云十六声格式
                     result = FormatUtils.convert_4x_float32_to_r16g16b16a16_snorm(result)
                     
-                self.element_vertex_ndarray[d3d11_element_name] = result
+                self.elementname_data_dict[d3d11_element_name] = result
             elif d3d11_element_name.startswith('COLOR'):
                 if d3d11_element_name in self.vertex_colors:
                     # 因为COLOR属性存储在Blender里固定是float32类型所以这里只能用numpy.float32
@@ -422,9 +418,8 @@ class ObjElementModel:
 
                     print(d3d11_element.Format)
                     print(d3d11_element_name)
-                    # print(result.shape)
-                    # print(self.element_vertex_ndarray[d3d11_element_name].shape)
-                    self.element_vertex_ndarray[d3d11_element_name] = result
+           
+                    self.elementname_data_dict[d3d11_element_name] = result
 
             elif d3d11_element_name.startswith('TEXCOORD') and d3d11_element.Format.endswith('FLOAT'):
                 # TimerUtils.Start("GET TEXCOORD")
@@ -440,7 +435,7 @@ class ObjElementModel:
                         # 重塑 uvs_array 成 (mesh_loops_length, 2) 形状的二维数组
                         # uvs_array = uvs_array.reshape(-1, 2)
 
-                        self.element_vertex_ndarray[d3d11_element_name] = uvs_array 
+                        self.elementname_data_dict[d3d11_element_name] = uvs_array 
                 # TimerUtils.End("GET TEXCOORD")
             
                         
@@ -457,23 +452,23 @@ class ObjElementModel:
                         raise Fatal("Cannot find any valid BLENDINDICES data in this model, Please check if your model's Vertex Group is correct.")
                 # print(len(blendindices))
                 if d3d11_element.Format == "R32G32B32A32_SINT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices
+                    self.elementname_data_dict[d3d11_element_name] = blendindices
                 elif d3d11_element.Format == "R16G16B16A16_UINT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices
+                    self.elementname_data_dict[d3d11_element_name] = blendindices
                 elif d3d11_element.Format == "R32G32B32A32_UINT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices
+                    self.elementname_data_dict[d3d11_element_name] = blendindices
                 elif d3d11_element.Format == "R32G32_UINT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices[:, :2]
+                    self.elementname_data_dict[d3d11_element_name] = blendindices[:, :2]
                 elif d3d11_element.Format == "R32G32_SINT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices[:, :2]
+                    self.elementname_data_dict[d3d11_element_name] = blendindices[:, :2]
                 elif d3d11_element.Format == "R32_UINT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices[:, :1]
+                    self.elementname_data_dict[d3d11_element_name] = blendindices[:, :1]
                 elif d3d11_element.Format == "R32_SINT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices[:, :1]
+                    self.elementname_data_dict[d3d11_element_name] = blendindices[:, :1]
                 elif d3d11_element.Format == 'R8G8B8A8_SNORM':
-                    self.element_vertex_ndarray[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(blendindices)
+                    self.elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(blendindices)
                 elif d3d11_element.Format == 'R8G8B8A8_UNORM':
-                    self.element_vertex_ndarray[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(blendindices)
+                    self.elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(blendindices)
                 elif d3d11_element.Format == 'R8G8B8A8_UINT':
                     # TODO 这里类型截断错了吧，假如我们的全局顶点组索引是256或者300呢？
                     # 这里截断直接没了，后续我们还怎么去和remap里进行映射？
@@ -484,8 +479,8 @@ class ObjElementModel:
                         print("BLENDINDICES大于255了,最大值是：" + str(max_index))
                     else:
                         blendindices.astype(numpy.uint8)
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices
-                    print(self.element_vertex_ndarray[d3d11_element_name].dtype)
+                    self.elementname_data_dict[d3d11_element_name] = blendindices
+                    print(self.elementname_data_dict[d3d11_element_name].dtype)
                 elif d3d11_element.Format == "R8_UINT" and d3d11_element.ByteWidth == 8:
                     max_index = numpy.max(blendindices)
                     if max_index > 255:
@@ -493,12 +488,12 @@ class ObjElementModel:
                     else:
                         blendindices.astype(numpy.uint8)
 
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices
-                    print(self.element_vertex_ndarray[d3d11_element_name].dtype)
+                    self.elementname_data_dict[d3d11_element_name] = blendindices
+                    print(self.elementname_data_dict[d3d11_element_name].dtype)
                     print("WWMI R8_UINT特殊处理")
                 elif d3d11_element.Format == "R16_UINT" and d3d11_element.ByteWidth == 16:
                     blendindices.astype(numpy.uint16)
-                    self.element_vertex_ndarray[d3d11_element_name] = blendindices
+                    self.elementname_data_dict[d3d11_element_name] = blendindices
                     print("WWMI R16_UINT特殊处理")
                 else:
                     print(blendindices.shape)
@@ -516,21 +511,21 @@ class ObjElementModel:
                         raise Fatal("Cannot find any valid BLENDWEIGHT data in this model, Please check if your model's Vertex Group is correct.")
                 # print(len(blendweights))
                 if d3d11_element.Format == "R32G32B32A32_FLOAT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendweights
+                    self.elementname_data_dict[d3d11_element_name] = blendweights
                 elif d3d11_element.Format == "R32G32_FLOAT":
-                    self.element_vertex_ndarray[d3d11_element_name] = blendweights[:, :2]
+                    self.elementname_data_dict[d3d11_element_name] = blendweights[:, :2]
                 elif d3d11_element.Format == 'R8G8B8A8_SNORM':
                     # print("BLENDWEIGHT R8G8B8A8_SNORM")
-                    self.element_vertex_ndarray[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(blendweights)
+                    self.elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(blendweights)
                 elif d3d11_element.Format == 'R8G8B8A8_UNORM':
                     # print("BLENDWEIGHT R8G8B8A8_UNORM")
-                    self.element_vertex_ndarray[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
+                    self.elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
                 elif d3d11_element.Format == 'R16G16B16A16_FLOAT':
-                    self.element_vertex_ndarray[d3d11_element_name] = blendweights.astype(numpy.float16)
+                    self.elementname_data_dict[d3d11_element_name] = blendweights.astype(numpy.float16)
                 elif d3d11_element.Format == "R8_UNORM" and d3d11_element.ByteWidth == 8:
                     TimerUtils.Start("WWMI BLENDWEIGHT R8_UNORM特殊处理")
                     blendweights = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
-                    self.element_vertex_ndarray[d3d11_element_name] = blendweights
+                    self.elementname_data_dict[d3d11_element_name] = blendweights
                     print("WWMI R8_UNORM特殊处理")
                     TimerUtils.End("WWMI BLENDWEIGHT R8_UNORM特殊处理")
 
