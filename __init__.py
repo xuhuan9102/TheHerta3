@@ -28,8 +28,8 @@ from .config.plugin_config import PluginConfig
 bl_info = {
     "name": "TheHerta3",
     "description": "SSMT3.0 Series's Blender Plugin.",
-    "blender": (5, 1, 0),
-    "version": (3, 1, 0),
+    "blender": (4, 5, 0),
+    "version": (3, 1, 1),
     "location": "View3D",
     "category": "Generic"
 }
@@ -168,7 +168,7 @@ register_classes = (
 
     SSMTSelectGenerateModFolder,
 
-    Sword_UL_FastImportTextureList,
+    SWORD_UL_FastImportTextureList,
     Sword_ImportTexture_ImageListItem,
     Sword_ImportTexture_VIEW3D_PT_ImageMaterialPanel,
     Sword_ImportTexture_WM_OT_ApplyImageToMaterial,
