@@ -143,6 +143,7 @@ register_classes = (
     ModelSplitByLoosePart,
     ModelSplitByVertexGroup,
     ModelDeleteLoosePoint,
+    ModelClearCustomSplitNormals,
     ModelRenameVertexGroupNameWithTheirSuffix,
     ModelResetLocation,
     ModelSortVertexGroupByName,

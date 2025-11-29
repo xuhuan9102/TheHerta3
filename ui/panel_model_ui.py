@@ -130,6 +130,22 @@ class ModelDeleteLoosePoint(bpy.types.Operator):
         self.report({'INFO'}, "删除松散点成功!")
         return {'FINISHED'}
     
+class ModelClearCustomSplitNormals(bpy.types.Operator):
+    bl_idname = "panel_model.clear_custom_split_normals"
+    bl_label = "清除自定义拆分法向"
+    bl_description = "WuWa 逆向得到的模型，有时顶点法线会歪，用这个处理一下就行。"
+    def execute(self, context):
+        sel = context.selected_objects
+        if not sel:
+            self.report({'ERROR'}, "未选中对象！")
+            return {'CANCELLED'}
+        for obj in sel:
+            if obj.type == 'MESH':
+                context.view_layer.objects.active = obj
+                bpy.ops.object.mode_set(mode='OBJECT')
+                bpy.ops.mesh.customdata_custom_splitnormals_clear()
+        return {'FINISHED'}
+    
 class ModelRenameVertexGroupNameWithTheirSuffix(bpy.types.Operator):
     bl_idname = "panel_model.rename_vertex_group_name_with_their_suffix"
     bl_label = "用模型名称作为前缀重命名顶点组"
@@ -608,6 +624,7 @@ class PanelModelProcess(bpy.types.Panel):
         layout.operator(ModelResetLocation.bl_idname)
         layout.operator(MMTResetRotation.bl_idname)
         layout.operator(ModelDeleteLoosePoint.bl_idname)
+        layout.operator(ModelClearCustomSplitNormals.bl_idname)
         layout.separator()
 
 
