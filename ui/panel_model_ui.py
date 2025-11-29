@@ -695,6 +695,7 @@ class CatterRightClickMenu(bpy.types.Menu):
         layout.operator(ModelResetLocation.bl_idname)
         layout.operator(MMTResetRotation.bl_idname)
         layout.operator(ModelDeleteLoosePoint.bl_idname)
+        layout.operator(ModelClearCustomSplitNormals.bl_idname)
         layout.separator()
 
         layout.operator(ModelSplitByLoosePart.bl_idname)
