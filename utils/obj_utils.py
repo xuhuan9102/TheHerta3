@@ -447,7 +447,9 @@ class ObjUtils:
         view_layer = bpy.context.view_layer
 
         # 1. 清空当前所有选中（可选，但通常需要）
-        bpy.ops.object.select_all(action='DESELECT')
+        # bpy.ops.object.select_all(action='DESELECT')
+        for obj in bpy.context.selected_objects:
+            obj.select_set(False)
 
         # 2. 设活动对象
         view_layer.objects.active = target_obj
