@@ -395,6 +395,9 @@ class DrawIBModelWWMI:
         
         此方法用于为当前DrawIB构建MergedObj对象
         '''
+        print("\n====== CHECK 1 / Component 初始化 ======")
+        for i, comp in enumerate(extracted_object.components):
+            print(f"Metadata Component[{i}] 期望 vg_count = {comp.vg_count}")
         print("build_merged_object::")
 
         # 1.Initialize components
@@ -420,6 +423,11 @@ class DrawIBModelWWMI:
             # 这里减去1是因为我们的Compoennt是从1开始的,但是WWMITools的逻辑是从0开始的
             component_id = int(component_count) - 1 
             print("component_id: " + str(component_id))
+
+            print(f"\n====== CHECK 2 / COMPONENT {component_id} → {component_model.component_name} ======")
+            print("预期 Obj 列表长度 =", len(component_model.final_ordered_draw_obj_model_list))
+            for o in component_model.final_ordered_draw_obj_model_list:
+                print("  OBJ:", o.obj_name, "存在？", bpy.data.objects.get(o.obj_name) is not None)
             
             for obj_data_model in component_model.final_ordered_draw_obj_model_list:
                 obj_name = obj_data_model.obj_name
@@ -522,29 +530,41 @@ class DrawIBModelWWMI:
         drawib_vertex_count, drawib_index_count = 0, 0
 
         component_obj_list = []
-        for component in components:
-            
-            component_merged_object:list[bpy.types.Object] = []
+        
+        print("\n====== CHECK 3 / 对象收集结果 ======")
+        for i, comp in enumerate(components):
+            print(f"Component[{i}] 对象数 = {len(comp.objects)}")
+            if len(comp.objects) == 0:
+                print("⚠ 警告：Component[{0}] 没有任何对象，将在合并时跳过。".format(i))
 
-            # for temp_object in component.objects:
-            #     drawib_merged_object.append(temp_object.object)
-            # 改为先把component的obj组合在一起，得到当前component的obj
-            # 然后就能获取每个component是否使用remap技术的信息了
-            # 然后最后再融合到drawib级别的mergedobj中，也不影响最终结果
-            for temp_object in component.objects:
-                component_merged_object.append(temp_object.object)
+        for component_index, component in enumerate(components):
+            # 把每个 component 里所有临时物体收集到一个列表
+            component_merged_object: list[bpy.types.Object] = [
+                temp_object.object for temp_object in component.objects
+            ]
 
+            print("\n====== CHECK 4 / JOIN 前汇总 ======")
+            print(f"➡ Component[{component_index}] 物体数 = {len(component_merged_object)}")
+            print("内容：", [o.name for o in component_merged_object])
+
+            # ⭐ 关键：如果这个 component 本身就没有任何几何，直接跳过
+            if len(component_merged_object) == 0:
+                print(f"⚠ Component[{component_index}] 无几何体，跳过 join。")
+                # 同时它对全局顶点数 / 索引数也是 0，不需要手动加减
+                continue
+
+            # 非空的才真正 merge
             ObjUtils.join_objects(bpy.context, component_merged_object)
 
             component_obj = component_merged_object[0]
             component_obj_list.append(component_obj)
-            
             drawib_merged_object.append(component_obj)
 
+            # 注意这里 component.vertex_count / index_count 已经在前面统计过
             drawib_vertex_count += component.vertex_count
             drawib_index_count += component.index_count
-        
-        # 获取到component_obj_list后，直接就能导出BlendRemap的Forward和Reverse了
+
+        # 获取到 component_obj_list 后，导出 BlendRemap forward/reverse
         self.export_blendremap_forward_and_reverse(component_obj_list)
 
         ObjUtils.join_objects(bpy.context, drawib_merged_object)
