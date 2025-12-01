@@ -406,6 +406,13 @@ class ModModelWWMI:
             texture_override_component.append("match_first_index = " + str(component_object.index_offset))
             texture_override_component.append("match_index_count = " + str(component_object.index_count))
             texture_override_component.append("$object_detected = 1")
+
+            if len(self.branch_model.keyname_mkey_dict.keys()) != 0:
+                texture_override_component.append("$active" + str(M_GlobalKeyCounter.generated_mod_number) + " = 1")
+
+                if Properties_GenerateMod.generate_branch_mod_gui():
+                    texture_override_component.append("$ActiveCharacter = 1")
+
             texture_override_component.append("if $mod_enabled")
 
             if Properties_WWMI.import_merged_vgmap():
