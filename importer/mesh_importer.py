@@ -376,7 +376,13 @@ class MeshImporter:
         # ========== 基础形状键预处理 ==========
         basis = obj.shape_key_add(name='Basis')
         basis.interpolation = 'KEY_LINEAR'
+        # Ensure we use relative shape keys and keep the Basis slider at 0
         obj.data.shape_keys.use_relative = True
+        try:
+            # some Blender versions may change active values; ensure Basis value is 0.0
+            basis.value = 0.0
+        except Exception:
+            pass
 
         # 批量获取基础顶点坐标（约快200倍）
         vert_count = len(obj.data.vertices)
@@ -389,6 +395,11 @@ class MeshImporter:
             # 添加新形状键
             new_sk = obj.shape_key_add(name=f'Deform {sk_id}')
             new_sk.interpolation = 'KEY_LINEAR'
+            # Ensure newly created shape key slider starts at 0.0 (Blender >=5.0 default may set to 1.0)
+            try:
+                new_sk.value = 0.0
+            except Exception:
+                pass
 
             # 转换为NumPy数组（假设offsets是列表的列表）
             offset_arr = numpy.array(offsets, dtype=numpy.float32).reshape(-1, 3)
@@ -400,6 +411,11 @@ class MeshImporter:
             new_sk.data.foreach_set('co', new_co.ravel())
 
             # 强制解除Blender数据块的引用（重要！避免内存泄漏）
+            # Ensure the shape key remains at value 0 after foreach_set
+            try:
+                new_sk.value = 0.0
+            except Exception:
+                pass
             del new_sk
 
         # 清理临时数组
