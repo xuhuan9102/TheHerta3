@@ -146,7 +146,7 @@ class ObjElementModel:
                 # can diagnose than to silently write zeros for an expected
                 # element (which would corrupt downstream buffers).
                 raise Fatal(f"Missing element data for '{d3d11_element_name}' when packing vertex ndarray")
-
+            print("尝试赋值 Element: " + d3d11_element_name)
             self.element_vertex_ndarray[d3d11_element_name] = data
 
     
@@ -228,6 +228,14 @@ class ObjElementModel:
                     # If format expects 4 components, add a zero alpha column (float32)
                     new_array = numpy.zeros((positions.shape[0], 4), dtype=numpy.float32)
                     new_array[:, :3] = positions
+                    positions = new_array
+                elif d3d11_element.Format == 'R16G16B16A16_FLOAT':
+                    # If format expects 4 components, add a W column (float16).
+                    # Expand the 3-component positions into the first 3 slots
+                    # and set the 4th (W) component to 1.0 (homogeneous coord).
+                    new_array = numpy.zeros((positions.shape[0], 4), dtype=numpy.float16)
+                    new_array[:, :3] = positions.astype(numpy.float16)
+                    new_array[:, 3] = numpy.ones(positions.shape[0], dtype=numpy.float16)
                     positions = new_array
 
                 self.original_elementname_data_dict[d3d11_element_name] = positions
