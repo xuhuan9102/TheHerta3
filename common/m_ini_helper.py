@@ -126,9 +126,7 @@ class M_IniHelper:
             if GlobalConfig.logic_name != LogicName.WWMI:
                 continue
 
-            # 如果WWMI只使用标记过的贴图，则跳过RenderTextures的生成
-            elif Properties_GenerateMod.only_use_marked_texture():
-                continue
+
             
             # Nico: 鸣潮也需要遵守贴图标记流程，不再使用全部RenderTextures贴图
             # # 添加RenderTextures里的的贴图

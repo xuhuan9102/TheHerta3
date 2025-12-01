@@ -77,8 +77,6 @@ class PanelGenerateModConfig(bpy.types.Panel):
 
         # 任何游戏都能贴图标记
         if GlobalConfig.logic_name == LogicName.WWMI:
-            layout.prop(context.scene.properties_generate_mod,
-                "only_use_marked_texture",text="只使用标记过的贴图")
             layout.prop(context.scene.properties_wwmi, "ignore_muted_shape_keys")
             layout.prop(context.scene.properties_wwmi, "apply_all_modifiers")
 

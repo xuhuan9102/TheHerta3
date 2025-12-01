@@ -118,20 +118,7 @@ class Properties_GenerateMod(bpy.types.PropertyGroup):
         return bpy.context.scene.properties_generate_mod.generate_mod_folder_path
     
 
-    only_use_marked_texture:bpy.props.BoolProperty(
-        name="只使用标记过的贴图",
-        description="勾选后不会再生成Hash风格的RenderTextures里的自动贴图，而是完全使用用户标记过的贴图，如果用户遗漏了标记，则不会生成对应没标记过的贴图的ini内容",
-        default=False
-    ) # type: ignore
 
-    
-    # only_use_marked_texture
-    @classmethod
-    def only_use_marked_texture(cls):
-        '''
-        bpy.context.scene.properties_generate_mod.only_use_marked_texture
-        '''
-        return bpy.context.scene.properties_generate_mod.only_use_marked_texture
     
 
 
