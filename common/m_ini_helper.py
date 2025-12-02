@@ -65,9 +65,7 @@ class M_IniHelper:
 
             hash_deduped_texture_info_dict = WorkSpaceHelper.get_hash_deduped_texture_info_dict(draw_ib=draw_ib)
 
-            render_texture_folder_path = GlobalConfig.path_workspace_folder() + draw_ib + "\\" + "RenderTextures\\"
 
-            render_texture_files = os.listdir(render_texture_folder_path)
 
             # 添加标记的Hash风格贴图
             for texture_markup_info_list in draw_ib_model.import_config.partname_texturemarkinfolist_dict.values():
@@ -128,47 +126,6 @@ class M_IniHelper:
 
 
             
-            # Nico: 鸣潮也需要遵守贴图标记流程，不再使用全部RenderTextures贴图
-            # # 添加RenderTextures里的的贴图
-            # for render_texture_name in render_texture_files:
-            #     texture_hash = render_texture_name.split("_")[0]
-                
-            #     if "!U!" in texture_hash:
-            #         continue
-
-            #     if texture_hash in slot_style_texture_hash_list:
-            #         continue
-
-            #     if texture_hash in repeat_hash_list:
-            #         continue
-            #     repeat_hash_list.append(texture_hash)
-
-            #     original_texture_file_path = render_texture_folder_path + render_texture_name
-
-            #     # same hash usually won't exists in two folder.
-            #     if not os.path.exists(original_texture_file_path):
-            #         continue
-
-                
-            #     target_texture_file_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib) + render_texture_name
-                
-            #     resource_and_textureoverride_texture_section = M_IniSection(M_SectionType.ResourceAndTextureOverride_Texture)
-            #     resource_and_textureoverride_texture_section.append("[Resource_Texture_" + texture_hash + "]")
-            #     resource_and_textureoverride_texture_section.append("filename = Texture/" + render_texture_name)
-            #     resource_and_textureoverride_texture_section.new_line()
-
-            #     resource_and_textureoverride_texture_section.append("[TextureOverride_" + texture_hash + "]")
-            #     resource_and_textureoverride_texture_section.append("; " + render_texture_name)
-            #     resource_and_textureoverride_texture_section.append("hash = " + texture_hash)
-            #     resource_and_textureoverride_texture_section.append("match_priority = 0")
-            #     resource_and_textureoverride_texture_section.append("this = Resource_Texture_" + texture_hash)
-            #     resource_and_textureoverride_texture_section.new_line()
-
-            #     ini_builder.append_section(resource_and_textureoverride_texture_section)
-
-            #     # copy only if target not exists avoid overwrite texture manually replaced by mod author.
-            #     if not os.path.exists(target_texture_file_path):
-            #         shutil.copy2(original_texture_file_path,target_texture_file_path)
 
         # if len(repeat_hash_list) != 0:
         #     texture_ini_builder.save_to_file(MainConfig.path_generate_mod_folder() + MainConfig.workspacename + "_Texture.ini")

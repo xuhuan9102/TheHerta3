@@ -105,11 +105,6 @@ class Import3DMigotoRaw(bpy.types.Operator, ImportHelper):
 
 
 def ImprotFromWorkSpaceSSMTV3(self, context):
-    '''
-    SSMT第三个版本集合架构的导入实现
-    第三个版本变更主要是为了支持一个按键控制多个DrawIB中的模型
-    同时简化工作空间集合的架构
-    '''
     import_drawib_aliasname_folder_path_dict = ConfigUtils.get_import_drawib_aliasname_folder_path_dict_with_first_match_type()
     print(import_drawib_aliasname_folder_path_dict)
 
@@ -168,6 +163,8 @@ class SSMTImportAllFromCurrentWorkSpaceV3(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     def execute(self, context):
+        # print("Current WorkSpace: " + GlobalConfig.workspacename)
+        # print("Current Game: " + GlobalConfig.gamename)
         if GlobalConfig.workspacename == "":
             self.report({"ERROR"},"Please select your WorkSpace in SSMT before import.")
         elif not os.path.exists(GlobalConfig.path_workspace_folder()):

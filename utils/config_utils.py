@@ -67,11 +67,12 @@ class ConfigUtils:
             gpu_import_folder_path_list = []
             cpu_import_folder_path_list = []
 
-            # print("DrawIB:", draw_ib)
+            print("DrawIB:", draw_ib)
             import_drawib_folder_path = os.path.join(output_folder_path, draw_ib)
+            print("  Import Folder Path:", import_drawib_folder_path)
 
             if not os.path.exists(import_drawib_folder_path):
-                continue
+                raise Fatal("Target DrawIB folder didn't exists, Please check if your DrawIB list is correct in SSMT's work page: " + import_drawib_folder_path)
 
             dirs = os.listdir(import_drawib_folder_path)
             for dirname in dirs:
@@ -82,6 +83,9 @@ class ConfigUtils:
                     gpu_import_folder_path_list.append(final_import_folder_path)
                 elif dirname.startswith("TYPE_CPU"):
                     cpu_import_folder_path_list.append(final_import_folder_path)
+            
+            print("  GPU Import Folders:", gpu_import_folder_path_list)
+            print("  CPU Import Folders:", cpu_import_folder_path_list)
 
             if len(gpu_import_folder_path_list) != 0:
                 final_import_folder_path_dict[draw_ib + "_" + alias_name] = gpu_import_folder_path_list[0]
