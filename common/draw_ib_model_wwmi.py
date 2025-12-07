@@ -465,25 +465,26 @@ class DrawIBModelWWMI:
         # 所以这里的值需要更新为，每个Compoennt实际使用到的顶点组的数量
         # 所以就需要提前记录所有的Component真实的VGCount，且是排除了空顶点组之后的
         self.component_real_vg_count_dict = {}
-        for component_id, component in enumerate(components):
-            max_vg_count = 0
-            for temp_object in component.objects:
-                temp_obj = temp_object.object
+        # for component_id, component in enumerate(components):
+        #     print("component_id" + str(component_id))
+        #     max_vg_count = 0
+        #     for temp_object in component.objects:
+        #         temp_obj = temp_object.object
                 
-                # 计算实际使用的顶点组数量（排除空顶点组）
-                # 注意：不能直接修改temp_obj，所以不能用VertexGroupUtils.remove_unused_vertex_groups
-                used_vg_indices = set()
-                for v in temp_obj.data.vertices:
-                    for g in v.groups:
-                        if g.weight > 0.0:
-                            used_vg_indices.add(g.group)
-                real_vg_count = len(used_vg_indices)
-
-                if real_vg_count > max_vg_count:
-                    max_vg_count = real_vg_count
-            
-            self.component_real_vg_count_dict[component_id] = max_vg_count
-            print(f"Calculated real vg_count for Component {component_id}: {max_vg_count}")
+        #         # 计算实际使用的顶点组数量（排除空顶点组）
+        #         # 注意：不能直接修改temp_obj，所以不能用VertexGroupUtils.remove_unused_vertex_groups
+        #         used_vg_indices = set()
+        #         for v in temp_obj.data.vertices:
+        #             for g in v.groups:
+        #                 if g.weight > 0.0:
+        #                     used_vg_indices.add(g.group)
+        #         real_vg_count = len(used_vg_indices)
+        #         print(f"Object {temp_obj.name} 真实 vg_count = {real_vg_count}")
+        #         if real_vg_count > max_vg_count:
+        #             max_vg_count = real_vg_count
+        #     print(f"Component {component_id} 真实 vg_count = {max_vg_count}")
+        #     self.component_real_vg_count_dict[component_id] = max_vg_count
+        #     print(f"Calculated real vg_count for Component {component_id}: {max_vg_count}")
 
         # 3.准备临时对象
         index_offset = 0
@@ -589,6 +590,17 @@ class DrawIBModelWWMI:
             component_obj = component_merged_object[0]
             component_obj_list.append(component_obj)
             drawib_merged_object.append(component_obj)
+
+            # Nico: 修复VGCount不准确的问题
+            # 此时已经合并了所有的obj，所以可以直接计算真实的VGCount
+            used_vg_indices = set()
+            for v in component_obj.data.vertices:
+                for g in v.groups:
+                    if g.weight > 0.0:
+                        used_vg_indices.add(g.group)
+            real_vg_count = len(used_vg_indices)
+            self.component_real_vg_count_dict[component_index] = real_vg_count
+            print(f"Calculated real vg_count for Component {component_index}: {real_vg_count}")
 
             # 注意这里 component.vertex_count / index_count 已经在前面统计过
             drawib_vertex_count += component.vertex_count

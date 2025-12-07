@@ -98,8 +98,6 @@ class Import3DMigotoRaw(bpy.types.Operator, ImportHelper):
             obj_result = MeshImporter.create_mesh_obj_from_mbf(mbf=mbf)
             collection.objects.link(obj_result)
 
-
-
             # 刷新视图以得到流畅的导入逐渐增多的视觉效果
             bpy.context.view_layer.update()
 

@@ -309,7 +309,7 @@ class SwordImportAllReversed(bpy.types.Operator):
                 bpy.ops.object.select_all(action='DESELECT')
                 obj_result.select_set(True)
                 bpy.context.view_layer.objects.active = obj_result
-                bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+                bpy.ops.object.transform_apply(location=True, rotation=True, scale=False)
                 obj_result.select_set(False)
                 
 

@@ -220,6 +220,7 @@ class ModModelWWMI:
                     # vg_count = draw_ib_model.extracted_object.components[component_count].vg_count
 
                     vg_count = draw_ib_model.component_real_vg_count_dict[component_count]
+                    print(component_tmp_obj_name + " count: " + str(vg_count))
 
                     # 从 extracted_object 中读取预先记录的 vg_count（此处代表该 component 总的 VG 数量）
                     blend_remap_section.append("$\\WWMIv1\\vg_count = " + str(vg_count))
