@@ -491,7 +491,7 @@ class MeshImporter:
                     material.node_tree.links.new(bsdf.inputs['Alpha'], tex_image.outputs['Alpha'])
 
                 if normal_path is not None and Properties_ImportModel.isUsingNormalMapWhileImporting():
-                    if not LogicName.ZZMI:
+                    if (GlobalConfig.logic_name != LogicName.ZZMI) and (GlobalConfig.logic_name != LogicName.GIMI):
                         norm_image = material.node_tree.nodes.new('ShaderNodeTexImage')
                         norm_image.image = bpy.data.images.load(normal_path)
                         norm_image.location.x = bsdf.location.x - 800
@@ -519,12 +519,52 @@ class MeshImporter:
                         norm_separate.location.y = bsdf.location.y - 400
                         material.node_tree.links.new(norm_separate.inputs['Color'], norm_image.outputs['Color'])
                         
-                        # 合并rg, zzz 法线贴图 b 通道不用于法线
+                        # 合并rg, 这里法线贴图 b 通道不用于法线, 须要手动演算得到 b 通道 = sqrt(1-(r^2+g^2))
                         norm_combine = material.node_tree.nodes.new('ShaderNodeCombineColor')
                         norm_combine.location.x = bsdf.location.x - 600
                         norm_combine.location.y = bsdf.location.y - 400
                         material.node_tree.links.new(norm_combine.inputs['Red'], norm_separate.outputs['Red'])
                         material.node_tree.links.new(norm_combine.inputs['Green'], norm_separate.outputs['Green'])
+                        # 计算 b 通道
+                        norm_math = material.node_tree.nodes.new('ShaderNodeMath')
+                        norm_math.location.x = bsdf.location.x - 400
+                        norm_math.location.y = bsdf.location.y - 600
+                        norm_math.operation = 'SQRT'
+                        norm_math.use_clamp = True
+                        # 1 - (r^2 + g^2)
+                        norm_math_2 = material.node_tree.nodes.new('ShaderNodeMath')
+                        norm_math_2.location.x = bsdf.location.x - 600
+                        norm_math_2.location.y = bsdf.location.y - 800
+                        norm_math_2.operation = 'SUBTRACT'
+                        norm_math_2.inputs[0].default_value = 1.0
+                        norm_math_2.use_clamp = True
+                        # r^2
+                        norm_math_r2 = material.node_tree.nodes.new('ShaderNodeMath')
+                        norm_math_r2.location.x = bsdf.location.x - 800
+                        norm_math_r2.location.y = bsdf.location.y - 600
+                        norm_math_r2.operation = 'POWER'
+                        norm_math_r2.inputs[1].default_value = 2.0
+                        # g^2
+                        norm_math_g2 = material.node_tree.nodes.new('ShaderNodeMath')
+                        norm_math_g2.location.x = bsdf.location.x - 800
+                        norm_math_g2.location.y = bsdf.location.y - 800
+                        norm_math_g2.operation = 'POWER'
+                        norm_math_g2.inputs[1].default_value = 2.0
+                        # r^2+g^2
+                        norm_math_add_r_g = material.node_tree.nodes.new('ShaderNodeMath')
+                        norm_math_add_r_g.location.x = bsdf.location.x - 600
+                        norm_math_add_r_g.location.y = bsdf.location.y - 600
+                        norm_math_add_r_g.operation = 'ADD'
+                        # 链接计算节点
+                        material.node_tree.links.new(norm_math_r2.inputs[0], norm_separate.outputs['Red'])
+                        material.node_tree.links.new(norm_math_g2.inputs[0], norm_separate.outputs['Green'])
+                        material.node_tree.links.new(norm_math_add_r_g.inputs[0], norm_math_r2.outputs['Value'])
+                        material.node_tree.links.new(norm_math_add_r_g.inputs[1], norm_math_g2.outputs['Value'])
+                        material.node_tree.links.new(norm_math_2.inputs[1], norm_math_add_r_g.outputs['Value'])
+                        material.node_tree.links.new(norm_math.inputs[0], norm_math_2.outputs['Value'])
+                        # 链接到合并节点的蓝色通道
+                        material.node_tree.links.new(norm_combine.inputs['Blue'], norm_math.outputs['Value'])
+
 
                         norm_map = material.node_tree.nodes.new('ShaderNodeNormalMap')
                         norm_map.location.x = bsdf.location.x - 400
