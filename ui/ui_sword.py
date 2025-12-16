@@ -314,6 +314,13 @@ class SwordImportAllReversed(bpy.types.Operator):
                     bpy.ops.object.transform_apply(location=True, rotation=True, scale=False)
                     obj_result.select_set(False)
                 
+                if mbf.fmt_file.clean_custom_normal:
+                    # 清除自定义法线
+                    print("准备清除自定义法线")
+                  
+                    context.view_layer.objects.active = obj_result
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                    bpy.ops.mesh.customdata_custom_splitnormals_clear() 
 
 
         # 随后把图片路径指定为当前路径
