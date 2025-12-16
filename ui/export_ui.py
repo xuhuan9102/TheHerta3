@@ -72,7 +72,8 @@ class PanelGenerateModConfig(bpy.types.Panel):
 
         # 生成Mod按钮
         if GlobalConfig.logic_name == LogicName.WWMI:
-            layout.label(text="鸣潮请优先考虑使用WWMI-Tools,SSMT仅提供概念与流程验证支持",icon='INFO')
+            layout.label(text="鸣潮请优先使用WWMI-Tools生成Mod",icon='ERROR')
+            layout.label(text="TheHerta3对鸣潮支持仍在开发测试中",icon='ERROR')
         
         layout.operator("ssmt.generate_mod",icon='EXPORT')
 
