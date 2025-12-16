@@ -170,7 +170,7 @@ class MeshImporter:
         mesh.update()
         # XXX 这个方法还必须得在mesh.validate和mesh.update之后调用 3.6和4.2都可以用这个
         if use_normals:
-            MeshUtils.set_import_normals(mesh=mesh,normals=normals)
+            MeshUtils.set_import_normals_v2(mesh=mesh,normals=normals)
         
         MeshImporter.create_bsdf_with_diffuse_linked(obj, mesh_name=mbf.mesh_name,directory=os.path.dirname(mbf.fmt_path))
         MeshImporter.set_import_rotate_angle(obj=obj, mbf=mbf)
