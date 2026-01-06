@@ -6,12 +6,7 @@ from ..config.main_config import *
 from .json_utils import *
 from .format_utils import Fatal
 
-
-class DrawIBPair:
-
-    def __init__(self):
-        self.DrawIB = ""
-        self.AliasName = ""
+from ..base.drawib_pair import DrawIBPair
 
 
 class ConfigUtils:
