@@ -238,13 +238,25 @@ class ObjElementModel:
                     new_array[:, 3] = numpy.ones(positions.shape[0], dtype=numpy.float16)
                     positions = new_array
 
+                if GlobalConfig.logic_name == LogicName.WWMI:
+                    # 鸣潮逆向翻转：Position (-x, -y, z)
+                    positions[:, 0] *= -1
+                    positions[:, 1] *= -1
+
                 self.original_elementname_data_dict[d3d11_element_name] = positions
 
             elif d3d11_element_name == 'NORMAL':
+                # 统一获取法线数据
+                normals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
+                mesh_loops.foreach_get('normal', normals)
+
+                # 鸣潮逆向翻转：Normal (-x, -y, z)
+                if GlobalConfig.logic_name == LogicName.WWMI:
+                    normals[0::3] *= -1
+                    normals[1::3] *= -1
+
                 if d3d11_element.Format == 'R16G16B16A16_FLOAT':
                     result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
-                    normals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-                    mesh_loops.foreach_get('normal', normals)
                     result[0::4] = normals[0::3]
                     result[1::4] = normals[1::3]
                     result[2::4] = normals[2::3]
@@ -252,11 +264,10 @@ class ObjElementModel:
 
                     result = result.astype(numpy.float16)
                     self.original_elementname_data_dict[d3d11_element_name] = result
+
                 elif d3d11_element.Format == 'R32G32B32A32_FLOAT':
                     
                     result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
-                    normals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-                    mesh_loops.foreach_get('normal', normals)
                     result[0::4] = normals[0::3]
                     result[1::4] = normals[1::3]
                     result[2::4] = normals[2::3]
@@ -264,17 +275,15 @@ class ObjElementModel:
 
                     result = result.astype(numpy.float32)
                     self.original_elementname_data_dict[d3d11_element_name] = result
+
                 elif d3d11_element.Format == 'R8G8B8A8_SNORM':
                     # WWMI 这里已经确定过NORMAL没问题
 
                     result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
-                    normals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-                    mesh_loops.foreach_get('normal', normals)
                     result[0::4] = normals[0::3]
                     result[1::4] = normals[1::3]
                     result[2::4] = normals[2::3]
                     
-
                     if GlobalConfig.logic_name == LogicName.WWMI:
                         bitangent_signs = numpy.empty(mesh_loops_length, dtype=numpy.float32)
                         mesh_loops.foreach_get("bitangent_sign", bitangent_signs)
@@ -296,8 +305,6 @@ class ObjElementModel:
                     if GlobalConfig.logic_name == LogicName.YYSLS:
                         result = numpy.zeros(mesh_loops_length * 4, dtype=numpy.float32)
                         
-                    normals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-                    mesh_loops.foreach_get('normal', normals)
                     result[0::4] = normals[0::3]
                     result[1::4] = normals[1::3]
                     result[2::4] = normals[2::3]
@@ -315,10 +322,9 @@ class ObjElementModel:
                     self.original_elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
                 
                 else:
-                    result = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-                    mesh_loops.foreach_get('normal', result)
                     # 将一维数组 reshape 成 (mesh_loops_length, 3) 形状的二维数组
-                    result = result.reshape(-1, 3)
+                    result = normals.reshape(-1, 3)
+
                     self.original_elementname_data_dict[d3d11_element_name] = result
 
 
@@ -329,6 +335,12 @@ class ObjElementModel:
                 # 使用 foreach_get 批量获取切线和副切线符号数据
                 tangents = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
                 mesh_loops.foreach_get("tangent", tangents)
+                
+                if GlobalConfig.logic_name == LogicName.WWMI:
+                        # 鸣潮逆向翻转：Tangent (-x, -y, z)
+                    tangents[0::3] *= -1
+                    tangents[1::3] *= -1
+
                 # 将切线分量放置到输出数组中
                 result[0::4] = tangents[0::3]  # x 分量
                 result[1::4] = tangents[1::3]  # y 分量
@@ -388,6 +400,12 @@ class ObjElementModel:
                 # 使用 foreach_get 批量获取切线和副切线符号数据
                 binormals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
                 mesh_loops.foreach_get("bitangent", binormals)
+                
+                if GlobalConfig.logic_name == LogicName.WWMI:
+                        # 鸣潮逆向翻转：Binormal (-x, -y, z)
+                    binormals[0::3] *= -1
+                    binormals[1::3] *= -1
+
                 # 将切线分量放置到输出数组中
                 # BINORMAL全部翻转即可得到和YYSLS游戏中一样的效果。
                 result[0::4] = binormals[0::3]  # x 分量

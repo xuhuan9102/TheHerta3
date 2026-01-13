@@ -81,6 +81,12 @@ class MeshImporter:
                 else:
                     positions = [(x[0], x[1] , x[2] ) for x in data]
 
+                # 这里鸣潮的翻转X和Y是为了和游戏里解包出来的原模型朝向完全一致
+                if GlobalConfig.logic_name == LogicName.WWMI:
+                    # 鸣潮的坐标系需要额外处理一下,这样让模型旋转了180度的效果
+                    positions = [(-x[0], -x[1], x[2]) for x in data]
+
+
                 mesh.vertices.foreach_set('co', unpack_list(positions))
             elif element.SemanticName.startswith("COLOR"):
                 mesh.vertex_colors.new(name=element.ElementName)
@@ -120,6 +126,10 @@ class MeshImporter:
                 if GlobalConfig.logic_name == LogicName.YYSLS:
                     print("燕云十六声法线处理")
                     normals = [(x[0] * 2 - 1, x[1] * 2 - 1, x[2] * 2 - 1) for x in data]
+
+                # 这里鸣潮的翻转X和Y是为了和游戏里解包出来的原模型朝向完全一致
+                elif GlobalConfig.logic_name == LogicName.WWMI:
+                    normals = [(-x[0], -x[1], x[2]) for x in data]
                 else:
                     normals = [(x[0], x[1], x[2]) for x in data]
             elif element.SemanticName == "TANGENT":
@@ -246,7 +256,7 @@ class MeshImporter:
                     flipped_triangle = triangle[::-1]
                     flipped_indices.extend(flipped_triangle)
                 mbf.ib_data = flipped_indices
-        # print(mbf.ib_data[0],mbf.ib_data[1],mbf.ib_data[2])
+        print(mbf.ib_data[0],mbf.ib_data[1],mbf.ib_data[2])
 
         # 导入IB文件设置为mesh的三角形索引
         mesh.loops.add(mbf.ib_count)

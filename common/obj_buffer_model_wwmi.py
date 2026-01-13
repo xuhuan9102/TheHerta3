@@ -193,6 +193,7 @@ class ObjBufferModelWWMI:
             stride_offset += cstride
 
         # (6) 翻转三角形方向（高效）
+        # 鸣潮需要翻转这一下
         flat_arr = flattened_ib_arr
         if flat_arr.size % 3 == 0:
             flipped = flat_arr.reshape(-1, 3)[:, ::-1].flatten().tolist()
