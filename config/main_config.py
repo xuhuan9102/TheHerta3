@@ -13,6 +13,7 @@ from ..config.properties_generate_mod import Properties_GenerateMod
 class LogicName:
     UnityVS = "UnityVS"
     UnityCS = "UnityCS"
+    UnityCSM = "UnityCSM"
     UnityCPU = "UnityCPU"
     
     GIMI = "GIMI"

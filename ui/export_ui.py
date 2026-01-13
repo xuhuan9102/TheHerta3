@@ -188,6 +188,11 @@ class SSMTGenerateMod(bpy.types.Operator):
         elif GlobalConfig.logic_name == LogicName.UnityCPU:
             migoto_mod_model = ModModelUnity(workspace_collection=workspace_collection)
             migoto_mod_model.generate_unity_vs_config_ini()
+        
+        # UnityCSM
+        elif GlobalConfig.logic_name == LogicName.UnityCSM:
+            migoto_mod_model = ModModelUnity(workspace_collection=workspace_collection)
+            migoto_mod_model.generate_unity_cs_config_ini()
 
         # 尘白禁区、卡拉比丘
         elif GlobalConfig.logic_name == LogicName.SnowBreak:

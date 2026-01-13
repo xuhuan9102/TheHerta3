@@ -198,7 +198,7 @@ def ImprotFromWorkSpaceSSMTV4(self, context):
 
     # 读取时保存每个DrawIB对应的GameType名称到工作空间文件夹下面的Import.json，在导出时使用
     draw_ib_gametypename_dict = {}
-
+    
     # 逐个DrawIB进行导入
     for draw_ib_pair in draw_ib_pair_list:
         # 获取DrwaIB和别名
