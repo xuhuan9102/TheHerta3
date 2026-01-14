@@ -221,8 +221,8 @@ class ObjElementModel:
                 # Follow WWMI-Tools: fetch the undeformed vertex coordinates and do
                 # not apply mirroring or dtype conversion at extraction stage.
                 mesh_vertices.foreach_get('co', vertex_coords)
-
                 positions = vertex_coords.reshape(-1, 3)[loop_vertex_indices]
+
 
                 if d3d11_element.Format == 'R32G32B32A32_FLOAT':
                     # If format expects 4 components, add a zero alpha column (float32)
@@ -239,9 +239,11 @@ class ObjElementModel:
                     positions = new_array
 
                 if GlobalConfig.logic_name == LogicName.WWMI:
-                    # 鸣潮逆向翻转：Position (-x, -y, z)
-                    positions[:, 0] *= -1
-                    positions[:, 1] *= -1
+                    # 鸣潮需要翻转：Position (-x, -y, z),所以X和Y都乘以-1
+                    # 鸣潮POSITION需要放大100倍，因为我们SSMT提取出来的模型缩小了100倍
+                    positions[:, 0] *= -100
+                    positions[:, 1] *= -100
+                    positions[:, 2] *= 100
 
                 self.original_elementname_data_dict[d3d11_element_name] = positions
 
