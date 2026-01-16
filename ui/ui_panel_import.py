@@ -36,7 +36,7 @@ class PanelModelImportConfig(bpy.types.Panel):
         
         if GlobalConfig.logic_name == LogicName.WWMI:
             layout.prop(context.scene.properties_wwmi,"import_merged_vgmap",text="使用融合统一顶点组")
-
+            layout.prop(context.scene.properties_wwmi,"import_skip_empty_vertex_groups",text="导入时跳过空顶点组")
         
         # 导入 ib vb fmt格式文件
         layout.operator("import_mesh.migoto_raw_buffers_mmt",icon='IMPORT')
@@ -109,71 +109,6 @@ class Import3DMigotoRaw(bpy.types.Operator, ImportHelper):
         CollectionUtils.select_collection_objects(collection)
 
         return {'FINISHED'}
-def ImprotFromWorkSpaceSSMTV3(self, context):
-    import_drawib_aliasname_folder_path_dict = ConfigUtils.get_import_drawib_aliasname_folder_path_dict_with_first_match_type()
-    print(import_drawib_aliasname_folder_path_dict)
-
-    workspace_collection = CollectionUtils.create_new_collection(collection_name=GlobalConfig.workspacename,color_tag=CollectionColor.Red)
-    # 这里先链接SourceCollection，确保它在上面
-    bpy.context.scene.collection.children.link(workspace_collection)
-
-    # TODO 如果此时刚才那个下拉列表没有任何集合，就让那个下拉列表选中这个集合
-    if not context.scene.active_workspace_collection:
-        context.scene.active_workspace_collection = workspace_collection
-
-    # 读取时保存每个DrawIB对应的GameType名称到工作空间文件夹下面的Import.json，在导出时使用
-    draw_ib_gametypename_dict = {}
-    for draw_ib_aliasname,import_folder_path in import_drawib_aliasname_folder_path_dict.items():
-        tmp_json = ConfigUtils.read_tmp_json(import_folder_path)
-        work_game_type = tmp_json.get("WorkGameType","")
-        draw_ib = draw_ib_aliasname.split("_")[0]
-        draw_ib_gametypename_dict[draw_ib] = work_game_type
-
-    save_import_json_path = os.path.join(GlobalConfig.path_workspace_folder(),"Import.json")
-
-    JsonUtils.SaveToFile(json_dict=draw_ib_gametypename_dict,filepath=save_import_json_path)
-    
-    # 创建一个默认显示的集合，用来存放默认显示的东西，在实际使用中几乎每次都需要我们手动创建，所以变为自动化了。
-    default_show_collection = CollectionUtils.create_new_collection(collection_name="DefaultShow",color_tag=CollectionColor.White,link_to_parent_collection_name=workspace_collection.name)
-
-    # 开始读取模型数据
-    for draw_ib_aliasname,import_folder_path in import_drawib_aliasname_folder_path_dict.items():
-        print("Importing DrawIB:", draw_ib_aliasname)
-
-        self.report({'INFO'}, "正在导入DrawIB: " + draw_ib_aliasname)
-
-        draw_ib = draw_ib_aliasname.split("_")[0]
-        alias_name = draw_ib_aliasname.split("_")[1]
-        if alias_name == "":
-            alias_name = "Original"
-
-        import_prefix_list = ConfigUtils.get_prefix_list_from_tmp_json(import_folder_path)
-        if len(import_prefix_list) == 0:
-            self.report({'ERROR'},"当前output文件夹"+draw_ib_aliasname+"中的内容暂不支持一键导入分支模型")
-            continue
-
-        
-        part_count = 1
-        for prefix in import_prefix_list:
-            
-            fmt_file_path = os.path.join(import_folder_path, prefix + ".fmt")
-            mbf = MigotoBinaryFile(fmt_path=fmt_file_path,mesh_name=draw_ib + "-" + str(part_count) + "-" + alias_name)
-            obj_result = MeshImporter.create_mesh_obj_from_mbf(mbf=mbf)
-
-            # 刷新视图以得到流畅的导入逐渐增多的视觉效果
-            bpy.context.view_layer.update()
-
-            # 强制Blender刷新界面
-            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-            
-            default_show_collection.objects.link(obj_result)
-            part_count = part_count + 1
- 
-
-    
-
-    # Select all objects under collection (因为用户习惯了导入后就是全部选中的状态). 
-    CollectionUtils.select_collection_objects(workspace_collection)
 
 
 def ImprotFromWorkSpaceSSMTV4(self, context):
@@ -304,7 +239,6 @@ class SSMTImportAllFromCurrentWorkSpaceV3(bpy.types.Operator):
             self.report({"ERROR"},"WorkSpace Folder Didn't exists, Please create a WorkSpace in SSMT before import " + GlobalConfig.path_workspace_folder())
         else:
             TimerUtils.Start("ImportFromWorkSpace")
-            # ImprotFromWorkSpaceSSMTV3(self,context)
             ImprotFromWorkSpaceSSMTV4(self,context)
             TimerUtils.End("ImportFromWorkSpace")
         

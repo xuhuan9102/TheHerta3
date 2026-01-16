@@ -42,3 +42,33 @@ class Properties_WWMI(bpy.types.PropertyGroup):
         bpy.context.scene.properties_wwmi.apply_all_modifiers
         '''
         return bpy.context.scene.properties_wwmi.apply_all_modifiers
+    
+    # import_skip_empty_vertex_groups
+    import_skip_empty_vertex_groups:bpy.props.BoolProperty(
+        name="跳过空顶点组",
+        description="勾选此项后，导入时会跳过空的顶点组",
+        default=True
+    ) # type: ignore
+
+    @classmethod
+    def import_skip_empty_vertex_groups(cls):
+        '''
+        bpy.context.scene.properties_wwmi.import_skip_empty_vertex_groups
+        '''
+        return bpy.context.scene.properties_wwmi.import_skip_empty_vertex_groups
+    
+    # export_add_missing_vertex_groups
+    export_add_missing_vertex_groups:bpy.props.BoolProperty(
+        name="导出时添加缺失顶点组",
+        description="勾选此项后，生成Mod时会自动重新排列并填补数字顶点组间的间隙空缺",
+        default=True
+    ) # type: ignore
+
+    @classmethod
+    def export_add_missing_vertex_groups(cls):
+        '''
+        bpy.context.scene.properties_wwmi.export_add_missing_vertex_groups
+        '''
+        return bpy.context.scene.properties_wwmi.export_add_missing_vertex_groups
+    
+    

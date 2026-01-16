@@ -1,13 +1,13 @@
 
 
 # UI界面
-from .ui.panel_ui import * 
-from .ui.panel_model_ui import *
-from .ui.collection_rightclick_ui import *
-from .ui.ui_sword import *
-from .ui.export_ui import SSMTGenerateMod, PanelGenerateModConfig, SSMTSelectGenerateModFolder
-from .ui.ui_import import Import3DMigotoRaw, SSMTImportAllFromCurrentWorkSpaceV3, PanelModelImportConfig
-from .ui.fast_texture_ui import *
+from .ui.ui_panel_basic import * 
+from .ui.ui_panel_model import *
+from .ui.ui_panel_rightclick import *
+from .ui.ui_panel_sword import *
+from .ui.ui_panel_export import SSMTGenerateMod, PanelGenerateModConfig, SSMTSelectGenerateModFolder
+from .ui.ui_panel_import import Import3DMigotoRaw, SSMTImportAllFromCurrentWorkSpaceV3, PanelModelImportConfig
+from .ui.ui_panel_fast_texture import *
 
 # 自动更新功能
 from . import addon_updater_ops
