@@ -537,8 +537,8 @@ class DrawIBModelWWMI:
                 remove_vertex_groups(temp_obj, ignore_list)
 
                 # Rename VGs to their indicies to merge ones of different components together
-                for vg in ObjUtils.get_vertex_groups(temp_obj):
-                    vg.name = str(vg.index)
+                # for vg in ObjUtils.get_vertex_groups(temp_obj):
+                #     vg.name = str(vg.index)
 
                 # Calculate vertex count of temporary object
                 temp_object.vertex_count = len(temp_obj.data.vertices)
@@ -608,7 +608,7 @@ class DrawIBModelWWMI:
             # 那么导出时就得按顺序排列并且添加回来那些空的顶点组以确保不会出问题
             if Properties_WWMI.export_add_missing_vertex_groups():
                 ObjUtils.select_obj(component_obj)
-                VertexGroupUtils.merge_vertex_groups_with_same_number()
+                # VertexGroupUtils.merge_vertex_groups_with_same_number()
                 VertexGroupUtils.fill_vertex_group_gaps()
                 component_obj.select_set(False)
 

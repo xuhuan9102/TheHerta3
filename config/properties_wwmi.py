@@ -47,7 +47,7 @@ class Properties_WWMI(bpy.types.PropertyGroup):
     import_skip_empty_vertex_groups:bpy.props.BoolProperty(
         name="跳过空顶点组",
         description="勾选此项后，导入时会跳过空的顶点组",
-        default=False
+        default=True
     ) # type: ignore
 
     @classmethod
@@ -61,7 +61,7 @@ class Properties_WWMI(bpy.types.PropertyGroup):
     export_add_missing_vertex_groups:bpy.props.BoolProperty(
         name="导出时添加缺失顶点组",
         description="勾选此项后，生成Mod时会自动重新排列并填补数字顶点组间的间隙空缺",
-        default=False
+        default=True
     ) # type: ignore
 
     @classmethod
