@@ -201,6 +201,7 @@ def ImprotFromWorkSpaceSSMTV4(self, context):
                     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
                     
                     default_show_collection.objects.link(obj_result)
+
                     part_count = part_count + 1
             except Exception as e:
                 self.report({'WARNING'},"导入DrawIB " + draw_ib + "的数据类型: " + gametype_name + " 时出错，尝试下一个数据类型。错误信息: " + str(e))

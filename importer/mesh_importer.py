@@ -12,6 +12,7 @@ from ..utils.format_utils import Fatal,FormatUtils
 from ..utils.texture_utils import TextureUtils
 from ..utils.mesh_utils import MeshUtils
 from ..utils.log_utils import LOG
+from ..utils.vertexgroup_utils import VertexGroupUtils
 
 from ..config.main_config import GlobalConfig, LogicName
 from ..config.properties_import_model import Properties_ImportModel
@@ -188,7 +189,10 @@ class MeshImporter:
         MeshImporter.set_import_rotate_angle(obj=obj, mbf=mbf)
         MeshImporter.set_import_scale(obj=obj, mbf=mbf)
 
-
+        # WWMI的Merged架构需要清理空顶点组，这里我们PerCompoennt也清理算了，不然做出区分后续优化太麻烦
+        if GlobalConfig.logic_name == LogicName.WWMI:
+            if Properties_WWMI.import_skip_empty_vertex_groups():
+                VertexGroupUtils.remove_unused_vertex_groups(obj)
 
         TimerUtils.End("Import 3Dmigoto Raw")
 
@@ -220,6 +224,13 @@ class MeshImporter:
 
     @classmethod
     def set_import_scale(cls,obj,mbf:MigotoBinaryFile):
+        '''
+        Deprecated
+
+        TODO 未来要移除这个处理，所有内容在模型提取端设置完成
+        这种底层操作尽可能不要暴漏给用户
+        '''
+
         # 设置导入时模型大小比例，Unreal模型常用
         scalefactor = Properties_ImportModel.model_scale()
         if scalefactor == 1.0:
