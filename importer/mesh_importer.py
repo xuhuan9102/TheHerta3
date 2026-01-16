@@ -13,6 +13,7 @@ from ..utils.texture_utils import TextureUtils
 from ..utils.mesh_utils import MeshUtils
 from ..utils.log_utils import LOG
 from ..utils.vertexgroup_utils import VertexGroupUtils
+from ..utils.obj_utils import ObjUtils
 
 from ..config.main_config import GlobalConfig, LogicName
 from ..config.properties_import_model import Properties_ImportModel
@@ -82,12 +83,6 @@ class MeshImporter:
                 else:
                     positions = [(x[0], x[1] , x[2] ) for x in data]
 
-                # 这里鸣潮的翻转X和Y是为了和游戏里解包出来的原模型朝向完全一致
-                if GlobalConfig.logic_name == LogicName.WWMI:
-                    # TODO 这里应该在SSMT提取端就完成
-                    # 鸣潮的坐标系需要额外处理一下,这样让模型旋转了180度的效果
-                    positions = [(-x[0], -x[1], x[2]) for x in data]
-
 
                 mesh.vertices.foreach_set('co', unpack_list(positions))
             elif element.SemanticName.startswith("COLOR"):
@@ -129,12 +124,7 @@ class MeshImporter:
                     print("燕云十六声法线处理")
                     normals = [(x[0] * 2 - 1, x[1] * 2 - 1, x[2] * 2 - 1) for x in data]
 
-                # 这里鸣潮的翻转X和Y是为了和游戏里解包出来的原模型朝向完全一致
-                # TODO 这里应该在SSMT提取端就完成
-                elif GlobalConfig.logic_name == LogicName.WWMI:
-                    normals = [(-x[0], -x[1], x[2]) for x in data]
-                else:
-                    normals = [(x[0], x[1], x[2]) for x in data]
+                normals = [(x[0], x[1], x[2]) for x in data]
             elif element.SemanticName == "TANGENT":
                 pass
             elif element.SemanticName == "BINORMAL":
@@ -186,7 +176,20 @@ class MeshImporter:
             MeshUtils.set_import_normals_v2(mesh=mesh,normals=normals)
         
         MeshImporter.create_bsdf_with_diffuse_linked(obj, mesh_name=mbf.mesh_name,directory=os.path.dirname(mbf.fmt_path))
-        MeshImporter.set_import_rotate_angle(obj=obj, mbf=mbf)
+        
+        # 通过fmt文件中标明的logic_name来进行预处理
+        if mbf.fmt_file.logic_name == LogicName.WWMI:
+            # 鸣潮需要把旋转角度清零
+            obj.rotation_euler[0] = 0
+            obj.rotation_euler[1] = 0
+            obj.rotation_euler[2] = math.radians(180)
+
+            # 鸣潮需要缩小100倍
+            obj.scale = (0.01,0.01,0.01)
+
+        else:
+            MeshImporter.set_import_rotate_angle(obj=obj, mbf=mbf)
+        
 
         # WWMI的Merged架构需要清理空顶点组，这里我们PerCompoennt也清理算了，不然做出区分后续优化太麻烦
         if GlobalConfig.logic_name == LogicName.WWMI:
@@ -238,23 +241,37 @@ class MeshImporter:
     def initialize_mesh(cls,mesh, mbf:MigotoBinaryFile):
         # 翻转索引顺序以改变面朝向，只能改变面朝向，模型依然是镜像的
         # print(mbf.ib_data[0],mbf.ib_data[1],mbf.ib_data[2])
-        if Properties_ImportModel.use_mirror_workflow():
-            if not mbf.fmt_file.flip_face_orientation:  # 假设你有一个标志位控制是否翻转
-                flipped_indices = []
-                for i in range(0, len(mbf.ib_data), 3):
-                    triangle = mbf.ib_data[i:i+3]
-                    flipped_triangle = triangle[::-1]
-                    flipped_indices.extend(flipped_triangle)
-                mbf.ib_data = flipped_indices
+
+        # 鸣潮的模型导入时必须翻转面朝向
+        if mbf.fmt_file.logic_name == LogicName.WWMI:
+            flipped_indices = []
+            for i in range(0, len(mbf.ib_data), 3):
+                triangle = mbf.ib_data[i:i+3]
+                flipped_triangle = triangle[::-1]
+                flipped_indices.extend(flipped_triangle)
+            mbf.ib_data = flipped_indices
         else:
-            if mbf.fmt_file.flip_face_orientation:  # 假设你有一个标志位控制是否翻转
-                flipped_indices = []
-                for i in range(0, len(mbf.ib_data), 3):
-                    triangle = mbf.ib_data[i:i+3]
-                    flipped_triangle = triangle[::-1]
-                    flipped_indices.extend(flipped_triangle)
-                mbf.ib_data = flipped_indices
-        print(mbf.ib_data[0],mbf.ib_data[1],mbf.ib_data[2])
+            # TODO 这里后续肯定要删除的，但是必须每个游戏都过一遍预设逻辑的过程
+            # 暂时留着来兼容旧版本
+            if Properties_ImportModel.use_mirror_workflow():
+                if not mbf.fmt_file.flip_face_orientation:  # 假设你有一个标志位控制是否翻转
+                    flipped_indices = []
+                    for i in range(0, len(mbf.ib_data), 3):
+                        triangle = mbf.ib_data[i:i+3]
+                        flipped_triangle = triangle[::-1]
+                        flipped_indices.extend(flipped_triangle)
+                    mbf.ib_data = flipped_indices
+            else:
+                if mbf.fmt_file.flip_face_orientation:  # 假设你有一个标志位控制是否翻转
+                    flipped_indices = []
+                    for i in range(0, len(mbf.ib_data), 3):
+                        triangle = mbf.ib_data[i:i+3]
+                        flipped_triangle = triangle[::-1]
+                        flipped_indices.extend(flipped_triangle)
+                    mbf.ib_data = flipped_indices
+        
+        # 输出查看翻转后的前三个索引
+        # print(mbf.ib_data[0],mbf.ib_data[1],mbf.ib_data[2])
 
         # 导入IB文件设置为mesh的三角形索引
         mesh.loops.add(mbf.ib_count)

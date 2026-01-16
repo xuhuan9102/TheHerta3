@@ -339,7 +339,7 @@ class ObjElementModel:
                 mesh_loops.foreach_get("tangent", tangents)
                 
                 if GlobalConfig.logic_name == LogicName.WWMI:
-                        # 鸣潮逆向翻转：Tangent (-x, -y, z)
+                    # 鸣潮逆向翻转：Tangent (-x, -y, z)
                     tangents[0::3] *= -1
                     tangents[1::3] *= -1
 

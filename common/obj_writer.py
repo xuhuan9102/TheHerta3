@@ -46,8 +46,12 @@ class ObjWriter:
                 
     @staticmethod
     def write_buf_shapekey_vertex_offsets(shapekey_vertex_offsets,filename:str):
-        # 将列表转换为numpy数组，并改变其数据类型为float16
-        float_array = numpy.array(shapekey_vertex_offsets, dtype=numpy.float32).astype(numpy.float16)
+        # 将列表转换为numpy数组
+        float_array = numpy.array(shapekey_vertex_offsets, dtype=numpy.float32)
+        # 在转换为float16之前，先乘以100以还原到游戏内的缩放比例
+        float_array *= 100.0
+        # 改变数据类型为float16
+        float_array = float_array.astype(numpy.float16)
         with open(GlobalConfig.path_generatemod_buffer_folder() + filename, 'wb') as file:
             float_array.tofile(file)
 

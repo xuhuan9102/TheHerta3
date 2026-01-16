@@ -588,6 +588,15 @@ class DrawIBModelWWMI:
             ObjUtils.join_objects(bpy.context, component_merged_object)
 
             component_obj = component_merged_object[0]
+
+            # 如果导入时勾选了忽略空顶点组
+            # 那么导出时就得按顺序排列并且添加回来那些空的顶点组以确保不会出问题
+            if Properties_WWMI.export_add_missing_vertex_groups():
+                ObjUtils.select_obj(component_obj)
+                VertexGroupUtils.merge_vertex_groups_with_same_number()
+                VertexGroupUtils.fill_vertex_group_gaps()
+                component_obj.select_set(False)
+
             component_obj_list.append(component_obj)
             drawib_merged_object.append(component_obj)
 
@@ -601,13 +610,21 @@ class DrawIBModelWWMI:
             real_vg_count = len(used_vg_indices)
             self.component_real_vg_count_dict[component_index] = real_vg_count
             print(f"Calculated real vg_count for Component {component_index}: {real_vg_count}")
-
+            
             # 注意这里 component.vertex_count / index_count 已经在前面统计过
             drawib_vertex_count += component.vertex_count
             drawib_index_count += component.index_count
 
         # 获取到 component_obj_list 后，导出 BlendRemap forward/reverse
         self.export_blendremap_forward_and_reverse(component_obj_list)
+
+        # 确保选中第一个，否则join_objects会报错
+        if drawib_merged_object:
+            bpy.ops.object.select_all(action='DESELECT')
+            target_active = drawib_merged_object[0]
+            target_active.select_set(True)
+            bpy.context.view_layer.objects.active = target_active
+
 
         ObjUtils.join_objects(bpy.context, drawib_merged_object)
 

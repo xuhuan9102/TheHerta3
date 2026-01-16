@@ -10,6 +10,7 @@ class FMTFile:
         self.gametypename = ""
         self.prefix = ""
         self.scale = "1.0"
+        self.logic_name = ""
         self.rotate_angle:bool = False
         self.rotate_angle_x:float = 0
         self.rotate_angle_y:float = 0
@@ -40,6 +41,8 @@ class FMTFile:
                 self.gametypename = value
             elif key == "prefix":
                 self.prefix = value
+            elif key == "logic_name":
+                self.logic_name = value
             elif key == "scale":
                 self.scale = value
             elif key == "rotate_angle":
