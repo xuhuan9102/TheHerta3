@@ -642,7 +642,7 @@ class DrawIBModelWWMI:
 
 
         ObjUtils.join_objects(bpy.context, drawib_merged_object)
-
+        
         obj = drawib_merged_object[0]
 
         ObjUtils.rename_object(obj, 'TEMP_EXPORT_OBJECT')

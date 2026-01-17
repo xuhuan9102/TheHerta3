@@ -6,6 +6,8 @@ from bpy.types import Operator, Panel, PropertyGroup, UIList
 from bpy_extras.io_utils import ImportHelper
 import bpy.utils.previews
 
+from ..utils.obj_utils import ObjUtils
+
 from ..importer.mesh_importer import MigotoBinaryFile, MeshImporter
 from ..config.main_config import GlobalConfig
 
@@ -299,6 +301,13 @@ class SwordImportAllReversed(bpy.types.Operator):
 
                 datatype_collection.objects.link(obj_result)
                 # 这里先链接SourceCollection，确保它在上面
+
+                # 选中此obj
+                ObjUtils.select_obj(obj_result)
+                
+                # 应用旋转和缩放
+                bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+
 
                 # 刷新视图以得到流畅的导入逐渐增多的视觉效果
                 bpy.context.view_layer.update()
