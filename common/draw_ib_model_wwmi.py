@@ -30,6 +30,8 @@ from .obj_buffer_model_wwmi import ObjBufferModelWWMI
 from .branch_model import BranchModel
 from .obj_writer import ObjWriter
 
+from ..helper.obj_buffer_helper import ObjBufferHelper
+
 
 
 @dataclass
@@ -129,6 +131,7 @@ class DrawIBModelWWMI:
             self.component_name_component_model_dict[component_model.component_name] = component_model
         
         # 创建obj_element_model
+        ObjBufferHelper.check_and_verify_attributes(obj=self.merged_object.object, d3d11_game_type=self.d3d11GameType)
         obj_element_model = ObjElementModel(d3d11_game_type=self.d3d11GameType, obj_name=self.merged_object.object.name)
 
         # 如果使用了remap技术则替换Remap

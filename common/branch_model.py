@@ -18,7 +18,7 @@ from ..base.m_global_key_counter import M_GlobalKeyCounter
 
 from .obj_element_model import ObjElementModel
 from .obj_buffer_model_unity import ObjBufferModelUnity
-
+from ..helper.obj_buffer_helper import ObjBufferHelper
 
 class BranchModel:
     '''
@@ -280,6 +280,7 @@ class BranchModel:
                     bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
 
                 # print("DrawIB BranchModel")
+                ObjBufferHelper.check_and_verify_attributes(obj=obj, d3d11_game_type=d3d11_game_type)
                 obj_element_model = ObjElementModel(d3d11_game_type=d3d11_game_type,obj_name=obj_name)
                 obj_element_model.fill_into_element_vertex_ndarray()
                 

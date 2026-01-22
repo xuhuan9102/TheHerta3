@@ -27,6 +27,36 @@ from ..base.obj_data_model import ObjDataModel
 
 @dataclass
 class ObjElementModel:
+    '''
+    TODO 要实现把形态键导出为.buf的话，就需要对现在的类进行改造
+    把所有的方法变成函数式的，方便任意组合灵活调用
+    因为如果是放在类的设计里，调用的模式就会被固定死
+    
+    因为后面不仅有形态键的Shape. 以及Anim.导出
+    还有基于帧的每帧buf导出
+    不管是哪个都要求我们能灵活地调用这些方法
+
+    需要实现，给出一个复制过的只保留某个形态键状态的obj
+    就能直接获取到它的POSITION.buf的数据
+    目前的架构很难做到，强行做到也会导致额外调用许多无效代码，导致拖慢执行速度
+    例如check_and_verify_attributes这个只需要在开始之前进行一次校验就行了
+
+    例如后面的替换BLENDINDICES，以及求Buffer，都需要变成灵活应用的函数
+    也就是需要下放到utils层级
+    这里可以看出我们之前的层级设计是错的，因为这里只涉及到底层操作，所以应该全部在utils层完成
+
+    由于obj_buffer_model是依赖于obj_element_model的
+    这个类一改，整个逻辑和体系全部都要修改，我靠了。。。
+
+    所以暂时不动这里的东西，新开一个utils类去测试
+
+    又因为obj_element_model还起到了数据传递的作用
+    所以这个类还不能删掉，还需要用这个类来传递数据
+    只不过需要把里面的方法去掉，方法改为从外面调用新的utils类，然后最终生成一个obj_element_model实例？
+    也不对，整个基于obj_element_model和obj_buffer_model的设计都要改
+    也就是这俩类都必须变成纯数据类，核心逻辑全部独立出来变成utils调用
+    并且要尽可能拆分的小一点。
+    '''
     # 初始化时必须填的字段
     d3d11_game_type:D3D11GameType
     obj_name:str
@@ -51,8 +81,6 @@ class ObjElementModel:
         使用Numpy直接从指定名称的obj的mesh中转换数据到目标格式Buffer
         '''
         self.obj = ObjUtils.get_obj_by_name(name=self.obj_name)
-
-        self.check_and_verify_attributes()
 
         '''
         这里我想把形态键归0，然后获取模型当前不含形态键的原始网格数据
@@ -111,35 +139,7 @@ class ObjElementModel:
         # truncation issues.
         self.parse_elementname_data_dict()
 
-    def check_and_verify_attributes(self):
-        '''
-        校验并补全部分元素
-        COLOR
-        TEXCOORD、TEXCOORD1、TEXCOORD2、TEXCOORD3
-        '''
-        for d3d11_element_name in self.d3d11_game_type.OrderedFullElementList:
-            d3d11_element = self.d3d11_game_type.ElementNameD3D11ElementDict[d3d11_element_name]
-            # 校验并补全所有COLOR的存在
-            if d3d11_element_name.startswith("COLOR"):
-                if d3d11_element_name not in self.obj.data.vertex_colors:
-                    self.obj.data.vertex_colors.new(name=d3d11_element_name)
-                    print("当前obj ["+ self.obj.name +"] 缺少游戏渲染所需的COLOR: ["+  "COLOR" + "]，已自动补全")
-            
-            # 校验TEXCOORD是否存在
-            if d3d11_element_name.startswith("TEXCOORD"):
-                if d3d11_element_name + ".xy" not in self.obj.data.uv_layers:
-                    # 此时如果只有一个UV，则自动改名为TEXCOORD.xy
-                    if len(self.obj.data.uv_layers) == 1 and d3d11_element_name == "TEXCOORD":
-                            self.obj.data.uv_layers[0].name = d3d11_element_name + ".xy"
-                    else:
-                        # 否则就自动补一个UV，防止后续calc_tangents失败
-                        self.obj.data.uv_layers.new(name=d3d11_element_name + ".xy")
-            
-            # Check if BLENDINDICES exists
-            if d3d11_element_name.startswith("BLENDINDICES"):
-                if not self.obj.vertex_groups:
-                    raise Fatal("your object [" +self.obj.name + "] need at leat one valid Vertex Group, Please check if your model's Vertex Group is correct.")
-
+    
 
     def fill_into_element_vertex_ndarray(self):
         # Create the element array with the original dtype (matching ByteWidth)
@@ -233,8 +233,8 @@ class ObjElementModel:
                 # Follow WWMI-Tools: fetch the undeformed vertex coordinates and do
                 # not apply mirroring or dtype conversion at extraction stage.
 
-                mesh_vertices.foreach_get('undeformed_co', vertex_coords)
-                # mesh_vertices.foreach_get('co', vertex_coords)
+                # mesh_vertices.foreach_get('undeformed_co', vertex_coords)
+                mesh_vertices.foreach_get('co', vertex_coords)
                 positions = vertex_coords.reshape(-1, 3)[loop_vertex_indices]
 
 

@@ -25,7 +25,7 @@ class PanelBasicInformation(bpy.types.Panel):
 
         GlobalConfig.read_from_main_json()
 
-        self.bl_label =  "TheHerta3 v" +  PluginConfig.get_version_string() + "  SSMT V" + str(GlobalConfig.ssmt_version_number)
+        self.bl_label =  "TheHerta3 V" +  PluginConfig.get_version_string() + "  SSMT V" + str(GlobalConfig.ssmt_version_number)
         layout.label(text=TR.translate("SSMT缓存文件夹路径: ") + GlobalConfig.dbmtlocation)
         layout.label(text=TR.translate("当前配置名称: ") + GlobalConfig.gamename)
         layout.label(text=TR.translate("当前执行逻辑: ") + GlobalConfig.logic_name)
@@ -33,7 +33,7 @@ class PanelBasicInformation(bpy.types.Panel):
 
         if PluginConfig.get_min_ssmt_version() > GlobalConfig.ssmt_version_number:
             layout.label(text=TR.translate("当前SSMT版本过低无法适配"),icon='ERROR')
- 
+
         # layout.prop(context.scene.properties_import_model,"use_mirror_workflow",text="使用非镜像工作流")
         
         context = bpy.context  # 直接使用 bpy.context 获取完整上下文
