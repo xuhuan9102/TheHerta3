@@ -27,29 +27,9 @@ from ..base.obj_data_model import ObjDataModel
 
 @dataclass
 class ObjElementModel:
-    '''
-    这个类只负责把Blender的数据转换为element_ndarray的dict
-    然后后面可以根据element来获取其数据就足够了
-
-    TODO 目前的架构还是有问题，这里应该是先从obj获取数据
-    获取的数据根据Element存放好
-    后面再来一层转换层，把数据再转换为带dtype的形式，而不是在这里创建的时候就转换好
-    不然的话就会遇到uint8但是实际上需要uint16的情况
-    然后这个uint8声明的时候就限制死了dtype导致后续替换流程特别麻烦
-    所以现在这么复杂，基本上就是由于层级拆分不明确导致的，后面必须重构
-
-    TODO 暂时先不管了，先去完成ini生成的部分，不然不管我们怎么改，都无法去游戏里验证实际效果
-    修改完ini的部分就回来拆分这里的部分。
-
-    '''
     # 初始化时必须填的字段
     d3d11_game_type:D3D11GameType
     obj_name:str
-    # Note: previously this class accepted a `blendindices_override`
-    # parameter to allow callers to provide remapped BLENDINDICES before
-    # packing. That facility has been removed — callers should now modify
-    # `elementname_data_dict['BLENDINDICES']` after parsing and before
-    # calling `fill_into_element_vertex_ndarray()`.
 
     # 外用字段
     obj:bpy.types.Object = field(init=False,repr=False)
@@ -73,15 +53,47 @@ class ObjElementModel:
         self.obj = ObjUtils.get_obj_by_name(name=self.obj_name)
 
         self.check_and_verify_attributes()
+
+        '''
+        这里我想把形态键归0，然后获取模型当前不含形态键的原始网格数据
+        但是问题在于，有些人是要通过形态键来调整体态数据的，然后他们希望导出那个特定形态键下的模型
+        此时如果我们把所有的形态键全部设为0，那就会导致导出结果和预期不符
+        所以这里只把部分形态键设为0，具体请看如下规则
+        可以把形态键命名为Export.XXXX 也就是以Export.开头的形态键，这样的形态键会被保留
+        这种形态键数值是多少，导出的模型就是多少
+        其它的形态键则会被归0，归0的目的是防止它们影响最终的网格数据
+        因为我们要把一部分形态键 Shape.XXXX 当成滑条调整体型的形态键
+        后面还有另一部分Anim.XXXX 当成动画形态键，也就是通过形态键、变量切换来实现循环播放小动画功能
+        其它不符合命名规则的形态键将会被归0并且忽略掉
+
+        TODO 在开发这个功能之前，我们必须把所有的导出流程都改为
+        创建一个临时的obj来进行导出，所有的操作只在这个临时的obj上进行
+        但是这个也不是必要的，总之先随便试试，写完功能之后再来优化这个问题
+
+
+        '''
+        shape_key_values = {}
+        if self.obj.data.shape_keys:
+            # 必须遍历 key_blocks 才能获取每个键的值
+            for key_block in self.obj.data.shape_keys.key_blocks:
+                shape_key_values[key_block.name] = key_block.value
+                # 只有不以 Export. 开头的形态键才会被归零
+                if not key_block.name.startswith("Export."):
+                    key_block.value = 0.0
         
+        # 这里获取应用了形态键之后的mesh数据
         mesh = ObjUtils.get_mesh_evaluate_from_obj(obj=self.obj)
-        # 三角化mesh
+
+        # 三角化mesh，因为游戏引擎里的mesh都是三角形
         ObjUtils.mesh_triangulate(mesh)
+
         # Calculates tangents and makes loop normals valid (still with our custom normal data from import time):
         # 前提是有UVMap，前面的步骤应该保证了模型至少有一个TEXCOORD.xy
         mesh.calc_tangents()
-        self.mesh = mesh
+
         # Cache frequently accessed mesh collections/lengths to avoid repeated attribute lookups
+        # 提前获取到变量，这样避免用到的时候重复获取，也许能节省开销？不确定，应该节省不了多少
+        self.mesh = mesh
         self.mesh_loops = mesh.loops
         self.mesh_loops_length = len(self.mesh_loops)
         self.mesh_vertices = mesh.vertices
@@ -220,7 +232,9 @@ class ObjElementModel:
                 vertex_coords = numpy.empty(mesh_vertices_length * 3, dtype=numpy.float32)
                 # Follow WWMI-Tools: fetch the undeformed vertex coordinates and do
                 # not apply mirroring or dtype conversion at extraction stage.
-                mesh_vertices.foreach_get('co', vertex_coords)
+
+                mesh_vertices.foreach_get('undeformed_co', vertex_coords)
+                # mesh_vertices.foreach_get('co', vertex_coords)
                 positions = vertex_coords.reshape(-1, 3)[loop_vertex_indices]
 
 
