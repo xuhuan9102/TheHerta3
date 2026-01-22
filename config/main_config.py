@@ -42,6 +42,9 @@ class GlobalConfig:
     current_game_migoto_folder = ""
     logic_name = ""
 
+    # 适配的SSMT最低版本号
+    ssmt_version_number = 0
+
     @classmethod
     def read_from_main_json(cls) :
         try:
@@ -56,6 +59,7 @@ class GlobalConfig:
                 cls.workspacename = main_setting_json.get("CurrentWorkSpace","")
                 cls.gamename = main_setting_json.get("CurrentGameName","")
                 cls.dbmtlocation = main_setting_json.get("DBMTWorkFolder","") + "\\"
+                cls.ssmt_version_number = main_setting_json.get("VersionNumber",0)
             else:
                 print("Can't find: " + main_json_path)
             

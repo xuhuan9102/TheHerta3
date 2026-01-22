@@ -17,4 +17,9 @@ class PluginConfig:
             return f"{version[0]}.{version[1]}.{version[2]}"
         return "未知"
     
+    @classmethod
+    def get_min_ssmt_version(cls) -> int:
+        if cls._bl_info and "min_ssmt_version" in cls._bl_info:
+            return cls._bl_info["min_ssmt_version"]
+        return 0
 

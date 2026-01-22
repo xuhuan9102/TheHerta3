@@ -31,6 +31,7 @@ bl_info = {
     "blender": (4, 5, 0),
     "version": (3, 3, 4),
     "location": "View3D",
+    "min_ssmt_version": 352, # 确保TheHerta3正确工作的SSMT最低版本号
     "category": "Generic"
 }
 
