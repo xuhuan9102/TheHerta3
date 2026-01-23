@@ -141,12 +141,13 @@ class ObjElementModel:
         mesh.calc_tangents()
         
         self.mesh = mesh
+        self.total_structured_dtype:numpy.dtype = self.d3d11_game_type.get_total_structured_dtype()
 
         self.original_elementname_data_dict = ObjBufferHelper.parse_elementname_data_dict(mesh=mesh, d3d11_game_type=self.d3d11_game_type)
 
 
     def fill_into_element_vertex_ndarray(self):
-        self.total_structured_dtype:numpy.dtype = self.d3d11_game_type.get_total_structured_dtype()
+        
 
         # Create the element array with the original dtype (matching ByteWidth)
         self.element_vertex_ndarray = numpy.zeros(len(self.mesh.loops), dtype=self.total_structured_dtype)

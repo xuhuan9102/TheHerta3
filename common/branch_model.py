@@ -256,8 +256,6 @@ class BranchModel:
             else:
                 # XXX 我们在导出具体数据之前，先对模型整体的权重进行normalize_all预处理，才能让后续的具体每一个权重的normalize_all更好的工作
                 # 使用这个的前提是当前obj中没有锁定的顶点组，所以这里要先进行判断。
-
-                # XXX 这里不论开关都不对鸣潮Mod造成影响
                 if "Blend" in d3d11_game_type.OrderedCategoryNameList:
                     all_vgs_locked = ObjUtils.is_all_vertex_groups_locked(obj)
                     if not all_vgs_locked:
@@ -279,14 +277,7 @@ class BranchModel:
                     # 应用旋转和缩放
                     bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
 
-                # print("DrawIB BranchModel")
-                ObjBufferHelper.check_and_verify_attributes(obj=obj, d3d11_game_type=d3d11_game_type)
-                obj_element_model = ObjElementModel(d3d11_game_type=d3d11_game_type,obj_name=obj_name)
-                obj_element_model.fill_into_element_vertex_ndarray()
-                
-                obj_buffer_model = ObjBufferModelUnity(obj_element_model=obj_element_model)
-                # print(len(category_buffer_dict["Blend"]))
-                # print(len(index_vertex_id_dict))
+                obj_buffer_model = ObjBufferModelUnity(obj=obj, d3d11_game_type=d3d11_game_type)
 
                 # 后处理翻转回来
                 if (GlobalConfig.logic_name == LogicName.SRMI 
