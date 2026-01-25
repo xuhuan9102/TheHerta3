@@ -142,7 +142,13 @@ class DrawIBModelWWMI:
             self.replace_remapped_blendindices(obj_element_model)
 
         # 上面替换完了remap这里才填充为最终的ndarray
-        obj_element_model.fill_into_element_vertex_ndarray()
+
+        obj_element_model.element_vertex_ndarray = ObjBufferHelper.convert_to_element_vertex_ndarray(
+            mesh=obj_element_model.mesh,
+            original_elementname_data_dict=obj_element_model.original_elementname_data_dict,
+            final_elementname_data_dict=obj_element_model.final_elementname_data_dict,
+            d3d11_game_type=self.d3d11GameType
+        )
 
         # 然后才能创建ObjBufferModelWWMI
         self.obj_buffer_model_wwmi = ObjBufferModelWWMI(obj_element_model=obj_element_model)
@@ -532,12 +538,6 @@ class DrawIBModelWWMI:
 
         if not hasattr(self, 'blend_remap_maps') or not self.blend_remap_maps:
             return
-
-        # We prefer to operate on the parsed per-element arrays stored in
-        # `original_elementname_data_dict` and write remapped results into
-        # `final_elementname_data_dict`. This avoids mutating the original
-        # parsed arrays and defers packing until callers call
-        # `fill_into_element_vertex_ndarray()`.
 
         mesh = obj_element_model.mesh
         loops_len = len(mesh.loops)

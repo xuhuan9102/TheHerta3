@@ -157,19 +157,29 @@ def ImprotFromWorkSpaceSSMTV4(self, context):
                 self.report({'ERROR'},"当前数据类型暂不支持一键导入分支模型")
                 continue
 
-            try:
-                part_count = 1
-                for prefix in import_prefix_list:
+            # try:
+            #     part_count = 1
+            #     for prefix in import_prefix_list:
                     
-                    fmt_file_path = os.path.join(import_folder_path, prefix + ".fmt")
-                    mbf = MigotoBinaryFile(fmt_path=fmt_file_path,mesh_name=draw_ib + "-" + str(part_count) + "-" + alias_name)
-                    MeshImporter.create_mesh_obj_from_mbf(mbf=mbf,import_collection=default_show_collection)
+            #         fmt_file_path = os.path.join(import_folder_path, prefix + ".fmt")
+            #         mbf = MigotoBinaryFile(fmt_path=fmt_file_path,mesh_name=draw_ib + "-" + str(part_count) + "-" + alias_name)
+            #         MeshImporter.create_mesh_obj_from_mbf(mbf=mbf,import_collection=default_show_collection)
 
-                    part_count = part_count + 1
-            except Exception as e:
-                self.report({'WARNING'},"导入DrawIB " + draw_ib + "的数据类型: " + gametype_name + " 时出错，尝试下一个数据类型。错误信息: " + str(e))
-                continue
-            
+            #         part_count = part_count + 1
+            # except Exception as e:
+            #     self.report({'WARNING'},"导入DrawIB " + draw_ib + "的数据类型: " + gametype_name + " 时出错，尝试下一个数据类型。错误信息: " + str(e))
+            #     continue
+
+            # 上面的给用户使用，下面的用于测试
+            part_count = 1
+            for prefix in import_prefix_list:
+                
+                fmt_file_path = os.path.join(import_folder_path, prefix + ".fmt")
+                mbf = MigotoBinaryFile(fmt_path=fmt_file_path,mesh_name=draw_ib + "-" + str(part_count) + "-" + alias_name)
+                MeshImporter.create_mesh_obj_from_mbf(mbf=mbf,import_collection=default_show_collection)
+
+                part_count = part_count + 1
+
             # 如果能执行到这里，说明这个DrawIB成功导入了一个数据类型
             # 然后要把这个DrawIB对应的GameType名称保存下来
             tmp_json = ConfigUtils.read_tmp_json(import_folder_path)

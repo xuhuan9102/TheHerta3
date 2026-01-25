@@ -113,8 +113,34 @@ class MeshImporter:
                 if GlobalConfig.logic_name == LogicName.YYSLS:
                     print("燕云十六声法线处理")
                     normals = [(x[0] * 2 - 1, x[1] * 2 - 1, x[2] * 2 - 1) for x in data]
+                elif mbf.fmt_file.logic_name == LogicName.AEMI and element.Format == "R32_UINT":
+                    # 对终末地压缩类型法线做特殊解压处理
+                    # 数据是以R32_UINT类型存储的，但是它实际上应该视为32位的内存块来解读
+                    print("终末地压缩法线处理(AEMI Packed Normals)")
+                    
+                    # Ensure we work with uint32
+                    if data.ndim == 1:
+                        raw = data.astype(numpy.uint32)
+                    else:
+                        raw = data[:, 0].astype(numpy.uint32)
+                    
+                    mask = 0x3FF 
 
-                normals = [(x[0], x[1], x[2]) for x in data]
+                    # Decode components (10-10-10-2)
+                    x = raw & mask
+                    y = (raw >> 10) & mask
+                    z = (raw >> 20) & mask
+
+                    # Normalize [0, 1023] -> [-1, 1]
+                    nx = (x / 1023.0) * 2.0 - 1.0
+                    ny = (y / 1023.0) * 2.0 - 1.0
+                    nz = (z / 1023.0) * 2.0 - 1.0
+
+                    normals = numpy.column_stack((nx, ny, nz)).tolist()
+
+                    print("终末地压缩法线处理完成")
+                else:
+                    normals = [(x[0], x[1], x[2]) for x in data]
             elif element.SemanticName == "TANGENT":
                 pass
             elif element.SemanticName == "BINORMAL":
@@ -312,6 +338,15 @@ class MeshImporter:
                 uvs[:, 0] = data_np[:, c0]           # U分量
                 uvs[:, 1] = 1.0 - data_np[:, c1]     # V分量翻转
                 
+                # Nico: 这里加一个冗余处理，防止UV数据比顶点数据少导致越界
+                # 如果发现最大索引超过了UV数据长度，则自动填充默认值(0,0)
+                max_index = numpy.max(vertex_indices) if len(vertex_indices) > 0 else 0
+                if max_index >= len(uvs):
+                    print(f"Warning: UV data too short. Max index: {max_index}, UV data len: {len(uvs)}.Padding with zeros.")
+                    padding_length = max_index - len(uvs) + 1
+                    padding = numpy.zeros((padding_length, 2), dtype=numpy.float32)
+                    uvs = numpy.vstack((uvs, padding))
+
                 # 通过顶点索引获取循环的UV数据并展平为一维数组
                 uv_array = uvs[vertex_indices].ravel()
                 

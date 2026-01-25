@@ -53,6 +53,341 @@ class ObjBufferHelper:
 
 
     @staticmethod
+    def _parse_position(mesh_vertices, mesh_vertices_length, loop_vertex_indices, d3d11_element):
+        vertex_coords = numpy.empty(mesh_vertices_length * 3, dtype=numpy.float32)
+        # Follow WWMI-Tools: fetch the undeformed vertex coordinates and do
+        # not apply mirroring or dtype conversion at extraction stage.
+        # mesh_vertices.foreach_get('undeformed_co', vertex_coords)
+        mesh_vertices.foreach_get('co', vertex_coords)
+        positions = vertex_coords.reshape(-1, 3)[loop_vertex_indices]
+
+        if d3d11_element.Format == 'R32G32B32A32_FLOAT':
+            # If format expects 4 components, add a zero alpha column (float32)
+            new_array = numpy.zeros((positions.shape[0], 4), dtype=numpy.float32)
+            new_array[:, :3] = positions
+            positions = new_array
+        elif d3d11_element.Format == 'R16G16B16A16_FLOAT':
+            # If format expects 4 components, add a W column (float16).
+            # Expand the 3-component positions into the first 3 slots
+            # and set the 4th (W) component to 1.0 (homogeneous coord).
+            new_array = numpy.zeros((positions.shape[0], 4), dtype=numpy.float16)
+            new_array[:, :3] = positions.astype(numpy.float16)
+            new_array[:, 3] = numpy.ones(positions.shape[0], dtype=numpy.float16)
+            positions = new_array
+        return positions
+
+    @staticmethod
+    def _parse_normal(mesh_loops, mesh_loops_length, d3d11_element):
+        # 统一获取法线数据
+        normals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
+        mesh_loops.foreach_get('normal', normals)
+
+        if d3d11_element.Format == 'R16G16B16A16_FLOAT':
+            result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
+            result[0::4] = normals[0::3]
+            result[1::4] = normals[1::3]
+            result[2::4] = normals[2::3]
+            result = result.reshape(-1, 4)
+
+            result = result.astype(numpy.float16)
+            return result
+
+        elif d3d11_element.Format == 'R32G32B32A32_FLOAT':
+            
+            result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
+            result[0::4] = normals[0::3]
+            result[1::4] = normals[1::3]
+            result[2::4] = normals[2::3]
+            result = result.reshape(-1, 4)
+
+            result = result.astype(numpy.float32)
+            return result
+
+        elif d3d11_element.Format == 'R8G8B8A8_SNORM':
+            # WWMI 这里已经确定过NORMAL没问题
+
+            result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
+            result[0::4] = normals[0::3]
+            result[1::4] = normals[1::3]
+            result[2::4] = normals[2::3]
+            
+            if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
+                bitangent_signs = numpy.empty(mesh_loops_length, dtype=numpy.float32)
+                mesh_loops.foreach_get("bitangent_sign", bitangent_signs)
+                result[3::4] = bitangent_signs * -1
+                # print("Unreal: Set NORMAL.W to bitangent_sign")
+            
+            result = result.reshape(-1, 4)
+
+            return FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(result)
+
+
+        elif d3d11_element.Format == 'R8G8B8A8_UNORM':
+            # 因为法线数据是[-1,1]如果非要导出成UNORM，那一定是进行了归一化到[0,1]
+            
+            result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
+            
+
+            # 燕云十六声的最后一位w固定为0
+            if GlobalConfig.logic_name == LogicName.YYSLS:
+                result = numpy.zeros(mesh_loops_length * 4, dtype=numpy.float32)
+                
+            result[0::4] = normals[0::3]
+            result[1::4] = normals[1::3]
+            result[2::4] = normals[2::3]
+            result = result.reshape(-1, 4)
+
+            # 归一化 (此处感谢 球球 的代码开发)
+            def DeConvert(nor):
+                return (nor + 1) * 0.5
+
+            for i in range(len(result)):
+                result[i][0] = DeConvert(result[i][0])
+                result[i][1] = DeConvert(result[i][1])
+                result[i][2] = DeConvert(result[i][2])
+
+            return FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
+        
+        else:
+            # 将一维数组 reshape 成 (mesh_loops_length, 3) 形状的二维数组
+            result = normals.reshape(-1, 3)
+
+            return result
+
+    @staticmethod
+    def _parse_tangent(mesh_loops, mesh_loops_length, d3d11_element):
+        result = numpy.empty(mesh_loops_length * 4, dtype=numpy.float32)
+
+        # 使用 foreach_get 批量获取切线和副切线符号数据
+        tangents = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
+        mesh_loops.foreach_get("tangent", tangents)
+
+        # 将切线分量放置到输出数组中
+        result[0::4] = tangents[0::3]  # x 分量
+        result[1::4] = tangents[1::3]  # y 分量
+        result[2::4] = tangents[2::3]  # z 分量
+
+        if GlobalConfig.logic_name == LogicName.YYSLS:
+            # 燕云十六声的TANGENT.w固定为1
+            tangent_w = numpy.ones(mesh_loops_length, dtype=numpy.float32)
+            result[3::4] = tangent_w
+        elif GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
+            # Unreal引擎中这里要填写固定的1
+            tangent_w = numpy.ones(mesh_loops_length, dtype=numpy.float32)
+            result[3::4] = tangent_w
+        else:
+            # print("其它游戏翻转TANGENT的W分量")
+            # 默认就设置BITANGENT的W翻转，大部分Unity游戏都要用到
+            bitangent_signs = numpy.empty(mesh_loops_length, dtype=numpy.float32)
+            mesh_loops.foreach_get("bitangent_sign", bitangent_signs)
+            # XXX 将副切线符号乘以 -1
+            # 这里翻转（翻转指的就是 *= -1）是因为如果要确保Unity游戏中渲染正确，必须翻转TANGENT的W分量
+            bitangent_signs *= -1
+            result[3::4] = bitangent_signs  # w 分量 (副切线符号)
+        # 重塑 output_tangents 成 (mesh_loops_length, 4) 形状的二维数组
+        result = result.reshape(-1, 4)
+
+        if d3d11_element.Format == 'R16G16B16A16_FLOAT':
+            result = result.astype(numpy.float16)
+
+        elif d3d11_element.Format == 'R8G8B8A8_SNORM':
+            # print("WWMI TANGENT To SNORM")
+            result = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(result)
+
+        elif d3d11_element.Format == 'R8G8B8A8_UNORM':
+            result = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
+        
+        # 第五人格格式
+        elif d3d11_element.Format == "R32G32B32_FLOAT":
+            result = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
+
+            result[0::3] = tangents[0::3]  # x 分量
+            result[1::3] = tangents[1::3]  # y 分量
+            result[2::3] = tangents[2::3]  # z 分量
+
+            result = result.reshape(-1, 3)
+
+        # 燕云十六声格式
+        elif d3d11_element.Format == 'R16G16B16A16_SNORM':
+            result = FormatUtils.convert_4x_float32_to_r16g16b16a16_snorm(result)
+        
+        return result
+
+    @staticmethod
+    def _parse_binormal(mesh_loops, mesh_loops_length, d3d11_element):
+        result = numpy.empty(mesh_loops_length * 4, dtype=numpy.float32)
+
+        # 使用 foreach_get 批量获取切线和副切线符号数据
+        binormals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
+        mesh_loops.foreach_get("bitangent", binormals)
+        
+        if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
+            # 鸣潮逆向翻转：Binormal (-x, -y, z)
+            binormals[0::3] *= -1
+            binormals[1::3] *= -1
+
+        # 将切线分量放置到输出数组中
+        # BINORMAL全部翻转即可得到和YYSLS游戏中一样的效果。
+        result[0::4] = binormals[0::3]  # x 分量
+        result[1::4] = binormals[1::3]   # y 分量
+        result[2::4] = binormals[2::3]  # z 分量
+        binormal_w = numpy.ones(mesh_loops_length, dtype=numpy.float32)
+        result[3::4] = binormal_w
+        result = result.reshape(-1, 4)
+
+        if d3d11_element.Format == 'R16G16B16A16_SNORM':
+            #  燕云十六声格式
+            result = FormatUtils.convert_4x_float32_to_r16g16b16a16_snorm(result)
+            
+        return result
+
+    @staticmethod
+    def _parse_color(mesh, mesh_loops_length, d3d11_element_name, d3d11_element):
+        if d3d11_element_name in mesh.vertex_colors:
+            # 因为COLOR属性存储在Blender里固定是float32类型所以这里只能用numpy.float32
+            result = numpy.zeros(mesh_loops_length, dtype=(numpy.float32, 4))
+            # result = numpy.zeros((mesh_loops_length,4), dtype=(numpy.float32))
+
+            mesh.vertex_colors[d3d11_element_name].data.foreach_get("color", result.ravel())
+            
+            if d3d11_element.Format == 'R16G16B16A16_FLOAT':
+                result = result.astype(numpy.float16)
+            elif d3d11_element.Format == "R16G16_UNORM":
+                # 鸣潮的平滑法线存UV，在WWMI中的处理方式是转为R16G16_UNORM。
+                # 但是这里很可能存在转换问题。
+                result = result.astype(numpy.float16)
+                result = result[:, :2]
+                result = FormatUtils.convert_2x_float32_to_r16g16_unorm(result)
+            elif d3d11_element.Format == "R16G16_FLOAT":
+                # 
+                result = result[:, :2]
+            elif d3d11_element.Format == 'R8G8B8A8_UNORM':
+                result = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
+
+            print(d3d11_element.Format)
+            print(d3d11_element_name)
+    
+            return result
+        return None
+
+    @staticmethod
+    def _parse_texcoord(mesh, mesh_loops_length, d3d11_element_name, d3d11_element):
+        result = None
+        # TimerUtils.Start("GET TEXCOORD")
+        for uv_name in ('%s.xy' % d3d11_element_name, '%s.zw' % d3d11_element_name):
+            if uv_name in mesh.uv_layers:
+                uvs_array = numpy.empty(mesh_loops_length ,dtype=(numpy.float32,2))
+                mesh.uv_layers[uv_name].data.foreach_get("uv",uvs_array.ravel())
+                uvs_array[:,1] = 1.0 - uvs_array[:,1]
+
+                if d3d11_element.Format == 'R16G16_FLOAT':
+                    uvs_array = uvs_array.astype(numpy.float16)
+                
+                # 重塑 uvs_array 成 (mesh_loops_length, 2) 形状的二维数组
+                # uvs_array = uvs_array.reshape(-1, 2)
+
+                result = uvs_array 
+        # TimerUtils.End("GET TEXCOORD")
+        return result
+
+    @staticmethod
+    def _parse_blendindices(blendindices_dict, d3d11_element):
+        blendindices = blendindices_dict.get(d3d11_element.SemanticIndex,None)
+        # print("blendindices: " + str(len(blendindices_dict)))
+        # 如果当前索引对应的 blendindices 为 None，则使用索引0的数据并全部置0
+        if blendindices is None:
+            blendindices_0 = blendindices_dict.get(0, None)
+            if blendindices_0 is not None:
+                # 创建一个与 blendindices_0 形状相同的全0数组，保持相同的数据类型
+                blendindices = numpy.zeros_like(blendindices_0)
+            else:
+                raise Fatal("Cannot find any valid BLENDINDICES data in this model, Please check if your model's Vertex Group is correct.")
+        # print(len(blendindices))
+        if d3d11_element.Format == "R32G32B32A32_SINT":
+            return blendindices
+        elif d3d11_element.Format == "R16G16B16A16_UINT":
+            return blendindices
+        elif d3d11_element.Format == "R32G32B32A32_UINT":
+            return blendindices
+        elif d3d11_element.Format == "R32G32_UINT":
+            return blendindices[:, :2]
+        elif d3d11_element.Format == "R32G32_SINT":
+            return blendindices[:, :2]
+        elif d3d11_element.Format == "R32_UINT":
+            return blendindices[:, :1]
+        elif d3d11_element.Format == "R32_SINT":
+            return blendindices[:, :1]
+        elif d3d11_element.Format == 'R8G8B8A8_SNORM':
+            return FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(blendindices)
+        elif d3d11_element.Format == 'R8G8B8A8_UNORM':
+            return FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(blendindices)
+        elif d3d11_element.Format == 'R8G8B8A8_UINT':
+            # TODO 这里类型截断错了吧，假如我们的全局顶点组索引是256或者300呢？
+            # 这里截断直接没了，后续我们还怎么去和remap里进行映射？
+            # 帮我在这里新加一个判断，如果blendindices里有大于255的值就不能转换为uint8
+            # print("uint8")
+            max_index = numpy.max(blendindices)
+            if max_index > 255:
+                print("BLENDINDICES大于255了,最大值是：" + str(max_index))
+            else:
+                blendindices.astype(numpy.uint8)
+            return blendindices
+            # print(original_elementname_data_dict[d3d11_element_name].dtype)
+        elif d3d11_element.Format == "R8_UINT" and d3d11_element.ByteWidth == 8:
+            max_index = numpy.max(blendindices)
+            if max_index > 255:
+                print("BLENDINDICES大于255了,最大值是：" + str(max_index))
+            else:
+                blendindices.astype(numpy.uint8)
+
+            return blendindices
+            # print(original_elementname_data_dict[d3d11_element_name].dtype)
+            # print("WWMI R8_UINT特殊处理")
+        elif d3d11_element.Format == "R16_UINT" and d3d11_element.ByteWidth == 16:
+            blendindices.astype(numpy.uint16)
+            return blendindices
+            # print("WWMI R16_UINT特殊处理")
+        else:
+            # print(blendindices.shape)
+            raise Fatal("未知的BLENDINDICES格式")
+
+    @staticmethod
+    def _parse_blendweight(blendweights_dict, d3d11_element):
+        blendweights = blendweights_dict.get(d3d11_element.SemanticIndex, None)
+        if blendweights is None:
+            # print("遇到了为None的情况！")
+            blendweights_0 = blendweights_dict.get(0, None)
+            if blendweights_0 is not None:
+                # 创建一个与 blendweights_0 形状相同的全0数组，保持相同的数据类型
+                blendweights = numpy.zeros_like(blendweights_0)
+            else:
+                raise Fatal("Cannot find any valid BLENDWEIGHT data in this model, Please check if your model's Vertex Group is correct.")
+        # print(len(blendweights))
+        if d3d11_element.Format == "R32G32B32A32_FLOAT":
+            return blendweights
+        elif d3d11_element.Format == "R32G32_FLOAT":
+            return blendweights[:, :2]
+        elif d3d11_element.Format == 'R8G8B8A8_SNORM':
+            # print("BLENDWEIGHT R8G8B8A8_SNORM")
+            return FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(blendweights)
+        elif d3d11_element.Format == 'R8G8B8A8_UNORM':
+            # print("BLENDWEIGHT R8G8B8A8_UNORM")
+            return FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
+        elif d3d11_element.Format == 'R16G16B16A16_FLOAT':
+            return blendweights.astype(numpy.float16)
+        elif d3d11_element.Format == "R8_UNORM" and d3d11_element.ByteWidth == 8:
+            # TimerUtils.Start("WWMI BLENDWEIGHT R8_UNORM特殊处理")
+            blendweights = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
+            # original_elementname_data_dict[d3d11_element_name] = blendweights
+            print("WWMI R8_UNORM特殊处理")
+            # TimerUtils.End("WWMI BLENDWEIGHT R8_UNORM特殊处理")
+            return blendweights
+
+        else:
+            print(blendweights.shape)
+            raise Fatal("未知的BLENDWEIGHTS格式")
+
+    @staticmethod
     def parse_elementname_data_dict(mesh:bpy.types.Mesh, d3d11_game_type:D3D11GameType):
         '''
         - 注意这里是从mesh.loops中获取数据，而不是从mesh.vertices中获取数据
@@ -88,349 +423,39 @@ class ObjBufferHelper:
         else:
             blendweights_dict, blendindices_dict = VertexGroupUtils.get_blendweights_blendindices_v3(mesh=mesh,normalize_weights = normalize_weights)
 
-        # The per-loop BLENDINDICES values are available in `blendindices_dict`
-        # (one entry per semantic index). We intentionally do NOT keep a
-        # separate `raw_blendindices` attribute here — the extracted per-
-        # element data will be placed into `original_elementname_data_dict['BLENDINDICES']`.
-        # Note: callers that need to remap BLENDINDICES should operate on
-        # `self.final_elementname_data_dict['BLENDINDICES']` after
-        # `parse_elementname_data_dict()` and before
-        # `fill_into_element_vertex_ndarray()`.
-
 
         # 对每一种Element都获取对应的数据
         for d3d11_element_name in d3d11_game_type.OrderedFullElementList:
             d3d11_element = d3d11_game_type.ElementNameD3D11ElementDict[d3d11_element_name]
+            
+            data = None
 
             if d3d11_element_name == 'POSITION':
-                vertex_coords = numpy.empty(mesh_vertices_length * 3, dtype=numpy.float32)
-                # Follow WWMI-Tools: fetch the undeformed vertex coordinates and do
-                # not apply mirroring or dtype conversion at extraction stage.
-
-                # mesh_vertices.foreach_get('undeformed_co', vertex_coords)
-                mesh_vertices.foreach_get('co', vertex_coords)
-                positions = vertex_coords.reshape(-1, 3)[loop_vertex_indices]
-
-
-                if d3d11_element.Format == 'R32G32B32A32_FLOAT':
-                    # If format expects 4 components, add a zero alpha column (float32)
-                    new_array = numpy.zeros((positions.shape[0], 4), dtype=numpy.float32)
-                    new_array[:, :3] = positions
-                    positions = new_array
-                elif d3d11_element.Format == 'R16G16B16A16_FLOAT':
-                    # If format expects 4 components, add a W column (float16).
-                    # Expand the 3-component positions into the first 3 slots
-                    # and set the 4th (W) component to 1.0 (homogeneous coord).
-                    new_array = numpy.zeros((positions.shape[0], 4), dtype=numpy.float16)
-                    new_array[:, :3] = positions.astype(numpy.float16)
-                    new_array[:, 3] = numpy.ones(positions.shape[0], dtype=numpy.float16)
-                    positions = new_array
-
-                original_elementname_data_dict[d3d11_element_name] = positions
+                data = ObjBufferHelper._parse_position(mesh_vertices, mesh_vertices_length, loop_vertex_indices, d3d11_element)
 
             elif d3d11_element_name == 'NORMAL':
-                # 统一获取法线数据
-                normals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-                mesh_loops.foreach_get('normal', normals)
-
-                if d3d11_element.Format == 'R16G16B16A16_FLOAT':
-                    result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
-                    result[0::4] = normals[0::3]
-                    result[1::4] = normals[1::3]
-                    result[2::4] = normals[2::3]
-                    result = result.reshape(-1, 4)
-
-                    result = result.astype(numpy.float16)
-                    original_elementname_data_dict[d3d11_element_name] = result
-
-                elif d3d11_element.Format == 'R32G32B32A32_FLOAT':
-                    
-                    result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
-                    result[0::4] = normals[0::3]
-                    result[1::4] = normals[1::3]
-                    result[2::4] = normals[2::3]
-                    result = result.reshape(-1, 4)
-
-                    result = result.astype(numpy.float32)
-                    original_elementname_data_dict[d3d11_element_name] = result
-
-                elif d3d11_element.Format == 'R8G8B8A8_SNORM':
-                    # WWMI 这里已经确定过NORMAL没问题
-
-                    result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
-                    result[0::4] = normals[0::3]
-                    result[1::4] = normals[1::3]
-                    result[2::4] = normals[2::3]
-                    
-                    if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
-                        bitangent_signs = numpy.empty(mesh_loops_length, dtype=numpy.float32)
-                        mesh_loops.foreach_get("bitangent_sign", bitangent_signs)
-                        result[3::4] = bitangent_signs * -1
-                        # print("Unreal: Set NORMAL.W to bitangent_sign")
-                    
-                    result = result.reshape(-1, 4)
-
-                    original_elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(result)
-
-
-                elif d3d11_element.Format == 'R8G8B8A8_UNORM':
-                    # 因为法线数据是[-1,1]如果非要导出成UNORM，那一定是进行了归一化到[0,1]
-                    
-                    result = numpy.ones(mesh_loops_length * 4, dtype=numpy.float32)
-                    
-
-                    # 燕云十六声的最后一位w固定为0
-                    if GlobalConfig.logic_name == LogicName.YYSLS:
-                        result = numpy.zeros(mesh_loops_length * 4, dtype=numpy.float32)
-                        
-                    result[0::4] = normals[0::3]
-                    result[1::4] = normals[1::3]
-                    result[2::4] = normals[2::3]
-                    result = result.reshape(-1, 4)
-
-                    # 归一化 (此处感谢 球球 的代码开发)
-                    def DeConvert(nor):
-                        return (nor + 1) * 0.5
-
-                    for i in range(len(result)):
-                        result[i][0] = DeConvert(result[i][0])
-                        result[i][1] = DeConvert(result[i][1])
-                        result[i][2] = DeConvert(result[i][2])
-
-                    original_elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
-                
-                else:
-                    # 将一维数组 reshape 成 (mesh_loops_length, 3) 形状的二维数组
-                    result = normals.reshape(-1, 3)
-
-                    original_elementname_data_dict[d3d11_element_name] = result
-
+                data = ObjBufferHelper._parse_normal(mesh_loops, mesh_loops_length, d3d11_element)
 
             elif d3d11_element_name == 'TANGENT':
+                data = ObjBufferHelper._parse_tangent(mesh_loops, mesh_loops_length, d3d11_element)
 
-                result = numpy.empty(mesh_loops_length * 4, dtype=numpy.float32)
-
-                # 使用 foreach_get 批量获取切线和副切线符号数据
-                tangents = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-                mesh_loops.foreach_get("tangent", tangents)
-
-                # 将切线分量放置到输出数组中
-                result[0::4] = tangents[0::3]  # x 分量
-                result[1::4] = tangents[1::3]  # y 分量
-                result[2::4] = tangents[2::3]  # z 分量
-
-                if GlobalConfig.logic_name == LogicName.YYSLS:
-                    # 燕云十六声的TANGENT.w固定为1
-                    tangent_w = numpy.ones(mesh_loops_length, dtype=numpy.float32)
-                    result[3::4] = tangent_w
-                elif GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
-                    # Unreal引擎中这里要填写固定的1
-                    tangent_w = numpy.ones(mesh_loops_length, dtype=numpy.float32)
-                    result[3::4] = tangent_w
-                else:
-                    print("其它游戏翻转TANGENT的W分量")
-                    # 默认就设置BITANGENT的W翻转，大部分Unity游戏都要用到
-                    bitangent_signs = numpy.empty(mesh_loops_length, dtype=numpy.float32)
-                    mesh_loops.foreach_get("bitangent_sign", bitangent_signs)
-                    # XXX 将副切线符号乘以 -1
-                    # 这里翻转（翻转指的就是 *= -1）是因为如果要确保Unity游戏中渲染正确，必须翻转TANGENT的W分量
-                    bitangent_signs *= -1
-                    result[3::4] = bitangent_signs  # w 分量 (副切线符号)
-                # 重塑 output_tangents 成 (mesh_loops_length, 4) 形状的二维数组
-                result = result.reshape(-1, 4)
-
-                if d3d11_element.Format == 'R16G16B16A16_FLOAT':
-                    result = result.astype(numpy.float16)
-
-                elif d3d11_element.Format == 'R8G8B8A8_SNORM':
-                    # print("WWMI TANGENT To SNORM")
-                    result = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(result)
-
-                elif d3d11_element.Format == 'R8G8B8A8_UNORM':
-                    result = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
-                
-                # 第五人格格式
-                elif d3d11_element.Format == "R32G32B32_FLOAT":
-                    result = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-
-                    result[0::3] = tangents[0::3]  # x 分量
-                    result[1::3] = tangents[1::3]  # y 分量
-                    result[2::3] = tangents[2::3]  # z 分量
-
-                    result = result.reshape(-1, 3)
-
-                # 燕云十六声格式
-                elif d3d11_element.Format == 'R16G16B16A16_SNORM':
-                    result = FormatUtils.convert_4x_float32_to_r16g16b16a16_snorm(result)
-                    
-
-                original_elementname_data_dict[d3d11_element_name] = result
-
-            #  YYSLS需要BINORMAL导出，前提是先把这些代码差分简化，因为YYSLS的TANGENT和NORMAL的.w都是固定的1
             elif d3d11_element_name.startswith('BINORMAL'):
-                result = numpy.empty(mesh_loops_length * 4, dtype=numpy.float32)
-
-                # 使用 foreach_get 批量获取切线和副切线符号数据
-                binormals = numpy.empty(mesh_loops_length * 3, dtype=numpy.float32)
-                mesh_loops.foreach_get("bitangent", binormals)
-                
-                if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
-                    # 鸣潮逆向翻转：Binormal (-x, -y, z)
-                    binormals[0::3] *= -1
-                    binormals[1::3] *= -1
-
-                # 将切线分量放置到输出数组中
-                # BINORMAL全部翻转即可得到和YYSLS游戏中一样的效果。
-                result[0::4] = binormals[0::3]  # x 分量
-                result[1::4] = binormals[1::3]   # y 分量
-                result[2::4] = binormals[2::3]  # z 分量
-                binormal_w = numpy.ones(mesh_loops_length, dtype=numpy.float32)
-                result[3::4] = binormal_w
-                result = result.reshape(-1, 4)
-
-                if d3d11_element.Format == 'R16G16B16A16_SNORM':
-                    #  燕云十六声格式
-                    result = FormatUtils.convert_4x_float32_to_r16g16b16a16_snorm(result)
-                    
-                original_elementname_data_dict[d3d11_element_name] = result
+                data = ObjBufferHelper._parse_binormal(mesh_loops, mesh_loops_length, d3d11_element)
+            
             elif d3d11_element_name.startswith('COLOR'):
-                if d3d11_element_name in mesh.vertex_colors:
-                    # 因为COLOR属性存储在Blender里固定是float32类型所以这里只能用numpy.float32
-                    result = numpy.zeros(mesh_loops_length, dtype=(numpy.float32, 4))
-                    # result = numpy.zeros((mesh_loops_length,4), dtype=(numpy.float32))
-
-                    mesh.vertex_colors[d3d11_element_name].data.foreach_get("color", result.ravel())
-                    
-                    if d3d11_element.Format == 'R16G16B16A16_FLOAT':
-                        result = result.astype(numpy.float16)
-                    elif d3d11_element.Format == "R16G16_UNORM":
-                        # 鸣潮的平滑法线存UV，在WWMI中的处理方式是转为R16G16_UNORM。
-                        # 但是这里很可能存在转换问题。
-                        result = result.astype(numpy.float16)
-                        result = result[:, :2]
-                        result = FormatUtils.convert_2x_float32_to_r16g16_unorm(result)
-                    elif d3d11_element.Format == "R16G16_FLOAT":
-                        # 
-                        result = result[:, :2]
-                    elif d3d11_element.Format == 'R8G8B8A8_UNORM':
-                        result = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
-
-                    print(d3d11_element.Format)
-                    print(d3d11_element_name)
-           
-                    original_elementname_data_dict[d3d11_element_name] = result
+                data = ObjBufferHelper._parse_color(mesh, mesh_loops_length, d3d11_element_name, d3d11_element)
 
             elif d3d11_element_name.startswith('TEXCOORD') and d3d11_element.Format.endswith('FLOAT'):
-                # TimerUtils.Start("GET TEXCOORD")
-                for uv_name in ('%s.xy' % d3d11_element_name, '%s.zw' % d3d11_element_name):
-                    if uv_name in mesh.uv_layers:
-                        uvs_array = numpy.empty(mesh_loops_length ,dtype=(numpy.float32,2))
-                        mesh.uv_layers[uv_name].data.foreach_get("uv",uvs_array.ravel())
-                        uvs_array[:,1] = 1.0 - uvs_array[:,1]
-
-                        if d3d11_element.Format == 'R16G16_FLOAT':
-                            uvs_array = uvs_array.astype(numpy.float16)
-                        
-                        # 重塑 uvs_array 成 (mesh_loops_length, 2) 形状的二维数组
-                        # uvs_array = uvs_array.reshape(-1, 2)
-
-                        original_elementname_data_dict[d3d11_element_name] = uvs_array 
-                # TimerUtils.End("GET TEXCOORD")
+                data = ObjBufferHelper._parse_texcoord(mesh, mesh_loops_length, d3d11_element_name, d3d11_element)
             
-                        
             elif d3d11_element_name.startswith('BLENDINDICES'):
-                blendindices = blendindices_dict.get(d3d11_element.SemanticIndex,None)
-                # print("blendindices: " + str(len(blendindices_dict)))
-                # 如果当前索引对应的 blendindices 为 None，则使用索引0的数据并全部置0
-                if blendindices is None:
-                    blendindices_0 = blendindices_dict.get(0, None)
-                    if blendindices_0 is not None:
-                        # 创建一个与 blendindices_0 形状相同的全0数组，保持相同的数据类型
-                        blendindices = numpy.zeros_like(blendindices_0)
-                    else:
-                        raise Fatal("Cannot find any valid BLENDINDICES data in this model, Please check if your model's Vertex Group is correct.")
-                # print(len(blendindices))
-                if d3d11_element.Format == "R32G32B32A32_SINT":
-                    original_elementname_data_dict[d3d11_element_name] = blendindices
-                elif d3d11_element.Format == "R16G16B16A16_UINT":
-                    original_elementname_data_dict[d3d11_element_name] = blendindices
-                elif d3d11_element.Format == "R32G32B32A32_UINT":
-                    original_elementname_data_dict[d3d11_element_name] = blendindices
-                elif d3d11_element.Format == "R32G32_UINT":
-                    original_elementname_data_dict[d3d11_element_name] = blendindices[:, :2]
-                elif d3d11_element.Format == "R32G32_SINT":
-                    original_elementname_data_dict[d3d11_element_name] = blendindices[:, :2]
-                elif d3d11_element.Format == "R32_UINT":
-                    original_elementname_data_dict[d3d11_element_name] = blendindices[:, :1]
-                elif d3d11_element.Format == "R32_SINT":
-                    original_elementname_data_dict[d3d11_element_name] = blendindices[:, :1]
-                elif d3d11_element.Format == 'R8G8B8A8_SNORM':
-                    original_elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(blendindices)
-                elif d3d11_element.Format == 'R8G8B8A8_UNORM':
-                    original_elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(blendindices)
-                elif d3d11_element.Format == 'R8G8B8A8_UINT':
-                    # TODO 这里类型截断错了吧，假如我们的全局顶点组索引是256或者300呢？
-                    # 这里截断直接没了，后续我们还怎么去和remap里进行映射？
-                    # 帮我在这里新加一个判断，如果blendindices里有大于255的值就不能转换为uint8
-                    # print("uint8")
-                    max_index = numpy.max(blendindices)
-                    if max_index > 255:
-                        print("BLENDINDICES大于255了,最大值是：" + str(max_index))
-                    else:
-                        blendindices.astype(numpy.uint8)
-                    original_elementname_data_dict[d3d11_element_name] = blendindices
-                    # print(original_elementname_data_dict[d3d11_element_name].dtype)
-                elif d3d11_element.Format == "R8_UINT" and d3d11_element.ByteWidth == 8:
-                    max_index = numpy.max(blendindices)
-                    if max_index > 255:
-                        print("BLENDINDICES大于255了,最大值是：" + str(max_index))
-                    else:
-                        blendindices.astype(numpy.uint8)
-
-                    original_elementname_data_dict[d3d11_element_name] = blendindices
-                    # print(original_elementname_data_dict[d3d11_element_name].dtype)
-                    # print("WWMI R8_UINT特殊处理")
-                elif d3d11_element.Format == "R16_UINT" and d3d11_element.ByteWidth == 16:
-                    blendindices.astype(numpy.uint16)
-                    original_elementname_data_dict[d3d11_element_name] = blendindices
-                    # print("WWMI R16_UINT特殊处理")
-                else:
-                    # print(blendindices.shape)
-                    raise Fatal("未知的BLENDINDICES格式")
+                data = ObjBufferHelper._parse_blendindices(blendindices_dict, d3d11_element)
                 
             elif d3d11_element_name.startswith('BLENDWEIGHT'):
-                blendweights = blendweights_dict.get(d3d11_element.SemanticIndex, None)
-                if blendweights is None:
-                    # print("遇到了为None的情况！")
-                    blendweights_0 = blendweights_dict.get(0, None)
-                    if blendweights_0 is not None:
-                        # 创建一个与 blendweights_0 形状相同的全0数组，保持相同的数据类型
-                        blendweights = numpy.zeros_like(blendweights_0)
-                    else:
-                        raise Fatal("Cannot find any valid BLENDWEIGHT data in this model, Please check if your model's Vertex Group is correct.")
-                # print(len(blendweights))
-                if d3d11_element.Format == "R32G32B32A32_FLOAT":
-                    original_elementname_data_dict[d3d11_element_name] = blendweights
-                elif d3d11_element.Format == "R32G32_FLOAT":
-                    original_elementname_data_dict[d3d11_element_name] = blendweights[:, :2]
-                elif d3d11_element.Format == 'R8G8B8A8_SNORM':
-                    # print("BLENDWEIGHT R8G8B8A8_SNORM")
-                    original_elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_snorm(blendweights)
-                elif d3d11_element.Format == 'R8G8B8A8_UNORM':
-                    # print("BLENDWEIGHT R8G8B8A8_UNORM")
-                    original_elementname_data_dict[d3d11_element_name] = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
-                elif d3d11_element.Format == 'R16G16B16A16_FLOAT':
-                    original_elementname_data_dict[d3d11_element_name] = blendweights.astype(numpy.float16)
-                elif d3d11_element.Format == "R8_UNORM" and d3d11_element.ByteWidth == 8:
-                    # TimerUtils.Start("WWMI BLENDWEIGHT R8_UNORM特殊处理")
-                    blendweights = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
-                    original_elementname_data_dict[d3d11_element_name] = blendweights
-                    print("WWMI R8_UNORM特殊处理")
-                    # TimerUtils.End("WWMI BLENDWEIGHT R8_UNORM特殊处理")
+                data = ObjBufferHelper._parse_blendweight(blendweights_dict, d3d11_element)
 
-                else:
-                    print(blendweights.shape)
-                    raise Fatal("未知的BLENDWEIGHTS格式")
+            if data is not None:
+                original_elementname_data_dict[d3d11_element_name] = data
 
         return original_elementname_data_dict
 
@@ -816,6 +841,19 @@ class ObjBufferHelper:
         element_vertex_ndarray:numpy.ndarray, 
         d3d11_game_type:D3D11GameType):
         '''
+        [特殊模式：少前2专用] 强制索引对齐模式
+        --------------------------------------------------
+        核心逻辑：
+        - 强制保持 "游戏引擎顶点数" == "Blender顶点数"。
+        - 忽略硬边、UV缝隙导致的数据分裂，强制合并。
+        
+        适用场景：
+        - 少前2等特殊渲染管线，或者模型已经预先处理过（所有硬边/UV缝隙确实就是物理断开的顶点）。
+        - 这种模式下生成 ShapeKey 极其简单，因为索引是一一对应的。
+        
+        缺点：
+        - 如果模型存在硬边或UV接缝，数据会被覆盖（合并），可能导致渲染错误（如法线平滑过度、UV错乱）。
+        
         1. Blender 的“顶点数”= mesh.vertices 长度，只要位置不同就算一个。
         2. 我们预分配同样长度的盒子列表，盒子下标 == 顶点下标，保证一一对应。
         3. 遍历 loop 时，把真实数据写进对应盒子；没人引用的盒子留 dummy（坐标填对，其余 0）。
@@ -892,41 +930,55 @@ class ObjBufferHelper:
         d3d11_game_type:D3D11GameType,
         dtype:numpy.dtype):
         '''
+        [通用模式] 标准图形学导出逻辑
+        --------------------------------------------------
+        核心逻辑：
+        - 以 "(数据内容 + Blender原始顶点索引)" 作为唯一标识。
+        - 自动处理硬边、UV缝隙：如果同一个顶点在不同 Loop 上的法线/UV不同，会自动分裂成多个游戏顶点。
+        - 自动处理 ShapeKey 安全：即使两个点坐标重合，只要 Blender 索引不同，就不会合并。
+        
+        适用场景：
+        - 绝大多数现代游戏的标准导出流程。
+        - 保证渲染正确性（法线、UV、顶点色）。
+        
+        代价：
+        - 导出的顶点数通常多于 Blender 顶点数（因为分裂）。
+        - 需要返回 index_vertex_id_dict 映射表，以便后续生成 ShapeKey Buffer 时能找回原始对应关系。
+
         计算IndexBuffer和CategoryBufferDict并返回
         如果模型具有形态键，那么形态键盘的值为0到1的任何值应用后，都不会造成由于顶点合并导致的顶点数改变。
         '''
         # TimerUtils.Start("Calc IB VB")
         
-        has_shape_keys = False
-        if mesh.shape_keys and len(mesh.shape_keys.key_blocks) > 0:
-             has_shape_keys = True
+        # 统一逻辑：始终将 (数据 + 顶点索引) 作为唯一标识
+        # 1. 彻底解决 ShapeKey 问题：防止 Basis 中重合但在 Morph 中分离的顶点被错误合并。
+        # 2. 保持拓扑结构：确保 Blender 中不同的点导出后依然是不同的点。
+        unique_map = collections.OrderedDict()
+        ib = []
+        for poly in mesh.polygons:
+            poly_indices = []
+            for loop_index in range(poly.loop_start, poly.loop_start + poly.loop_total):
+                loop = mesh.loops[loop_index]
+                data = element_vertex_ndarray[loop.index].tobytes()
+                
+                # 核心：Key 始终包含 vertex_index (data, index)
+                # 这样只有当 "数据完全一致" 且 "是同一个顶点(仅因硬边/UV断开)" 时才会共用索引
+                key = (data, loop.vertex_index)
+                
+                idx = unique_map.setdefault(key, len(unique_map))
+                poly_indices.append(idx)
+            ib.append(poly_indices)
+        
+        # 提取 vertex buffer 需要的数据 (也就是 key 中的 data 部分)
+        # vertex_data_list = [k[0] for k in unique_map.keys()]
 
-        if has_shape_keys:
-            # 如果有形态键，必须区分不同顶点索引的顶点，即使它们的数据相同
-            # 这样可以防止合并那些在Basis中重合但在ShapeKey中分离的顶点
-            unique_map = collections.OrderedDict()
-            ib = []
-            for poly in mesh.polygons:
-                poly_indices = []
-                for loop_index in range(poly.loop_start, poly.loop_start + poly.loop_total):
-                    loop = mesh.loops[loop_index]
-                    data = element_vertex_ndarray[loop.index].tobytes()
-                    # Key includes vertex_index to prevent merging different vertices
-                    key = (data, loop.vertex_index)
-                    idx = unique_map.setdefault(key, len(unique_map))
-                    poly_indices.append(idx)
-                ib.append(poly_indices)
-            
-            # Extract just the data bytes for the vertex buffer
-            vertex_data_list = [k[0] for k in unique_map.keys()]
-            
-        else:
-            # Standard merging based on data only
-            indexed_vertices = collections.OrderedDict()
-            ib = [[indexed_vertices.setdefault(element_vertex_ndarray[blender_lvertex.index].tobytes(), len(indexed_vertices))
-                    for blender_lvertex in mesh.loops[poly.loop_start:poly.loop_start + poly.loop_total]
-                        ]for poly in mesh.polygons] 
-            vertex_data_list = indexed_vertices # keys are the data bytes
+        # 同时构建 index -> blender_vertex_index 的映射
+        # 这对于后续生成 ShapeKey Buffer 至关重要，因为我们需要知道当前生成的第 i 个点对应 Blender 的哪个点
+        vertex_data_list = []
+        index_vertex_id_dict = {}
+        for i, (data_bytes, blender_v_idx) in enumerate(unique_map.keys()):
+            vertex_data_list.append(data_bytes)
+            index_vertex_id_dict[i] = blender_v_idx
 
         flattened_ib = [item for sublist in ib for item in sublist]
         # TimerUtils.End("Calc IB VB")
@@ -950,14 +1002,10 @@ class ObjBufferHelper:
             category_buffer_dict[categoryname] = data_matrix[:,stride_offset:stride_offset + category_stride].flatten()
             stride_offset += category_stride
 
+        # 设置ib，准备返回
         ib = flattened_ib
-
-
-        # TODO YYSLS是目前除了鸣潮外，唯一需要翻转面朝向的游戏
-        # 但是也许后续非镜像工作流统一后可以解决这个问题？
+        # YYSLS是目前除了鸣潮外，唯一需要翻转面朝向的游戏
         if GlobalConfig.logic_name == LogicName.YYSLS:
-            print("导出时翻转面朝向")
-
             flipped_indices = []
             # print(flattened_ib[0],flattened_ib[1],flattened_ib[2])
             for i in range(0, len(flattened_ib), 3):
@@ -966,8 +1014,6 @@ class ObjBufferHelper:
                 flipped_indices.extend(flipped_triangle)
             # print(flipped_indices[0],flipped_indices[1],flipped_indices[2])
             ib = flipped_indices
-
-        index_vertex_id_dict = None
 
         return ib, category_buffer_dict,index_vertex_id_dict
       

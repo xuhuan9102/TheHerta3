@@ -94,6 +94,9 @@ class FMTFile:
             # print("element: "+ elemnt.ElementName)
             # print(numpy_type)
             # print(size)
-            fields.append((elemnt.ElementName,numpy_type , size))
+            if size == 1:
+                fields.append((elemnt.ElementName, numpy_type))
+            else:
+                fields.append((elemnt.ElementName, numpy_type, size))
         dtype = numpy.dtype(fields)
         return dtype
