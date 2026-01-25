@@ -30,7 +30,7 @@ class ObjBufferModelUnity:
     # 这三个是最终要得到的输出内容
     ib:list = field(init=False,repr=False)
     category_buffer_dict:dict = field(init=False,repr=False)
-    index_vertex_id_dict:dict = field(init=False,repr=False) # 仅用于WWMI的索引顶点ID字典，key是顶点索引，value是顶点ID，默认可以为None
+    index_loop_id_dict:dict = field(init=False,repr=False) # 仅用于WWMI的索引 Loop ID字典，key是 Buffer 索引，value是 Loop ID，默认可以为None
     
     def __post_init__(self) -> None:
         ObjBufferHelper.check_and_verify_attributes(obj=self.obj, d3d11_game_type=self.d3d11_game_type)
@@ -45,18 +45,19 @@ class ObjBufferModelUnity:
 
         mesh = obj_element_model.mesh
         # self.obj_name = obj_element_model.obj_name
-        dtype = obj_element_model.total_structured_dtype
+        self.dtype = obj_element_model.total_structured_dtype
+        dtype = self.dtype
         self.element_vertex_ndarray = obj_element_model.element_vertex_ndarray
 
         # 因为只有存在TANGENT时，顶点数才会增加，所以如果是GF2并且存在TANGENT才使用共享TANGENT防止增加顶点数
         if GlobalConfig.logic_name == LogicName.UnityCPU and "TANGENT" in self.d3d11_game_type.OrderedFullElementList:
-            self.ib, self.category_buffer_dict, self.index_vertex_id_dict = ObjBufferHelper.calc_index_vertex_buffer_girlsfrontline2(mesh=mesh, element_vertex_ndarray=self.element_vertex_ndarray, d3d11_game_type=self.d3d11_game_type, dtype=dtype)
+            self.ib, self.category_buffer_dict, self.index_loop_id_dict = ObjBufferHelper.calc_index_vertex_buffer_girlsfrontline2(mesh=mesh, element_vertex_ndarray=self.element_vertex_ndarray, d3d11_game_type=self.d3d11_game_type, dtype=dtype)
         else:
             # 计算IndexBuffer和CategoryBufferDict
-            self.ib, self.category_buffer_dict, self.index_vertex_id_dict = ObjBufferHelper.calc_index_vertex_buffer_unified(mesh=mesh, element_vertex_ndarray=self.element_vertex_ndarray, d3d11_game_type=self.d3d11_game_type, dtype=dtype,obj=self.obj)
+            self.ib, self.category_buffer_dict, self.index_loop_id_dict = ObjBufferHelper.calc_index_vertex_buffer_unified(mesh=mesh, element_vertex_ndarray=self.element_vertex_ndarray, d3d11_game_type=self.d3d11_game_type, dtype=dtype,obj=self.obj)
 
-        # 此时根据前面的计算，我们得到了index_vertex_id_dict，这个是用于ShapeKeyBufferModel的生成的关键数据
-        # 它记录了每个索引对应的Blender顶点ID，方便后续ShapeKey数据的提取
+        # 此时根据前面的计算，我们得到了 index_loop_id_dict
+        # 它记录了每个索引对应的Blender Loop ID，方便后续ShapeKey数据的提取 (支持 Split Normals/Tangents)
 
         self.shape_key_buffer_dict = {}
 
@@ -68,12 +69,21 @@ class ObjBufferModelUnity:
                 TimerUtils.Start(f"Processing {len(shape_keys)} ShapeKeys for {self.obj.name}")
                 
                 # Pre-calculate indices_map explicitly once
-                target_count = len(self.element_vertex_ndarray)
-                if self.index_vertex_id_dict is not None:
+                # 修复: target_count 必须对应导出后的唯一顶点数
+                if self.index_loop_id_dict is not None:
+                     target_count = len(self.index_loop_id_dict)
                      indices_map = numpy.zeros(target_count, dtype=int)
-                     indices_map[:] = list(self.index_vertex_id_dict.values())
+                     # value 存储的是 Blender Loop Index
+                     indices_map[:] = list(self.index_loop_id_dict.values())
                 else:
+                     # 少前2模式 (GF2 Mode): 强制 1:1 对应 Blender Vertices
+                     # 因此目标数量等于 Blender 顶点数量
+                     target_count = len(self.obj.data.vertices)
                      indices_map = numpy.arange(target_count, dtype=int)
+
+                # 创建一个正确大小的空 ndarray 作为 ShapeKey 的基础模板
+                # 这避免了使用 self.element_vertex_ndarray (Loops) 导致的形状不匹配错误
+                base_shape_vertex_ndarray = numpy.zeros(target_count, dtype=self.dtype)
 
                 for sk in shape_keys:
                     sk_name = sk.name
@@ -92,15 +102,14 @@ class ObjBufferModelUnity:
                     # 4. 构建 ShapeKeyBufferModel (它会自动在 __post_init__ 中计算数据)
                     sb_model = ShapeKeyBufferModel(
                         name=sk_name,
-                        base_element_vertex_ndarray=self.element_vertex_ndarray,
+                        base_element_vertex_ndarray=base_shape_vertex_ndarray,
                         mesh=mesh_eval,
                         indices_map=indices_map,
                         d3d11_game_type=self.d3d11_game_type
                     )
                     self.shape_key_buffer_dict[sk_name] = sb_model
                     
-                    # 5. 清理临时 Mesh
-                    bpy.data.meshes.remove(mesh_eval)
+  
 
                 # 循环结束后重置状态
                 ShapeKeyUtils.reset_shapekey_values(self.obj)

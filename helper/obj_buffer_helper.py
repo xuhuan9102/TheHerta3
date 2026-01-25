@@ -954,6 +954,12 @@ class ObjBufferHelper:
         # 1. 彻底解决 ShapeKey 问题：防止 Basis 中重合但在 Morph 中分离的顶点被错误合并。
         # 2. 保持拓扑结构：确保 Blender 中不同的点导出后依然是不同的点。
         unique_map = collections.OrderedDict()
+        
+        # KEY: unique_vertex_index (buffer index), VALUE: first_loop_index
+        # 记录每一个生成的 Buffer 顶点对应的是哪一个原始 Loop
+        # 这对于 Shape Key 的法线导出至关重要，因为法线是存储在 Loop 上的
+        unique_loop_map = {} 
+
         ib = []
         for poly in mesh.polygons:
             poly_indices = []
@@ -965,20 +971,27 @@ class ObjBufferHelper:
                 # 这样只有当 "数据完全一致" 且 "是同一个顶点(仅因硬边/UV断开)" 时才会共用索引
                 key = (data, loop.vertex_index)
                 
-                idx = unique_map.setdefault(key, len(unique_map))
+                if key in unique_map:
+                    idx = unique_map[key]
+                else:
+                    idx = len(unique_map)
+                    unique_map[key] = idx
+                    unique_loop_map[idx] = loop.index
+                
                 poly_indices.append(idx)
             ib.append(poly_indices)
         
         # 提取 vertex buffer 需要的数据 (也就是 key 中的 data 部分)
         # vertex_data_list = [k[0] for k in unique_map.keys()]
 
-        # 同时构建 index -> blender_vertex_index 的映射
-        # 这对于后续生成 ShapeKey Buffer 至关重要，因为我们需要知道当前生成的第 i 个点对应 Blender 的哪个点
+        # 同时构建 index -> blender_loop_index 的映射
+        # 这对于后续生成 ShapeKey Buffer 至关重要，因为我们需要知道当前生成的第 i 个点对应 Blender 的哪个 Loop
+        # Loop Index 可进一步转换为 Vertex Index，但 Vertex Index 无法反推唯一的 Loop Index (Split Normals)
         vertex_data_list = []
-        index_vertex_id_dict = {}
         for i, (data_bytes, blender_v_idx) in enumerate(unique_map.keys()):
             vertex_data_list.append(data_bytes)
-            index_vertex_id_dict[i] = blender_v_idx
+        
+        index_loop_id_dict = unique_loop_map
 
         flattened_ib = [item for sublist in ib for item in sublist]
         # TimerUtils.End("Calc IB VB")
@@ -1015,5 +1028,5 @@ class ObjBufferHelper:
             # print(flipped_indices[0],flipped_indices[1],flipped_indices[2])
             ib = flipped_indices
 
-        return ib, category_buffer_dict,index_vertex_id_dict
+        return ib, category_buffer_dict,index_loop_id_dict
       

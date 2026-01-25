@@ -69,9 +69,12 @@ class DrawIBModel:
         self.total_index_count:int = 0 # 每个DrawIB都有总的IndexCount数，也就是所有的Component中的所有顶点索引数量
         self.__obj_name_drawindexed_dict:dict[str,M_DrawIndexed] = {} 
 
+        # 用于存储合并后的形态键数据
+        self.shapekey_name_bytelist_dict:dict[str, numpy.ndarray] = {}
+
         self.__read_component_ib_buf_dict()
             
-        self.parse_categoryname_bytelist_dict_3()
+        self.parse_categoryname_bytelist_dict()
 
         # (5) 导出Buffer文件，Export Index Buffer files, Category Buffer files. (And Export ShapeKey Buffer Files.(WWMI))
         # 用于写出IB时使用
@@ -81,49 +84,101 @@ class DrawIBModel:
         self.write_buffer_files()
 
 
-    def parse_categoryname_bytelist_dict_3(self):
-        processed_obj_name_list = [] # 用于记录已经处理过的obj_name，避免重复处理
+    def parse_categoryname_bytelist_dict(self):
+        # 1. 收集所有对象和唯一的形态键名称
+        all_ordered_objects: list[ObjDataModel] = []
+        unique_shape_key_names = set()
+        processed_obj_names = set()
 
         for component_model in self._component_model_list:
             for obj_model in component_model.final_ordered_draw_obj_model_list:
-                obj_name = obj_model.obj_name
-                # 如果obj_name已经被处理过了，则跳过
-                if obj_name in processed_obj_name_list:
+                if obj_model.obj_name in processed_obj_names:
                     continue
+                processed_obj_names.add(obj_model.obj_name)
+                all_ordered_objects.append(obj_model)
                 
-                # 否则加入已处理列表，并进行处理
-                processed_obj_name_list.append(obj_name)
-                # 下面的流程是对当前obj处理得到CategoryBuffer，所以如果obj_name已经被处理过，那就不需要继续处理了
-                category_buffer_list = obj_model.category_buffer_dict
+                # 收集该对象的形态键
+                if hasattr(obj_model, 'shape_key_buffer_dict') and obj_model.shape_key_buffer_dict:
+                    for sk_name in obj_model.shape_key_buffer_dict.keys():
+                        unique_shape_key_names.add(sk_name)
+
+        # 2. 初始化数据容器
+        # Category 容器
+        category_data_lists = {name: [] for name in self.d3d11GameType.OrderedCategoryNameList}
+        # ShapeKey 容器
+        shapekey_data_lists = {name: [] for name in unique_shape_key_names}
+
+        # Pre-calculate Position stride/offset for slicing ShapeKey data
+        pos_cat_offset = 0
+        pos_cat_stride = 0
+        target_cat = "Position"
+        for cat_name in self.d3d11GameType.OrderedCategoryNameList:
+             stride = self.d3d11GameType.CategoryStrideDict.get(cat_name, 0)
+             if cat_name == target_cat:
+                 pos_cat_stride = stride
+                 break
+             pos_cat_offset += stride
+
+        # 3. 遍历对象填充容器
+        for obj_model in all_ordered_objects:
+            # (A) 处理 Category Buffers
+            if obj_model.category_buffer_dict:
+                for cat_name in self.d3d11GameType.OrderedCategoryNameList:
+                    if cat_name in obj_model.category_buffer_dict:
+                        # 已经是展平的 uint8 数组或 bytes
+                        category_data_lists[cat_name].append(obj_model.category_buffer_dict[cat_name])
+
+            # (B) 处理 ShapeKey Buffers
+            # 获取该对象的 Base Position 数据作为回退 (uint8/bytes format)
+            base_pos_bytes = None
+            if obj_model.category_buffer_dict and "Position" in obj_model.category_buffer_dict:
+                 base_pos_bytes = obj_model.category_buffer_dict["Position"]
+
+            for sk_name in unique_shape_key_names:
+                sk_data_bytes = None
                 
-                if category_buffer_list is None:
-                    print("Can't find vb object for " + obj_name +",skip this obj process.")
-                    continue
+                # 尝试从对象的 shape_key_buffer_dict 中获取
+                if hasattr(obj_model, 'shape_key_buffer_dict') and obj_model.shape_key_buffer_dict:
+                    sk_buffer_model = obj_model.shape_key_buffer_dict.get(sk_name)
+                    if sk_buffer_model and hasattr(sk_buffer_model, 'element_vertex_ndarray'):
+                        # ShapeKeyBufferModel 存储的是完整的 Structured Array (包含 Pos/Normal/etc)
+                        # 我们需要根据 Stride/Offset 切片出 Position Category 的数据
+                        if pos_cat_stride > 0:
+                            # 转换为 uint8 2D 视图 (VertexCount, TotalStride)
+                            vertex_count = len(sk_buffer_model.element_vertex_ndarray)
+                            sk_full_byte_view = sk_buffer_model.element_vertex_ndarray.view(numpy.uint8).reshape(vertex_count, -1)
+                            
+                            # 切片提取 Position Category
+                            sk_pos_bytes = sk_full_byte_view[:, pos_cat_offset : pos_cat_offset + pos_cat_stride].flatten()
+                            sk_data_bytes = sk_pos_bytes
+                
+                # 如果对象没有该形态键，使用 Base Position 填充
+                if sk_data_bytes is None:
+                    sk_data_bytes = base_pos_bytes
+                
+                if sk_data_bytes is not None:
+                    shapekey_data_lists[sk_name].append(sk_data_bytes)
+                else:
+                    # 理论上不应发生：既没有 ShapeKey 也没有 Base Position
+                    print(f"Warning: Missing Position data for object {obj_model.obj_name} during ShapeKey export.")
 
-                for category_name in self.d3d11GameType.OrderedCategoryNameList:
-                    if category_name not in self.__categoryname_bytelist_dict:
-                        self.__categoryname_bytelist_dict[category_name] =  category_buffer_list[category_name]
-                    else:
-                        existing_array = self.__categoryname_bytelist_dict[category_name]
-                        buffer_array = category_buffer_list[category_name]
-
-                        # 确保两个数组都是NumPy数组
-                        existing_array = numpy.asarray(existing_array)
-                        buffer_array = numpy.asarray(buffer_array)
-
-                        # 使用 concatenate 连接两个数组，确保传递的是一个序列（如列表或元组）
-                        concatenated_array = numpy.concatenate((existing_array, buffer_array))
-
-                        # 更新字典中的值
-                        self.__categoryname_bytelist_dict[category_name] = concatenated_array
-
-                        # self.__categoryname_bytelist_dict[category_name] = numpy.concatenate(self.__categoryname_bytelist_dict[category_name],category_buffer_list[category_name])
+        # 4. 合并数据 (一次性 Concatenate)
+        self.__categoryname_bytelist_dict = {}
+        for cat_name, data_list in category_data_lists.items():
+            if data_list:
+                self.__categoryname_bytelist_dict[cat_name] = numpy.concatenate(data_list)
+        
+        self.shapekey_name_bytelist_dict = {}
+        for sk_name, data_list in shapekey_data_lists.items():
+            if data_list:
+                self.shapekey_name_bytelist_dict[sk_name] = numpy.concatenate(data_list)
 
         # 顺便计算一下步长得到总顶点数
         # print(self.d3d11GameType.CategoryStrideDict)
-        position_stride = self.d3d11GameType.CategoryStrideDict["Position"]
-        position_bytelength = len(self.__categoryname_bytelist_dict["Position"])
-        self.draw_number = int(position_bytelength/position_stride)
+        if "Position" in self.__categoryname_bytelist_dict:
+            position_stride = self.d3d11GameType.CategoryStrideDict.get("Position", 12) # Default stride?
+            position_bytelength = len(self.__categoryname_bytelist_dict["Position"])
+            self.draw_number = int(position_bytelength/position_stride)
 
     def __read_component_ib_buf_dict(self):
         obj_name_drawindexedobj_cache_dict:dict[str,M_DrawIndexed] = {}
@@ -274,6 +329,21 @@ class DrawIBModel:
             # category_array = numpy.array(category_buf, dtype=numpy.uint8)
             with open(buf_path, 'wb') as ibf:
                 category_buf.tofile(ibf)
+
+        # Export ShapeKey buffer files.
+        if self.shapekey_name_bytelist_dict:
+            print("Export ShapeKey Buffers::")
+            for sk_name, sk_buf in self.shapekey_name_bytelist_dict.items():
+                sk_filename = "Position." + sk_name + ".buf" 
+                # 这里根据需求，也许需要加上 hash 前缀，如 self.draw_ib + "-" + sk_filename
+                # 但根据用户指示："名字就是Position.形态键名称.buf", 这里直接拼接在 hash 后面比较稳妥
+                # 通常格式: [Hash]-Position.[SKName].buf
+                # sk_name 已经包含 "Shape." 前缀
+                
+                buf_path = buf_output_folder + self.draw_ib + "-" + sk_filename
+                # print("write sk: " + buf_path)
+                with open(buf_path, 'wb') as skf:
+                    sk_buf.tofile(skf)
 
 
 

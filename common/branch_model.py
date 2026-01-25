@@ -235,6 +235,7 @@ class BranchModel:
         '''
         __obj_name_ib_dict:dict[str,list] = {} 
         __obj_name_category_buffer_list_dict:dict[str,list] =  {} 
+        __obj_name_shape_key_buffer_dict:dict[str,dict] = {}
 
         obj_name_obj_model_cache_dict:dict[str,ObjDataModel] = {}
 
@@ -248,11 +249,13 @@ class BranchModel:
 
             obj = bpy.data.objects[obj_name]
             
-            obj_model = obj_name_obj_model_cache_dict.get(obj_name,None)
-            if obj_model is not None:
+            obj_model_cached = obj_name_obj_model_cache_dict.get(obj_name,None)
+            if obj_model_cached is not None:
                 LOG.info("Using cached model for " + obj_name)
-                __obj_name_ib_dict[obj.name] = obj_model.ib
-                __obj_name_category_buffer_list_dict[obj.name] = obj_model.category_buffer_dict
+                __obj_name_ib_dict[obj.name] = obj_model_cached.ib
+                __obj_name_category_buffer_list_dict[obj.name] = obj_model_cached.category_buffer_dict
+                if hasattr(obj_model_cached, 'shape_key_buffer_dict'):
+                    __obj_name_shape_key_buffer_dict[obj.name] = obj_model_cached.shape_key_buffer_dict
             else:
                 # XXX 我们在导出具体数据之前，先对模型整体的权重进行normalize_all预处理，才能让后续的具体每一个权重的normalize_all更好的工作
                 # 使用这个的前提是当前obj中没有锁定的顶点组，所以这里要先进行判断。
@@ -294,6 +297,9 @@ class BranchModel:
                 
                 __obj_name_ib_dict[obj.name] = obj_buffer_model.ib
                 __obj_name_category_buffer_list_dict[obj.name] = obj_buffer_model.category_buffer_dict
+                # 新增：收集 shape_key_buffer_dict
+                if hasattr(obj_buffer_model, 'shape_key_buffer_dict'):
+                    __obj_name_shape_key_buffer_dict[obj.name] = obj_buffer_model.shape_key_buffer_dict
 
                 obj_name_obj_model_cache_dict[obj_name] = obj_buffer_model
         
@@ -311,6 +317,10 @@ class BranchModel:
 
             obj_model.ib = __obj_name_ib_dict[obj_name]
             obj_model.category_buffer_dict = __obj_name_category_buffer_list_dict[obj_name]
+            
+            # 这里的 obj_model 是 ObjDataModel 类型，我们需要动态给它添加 shape_key_buffer_dict 属性
+            if obj_name in __obj_name_shape_key_buffer_dict:
+                 obj_model.shape_key_buffer_dict = __obj_name_shape_key_buffer_dict[obj_name]
 
             final_ordered_draw_obj_model_list.append(copy.deepcopy(obj_model))
         
