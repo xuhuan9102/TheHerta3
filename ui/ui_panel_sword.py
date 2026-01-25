@@ -390,4 +390,37 @@ class Sword_SplitModel_By_DrawIndexed_Panel(Panel):
         op = layout.operator("mesh.extract_submesh")
         op.start_index = scene.submesh_start
         op.index_count = scene.submesh_count
+
+def register():
+    # 注册预览图集合
+    pcoll = bpy.utils.previews.new()
+    preview_collections["main"] = pcoll
+
+    bpy.utils.register_class(Sword_ImportTexture_ImageListItem)
+    bpy.utils.register_class(SWORD_UL_FastImportTextureList)
+    bpy.utils.register_class(Sword_ImportTexture_VIEW3D_PT_ImageMaterialPanel)
+    bpy.utils.register_class(Sword_ImportTexture_WM_OT_ApplyImageToMaterial)
+    bpy.utils.register_class(Sword_ImportTexture_WM_OT_SelectImageFolder)
+    bpy.utils.register_class(SwordImportAllReversed)
+    bpy.utils.register_class(Sword_SplitModel_By_DrawIndexed_Panel)
+
+    bpy.types.Scene.sword_image_list = CollectionProperty(type=Sword_ImportTexture_ImageListItem)
+    bpy.types.Scene.sword_image_list_index = IntProperty(default=0)
+
+def unregister():
+    del bpy.types.Scene.sword_image_list
+    del bpy.types.Scene.sword_image_list_index
+
+    # 移除预览图集合
+    for pcoll in preview_collections.values():
+        bpy.utils.previews.remove(pcoll)
+    preview_collections.clear()
+
+    bpy.utils.unregister_class(Sword_SplitModel_By_DrawIndexed_Panel)
+    bpy.utils.unregister_class(SwordImportAllReversed)
+    bpy.utils.unregister_class(Sword_ImportTexture_WM_OT_SelectImageFolder)
+    bpy.utils.unregister_class(Sword_ImportTexture_WM_OT_ApplyImageToMaterial)
+    bpy.utils.unregister_class(Sword_ImportTexture_VIEW3D_PT_ImageMaterialPanel)
+    bpy.utils.unregister_class(SWORD_UL_FastImportTextureList)
+    bpy.utils.unregister_class(Sword_ImportTexture_ImageListItem)
                 

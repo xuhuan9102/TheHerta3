@@ -206,3 +206,42 @@ class SSMTGenerateMod(bpy.types.Operator):
 
         CommandUtils.OpenGeneratedModFolder()
         return {'FINISHED'}
+
+# 注册一个用于选择工作空间集合的属性，带poll函数过滤红色集合
+def poll_red_collection(self, object):
+    return object.color_tag == 'COLOR_01'
+
+addon_keymaps = []
+
+def register():
+    bpy.utils.register_class(SSMTSelectGenerateModFolder)
+    bpy.utils.register_class(PanelGenerateModConfig)
+    bpy.utils.register_class(SSMTGenerateMod)
+
+    bpy.types.Scene.active_workspace_collection = bpy.props.PointerProperty(
+        type=bpy.types.Collection,
+        name="Generate Mod Workspace Collection",
+        description="生成Mod之前必须在这里选择一个当前工作空间为名称的集合",
+        poll=poll_red_collection
+    )
+    
+    # 添加快捷键
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon
+    if kc:
+        km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
+        kmi = km.keymap_items.new(SSMTGenerateMod.bl_idname, 
+                                    type='O', value='PRESS',
+                                    ctrl=True, alt=True, shift=False)
+        addon_keymaps.append((km, kmi))
+
+def unregister():
+    for km, kmi in addon_keymaps:
+        km.keymap_items.remove(kmi)
+    addon_keymaps.clear()
+
+    bpy.utils.unregister_class(SSMTGenerateMod)
+    bpy.utils.unregister_class(PanelGenerateModConfig)
+    bpy.utils.unregister_class(SSMTSelectGenerateModFolder)
+
+    del bpy.types.Scene.active_workspace_collection

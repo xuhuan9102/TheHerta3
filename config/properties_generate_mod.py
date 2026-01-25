@@ -167,4 +167,11 @@ class Properties_GenerateMod(bpy.types.PropertyGroup):
         '''
         return bpy.context.scene.properties_generate_mod.recalculate_color
     
+def register():
+    bpy.utils.register_class(Properties_GenerateMod)
+    bpy.types.Scene.properties_generate_mod = bpy.props.PointerProperty(type=Properties_GenerateMod)
+
+def unregister():
+    del bpy.types.Scene.properties_generate_mod
+    bpy.utils.unregister_class(Properties_GenerateMod)
 

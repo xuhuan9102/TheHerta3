@@ -119,5 +119,19 @@ def menu_dbmt_mark_collection_switch(self, context):
     self.layout.operator(SSMT_LinkObjectsToCollection.bl_idname)
     self.layout.operator(SSMT_UnlinkObjectsFromCollection.bl_idname)
 
+def register():
+    bpy.utils.register_class(Catter_MarkCollection_Switch)
+    bpy.utils.register_class(Catter_MarkCollection_Toggle)
+    bpy.utils.register_class(SSMT_LinkObjectsToCollection)
+    bpy.utils.register_class(SSMT_UnlinkObjectsFromCollection)
+    bpy.types.OUTLINER_MT_collection.append(menu_dbmt_mark_collection_switch)
+
+def unregister():
+    bpy.types.OUTLINER_MT_collection.remove(menu_dbmt_mark_collection_switch)
+    bpy.utils.unregister_class(SSMT_UnlinkObjectsFromCollection)
+    bpy.utils.unregister_class(SSMT_LinkObjectsToCollection)
+    bpy.utils.unregister_class(Catter_MarkCollection_Toggle)
+    bpy.utils.unregister_class(Catter_MarkCollection_Switch)
+
 
 

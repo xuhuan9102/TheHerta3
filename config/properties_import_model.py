@@ -37,3 +37,11 @@ class Properties_ImportModel(bpy.types.PropertyGroup):
         '''
         return bpy.context.scene.properties_import_model.use_normal_map
 
+def register():
+    bpy.utils.register_class(Properties_ImportModel)
+    bpy.types.Scene.properties_import_model = bpy.props.PointerProperty(type=Properties_ImportModel)
+
+def unregister():
+    del bpy.types.Scene.properties_import_model
+    bpy.utils.unregister_class(Properties_ImportModel)
+

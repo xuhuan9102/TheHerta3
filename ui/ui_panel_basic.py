@@ -28,6 +28,8 @@ class PanelBasicInformation(bpy.types.Panel):
         self.bl_label =  "TheHerta3 V" +  PluginConfig.get_version_string() + "  SSMT V" + str(GlobalConfig.ssmt_version_number)
         layout.label(text=TR.translate("SSMT缓存文件夹路径: ") + GlobalConfig.dbmtlocation)
         layout.label(text=TR.translate("当前配置名称: ") + GlobalConfig.gamename)
+
+
         layout.label(text=TR.translate("当前执行逻辑: ") + GlobalConfig.logic_name)
         layout.label(text=TR.translate("当前工作空间: ") + GlobalConfig.workspacename)
 
@@ -61,3 +63,9 @@ class PanelBasicInformation(bpy.types.Panel):
 
         # 决定导入时是否调用法线贴图
         layout.prop(context.scene.properties_import_model, "use_normal_map")
+
+def register():
+    bpy.utils.register_class(PanelBasicInformation)
+
+def unregister():
+    bpy.utils.unregister_class(PanelBasicInformation)

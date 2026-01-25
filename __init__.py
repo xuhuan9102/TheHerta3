@@ -1,14 +1,14 @@
-
+import bpy
 
 # UI界面
-from .ui.ui_panel_basic import * 
-from .ui.ui_panel_model import *
-from .ui.ui_panel_rightclick import *
-from .ui.ui_panel_sword import *
-from .ui.ui_panel_export import SSMTGenerateMod, PanelGenerateModConfig, SSMTSelectGenerateModFolder
-from .ui.ui_panel_import import Import3DMigotoRaw, SSMTImportAllFromCurrentWorkSpaceV3
-from .ui.ui_panel_fast_texture import *
-from .ui.ui_shader_window import *
+from .ui import ui_panel_basic
+from .ui import ui_panel_model
+from .ui import ui_panel_rightclick
+from .ui import ui_panel_sword
+from .ui import ui_panel_export
+from .ui import ui_panel_import
+from .ui import ui_panel_fast_texture
+from .ui import ui_shader_window
 from .blueprint import blueprint as blueprint_system
 
 # 自动更新功能
@@ -21,10 +21,10 @@ importlib.reload(addon_updater_ops)
 from bpy.types import SpaceView3D
 
 # 全局配置
-from .config.properties_import_model import Properties_ImportModel
-from .config.properties_generate_mod import Properties_GenerateMod
-from .config.properties_wwmi import Properties_WWMI
-from .config.properties_extract_model import Properties_ExtractModel
+from .config import properties_import_model
+from .config import properties_generate_mod
+from .config import properties_wwmi
+from .config import properties_extract_model
 from .config.plugin_config import PluginConfig
 
 bl_info = {
@@ -114,212 +114,51 @@ class HertaUpdatePreference(bpy.types.AddonPreferences):
         layout.prop(self, "自动检查更新")
         addon_updater_ops.update_settings_ui(self, context)
 
-register_classes = (
-    # 全局配置
-    Properties_ImportModel,
-    Properties_WWMI,
-    Properties_GenerateMod,
-    Properties_ExtractModel,
-
-
-    # 导入3Dmigoto模型功能
-    Import3DMigotoRaw,
-    SSMTImportAllFromCurrentWorkSpaceV3,
-
-
-
-
-    # 生成Mod功能
-    SSMTGenerateMod,
-
-    # 模型处理面板
-    RemoveAllVertexGroupOperator,
-    RemoveUnusedVertexGroupOperator,
-    MergeVertexGroupsWithSameNumber,
-    FillVertexGroupGaps,
-    AddBoneFromVertexGroupV2,
-    RemoveNotNumberVertexGroup,
-    MMTResetRotation,
-    CatterRightClickMenu,
-    SplitMeshByCommonVertexGroup,
-    RecalculateTANGENTWithVectorNormalizedNormal,
-    RecalculateCOLORWithVectorNormalizedNormal,
-    WWMI_ApplyModifierForObjectWithShapeKeysOperator,
-    SmoothNormalSaveToUV,
-    RenameAmatureFromGame,
-    ModelSplitByLoosePart,
-    ModelSplitByVertexGroup,
-    ModelDeleteLoosePoint,
-    ModelClearCustomSplitNormals,
-    ModelRenameVertexGroupNameWithTheirSuffix,
-    ModelResetLocation,
-    ModelSortVertexGroupByName,
-    ModelVertexGroupRenameByLocation,
-
-    # 集合的右键菜单栏
-    Catter_MarkCollection_Switch,
-    Catter_MarkCollection_Toggle,
-    SSMT_LinkObjectsToCollection,
-    SSMT_UnlinkObjectsFromCollection,
-
-    # 根据DrawIndexed拆分模型功能
-    ExtractSubmeshOperator,
-
-    
-    # 模型导入面板
-    PanelBasicInformation,
-
-    # 快速上贴图面板，位于导入模型和生成Mod之间
-    SSMT_UL_FastImportTextureList,
-    SSMT_ImportTexture_WM_OT_ApplyImageToMaterial,
-    SSMT_ImportTexture_WM_OT_AutoDetectTextureFolder,
-    SSMT_FastTexture_ComponentOnly,
-    SSMT_ImportTexture_VIEW3D_PT_ImageMaterialPanel,
-
-    # 生成Mod面板
-    PanelGenerateModConfig,
-
-    # 模型处理面板
-    PanelModelProcess,
-
-    # 自动更新面板
-    HertaUpdatePreference,
-    UpdaterPanel,
-
-    SSMTSelectGenerateModFolder,
-
-    SWORD_UL_FastImportTextureList,
-    Sword_ImportTexture_ImageListItem,
-    Sword_ImportTexture_VIEW3D_PT_ImageMaterialPanel,
-    Sword_ImportTexture_WM_OT_ApplyImageToMaterial,
-    Sword_ImportTexture_WM_OT_SelectImageFolder,
-    SwordImportAllReversed,
-    Sword_SplitModel_By_DrawIndexed_Panel,
-
-    # Shader窗口功能
-    THEHERTA3_OT_OpenPersistentBlueprint,
-    THEHERTA3_PT_ShaderWindow,
-)
-
-
 def register():
-    # 创建预览集合
-    pcoll = bpy.utils.previews.new()
-    preview_collections["main"] = pcoll
-
-    fast_pcoll = bpy.utils.previews.new()
-    fast_preview_collections["main"] = fast_pcoll
-
-    blueprint_system.register()
-
-    for cls in register_classes:
-        bpy.utils.register_class(cls)
-
-    bpy.types.Scene.properties_wwmi = bpy.props.PointerProperty(type=Properties_WWMI)
-    bpy.types.Scene.properties_import_model = bpy.props.PointerProperty(type=Properties_ImportModel)
-    bpy.types.Scene.properties_generate_mod = bpy.props.PointerProperty(type=Properties_GenerateMod)
-
-    # 注册一个用于选择工作空间集合的属性，带poll函数过滤红色集合
-    def poll_red_collection(self, object):
-        return object.color_tag == 'COLOR_01'
-
-    bpy.types.Scene.active_workspace_collection = bpy.props.PointerProperty(
-        type=bpy.types.Collection,
-        name="Generate Mod Workspace Collection",
-        description="生成Mod之前必须在这里选择一个当前工作空间为名称的集合",
-        poll=poll_red_collection
-    )
-    bpy.types.Scene.properties_extract_model = bpy.props.PointerProperty(type=Properties_ExtractModel)
-
-    bpy.types.VIEW3D_MT_object_context_menu.append(menu_func_migoto_right_click)
-    bpy.types.OUTLINER_MT_collection.append(menu_dbmt_mark_collection_switch)
-
-
-    bpy.types.Scene.submesh_start = bpy.props.IntProperty(
-        name="Start Index",
-        default=0,
-        min=0
-    )
-    bpy.types.Scene.submesh_count = bpy.props.IntProperty(
-        name="Index Count",
-        default=3,
-        min=3
-    )
-
-    # 添加快捷键
-    wm = bpy.context.window_manager
-    kc = wm.keyconfigs.addon
-    if kc:
-        km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
-        kmi = km.keymap_items.new(SSMTImportAllFromCurrentWorkSpaceV3.bl_idname, 
-                                    type='I', value='PRESS', 
-                                    ctrl=True, alt=True, shift=False)
-        kmi = km.keymap_items.new(SSMTGenerateMod.bl_idname, 
-                                    type='O', value='PRESS',
-                                    ctrl=True, alt=True, shift=False)
-
-
-    addon_updater_ops.register(bl_info)
+    # 1. Configs
+    properties_import_model.register()
+    properties_wwmi.register()
+    properties_generate_mod.register()
+    properties_extract_model.register()
     
+    # 2. Addon Updater (local classes)
+    addon_updater_ops.register(bl_info)
+    bpy.utils.register_class(UpdaterPanel)
+    bpy.utils.register_class(HertaUpdatePreference)
 
-    # 在场景属性中存储图片列表和索引
-    bpy.types.Scene.sword_image_list = CollectionProperty(type=Sword_ImportTexture_ImageListItem)
-    bpy.types.Scene.sword_image_list_index = IntProperty(default=0)
-
-    # 在场景属性中存储图片列表和索引
-    bpy.types.Scene.image_list = CollectionProperty(type=Sword_ImportTexture_ImageListItem)
-    bpy.types.Scene.image_list_index = IntProperty(default=0)
-
-
+    # 3. UI Panels & Logic
+    ui_panel_basic.register()
+    ui_panel_model.register()
+    ui_panel_rightclick.register()
+    ui_panel_sword.register()
+    ui_panel_export.register()
+    ui_panel_import.register()
+    ui_panel_fast_texture.register()
+    ui_shader_window.register()
+    blueprint_system.register()
 
 
 def unregister():
-
     blueprint_system.unregister()
+    ui_shader_window.unregister()
+    ui_panel_fast_texture.unregister()
+    ui_panel_import.unregister()
+    ui_panel_export.unregister()
+    ui_panel_sword.unregister()
+    ui_panel_rightclick.unregister()
+    ui_panel_model.unregister()
+    ui_panel_basic.unregister()
 
-    # 清除预览集合
-    for pcoll in preview_collections.values():
-        bpy.utils.previews.remove(pcoll)
-    preview_collections.clear()
-
-    for pcoll in fast_preview_collections.values():
-        bpy.utils.previews.remove(pcoll)
-    fast_preview_collections.clear()
-
-    for cls in reversed(register_classes):
-        bpy.utils.unregister_class(cls)
-    
-    # 删除场景属性
-    del bpy.types.Scene.sword_image_list
-    del bpy.types.Scene.sword_image_list_index
-
-    del bpy.types.Scene.image_list
-    del bpy.types.Scene.image_list_index
-
-
+    bpy.utils.unregister_class(HertaUpdatePreference)
+    bpy.utils.unregister_class(UpdaterPanel)
     addon_updater_ops.unregister()
 
-    # 卸载右键菜单
-    bpy.types.VIEW3D_MT_object_context_menu.remove(menu_func_migoto_right_click)
-    bpy.types.OUTLINER_MT_collection.remove(menu_dbmt_mark_collection_switch)
-
-    del bpy.types.Scene.submesh_start
-    del bpy.types.Scene.submesh_count
-
-    # 移除快捷键
-    wm = bpy.context.window_manager
-    kc = wm.keyconfigs.addon
-    if kc:
-        km = kc.keymaps.get('3D View')
-        if km:
-            for kmi in km.keymap_items:
-                if kmi.idname in [SSMTImportAllFromCurrentWorkSpaceV3.bl_idname, SSMTGenerateMod.bl_idname]:
-                    km.keymap_items.remove(kmi)
+    properties_extract_model.unregister()
+    properties_generate_mod.unregister()
+    properties_wwmi.unregister()
+    properties_import_model.unregister()
     
 
-    
-
-if __name__ == "__main__":
     register()
 
 

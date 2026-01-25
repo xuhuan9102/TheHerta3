@@ -711,3 +711,73 @@ class CatterRightClickMenu(bpy.types.Menu):
 def menu_func_migoto_right_click(self, context):
     self.layout.separator()
     self.layout.menu(CatterRightClickMenu.bl_idname)
+
+def register():
+    bpy.utils.register_class(RemoveAllVertexGroupOperator)
+    bpy.utils.register_class(RemoveUnusedVertexGroupOperator)
+    bpy.utils.register_class(MergeVertexGroupsWithSameNumber)
+    bpy.utils.register_class(FillVertexGroupGaps)
+    bpy.utils.register_class(AddBoneFromVertexGroupV2)
+    bpy.utils.register_class(RemoveNotNumberVertexGroup)
+    bpy.utils.register_class(MMTResetRotation)
+    bpy.utils.register_class(CatterRightClickMenu)
+    bpy.utils.register_class(SplitMeshByCommonVertexGroup)
+    bpy.utils.register_class(RecalculateTANGENTWithVectorNormalizedNormal)
+    bpy.utils.register_class(RecalculateCOLORWithVectorNormalizedNormal)
+    bpy.utils.register_class(WWMI_ApplyModifierForObjectWithShapeKeysOperator)
+    bpy.utils.register_class(SmoothNormalSaveToUV)
+    bpy.utils.register_class(RenameAmatureFromGame)
+    bpy.utils.register_class(ModelSplitByLoosePart)
+    bpy.utils.register_class(ModelSplitByVertexGroup)
+    bpy.utils.register_class(ModelDeleteLoosePoint)
+    bpy.utils.register_class(ModelClearCustomSplitNormals)
+    bpy.utils.register_class(ModelRenameVertexGroupNameWithTheirSuffix)
+    bpy.utils.register_class(ModelResetLocation)
+    bpy.utils.register_class(ModelSortVertexGroupByName)
+    bpy.utils.register_class(ModelVertexGroupRenameByLocation)
+    bpy.utils.register_class(ExtractSubmeshOperator)
+    bpy.utils.register_class(PanelModelProcess)
+
+    bpy.types.VIEW3D_MT_object_context_menu.append(menu_func_migoto_right_click)
+
+    bpy.types.Scene.submesh_start = bpy.props.IntProperty(
+        name="Start Index",
+        default=0,
+        min=0
+    )
+    bpy.types.Scene.submesh_count = bpy.props.IntProperty(
+        name="Index Count",
+        default=3,
+        min=3
+    )
+
+def unregister():
+    del bpy.types.Scene.submesh_start
+    del bpy.types.Scene.submesh_count
+
+    bpy.types.VIEW3D_MT_object_context_menu.remove(menu_func_migoto_right_click)
+
+    bpy.utils.unregister_class(PanelModelProcess)
+    bpy.utils.unregister_class(ExtractSubmeshOperator)
+    bpy.utils.unregister_class(ModelVertexGroupRenameByLocation)
+    bpy.utils.unregister_class(ModelSortVertexGroupByName)
+    bpy.utils.unregister_class(ModelResetLocation)
+    bpy.utils.unregister_class(ModelRenameVertexGroupNameWithTheirSuffix)
+    bpy.utils.unregister_class(ModelClearCustomSplitNormals)
+    bpy.utils.unregister_class(ModelDeleteLoosePoint)
+    bpy.utils.unregister_class(ModelSplitByVertexGroup)
+    bpy.utils.unregister_class(ModelSplitByLoosePart)
+    bpy.utils.unregister_class(RenameAmatureFromGame)
+    bpy.utils.unregister_class(SmoothNormalSaveToUV)
+    bpy.utils.unregister_class(WWMI_ApplyModifierForObjectWithShapeKeysOperator)
+    bpy.utils.unregister_class(RecalculateCOLORWithVectorNormalizedNormal)
+    bpy.utils.unregister_class(RecalculateTANGENTWithVectorNormalizedNormal)
+    bpy.utils.unregister_class(SplitMeshByCommonVertexGroup)
+    bpy.utils.unregister_class(CatterRightClickMenu)
+    bpy.utils.unregister_class(MMTResetRotation)
+    bpy.utils.unregister_class(RemoveNotNumberVertexGroup)
+    bpy.utils.unregister_class(AddBoneFromVertexGroupV2)
+    bpy.utils.unregister_class(FillVertexGroupGaps)
+    bpy.utils.unregister_class(MergeVertexGroupsWithSameNumber)
+    bpy.utils.unregister_class(RemoveUnusedVertexGroupOperator)
+    bpy.utils.unregister_class(RemoveAllVertexGroupOperator)

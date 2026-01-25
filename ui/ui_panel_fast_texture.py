@@ -317,6 +317,7 @@ class SSMT_ImportTexture_VIEW3D_PT_ImageMaterialPanel(Panel):
         # 应用材质按钮
         row = layout.row()
         row.operator("ssmt.apply_image_to_material", icon='MATERIAL_DATA')
+
         
         # 显示当前选中图片的预览
         if scene.image_list and scene.image_list_index >= 0 and scene.image_list_index < len(scene.image_list):
@@ -327,3 +328,36 @@ class SSMT_ImportTexture_VIEW3D_PT_ImageMaterialPanel(Panel):
                 box = layout.box()
                 box.label(text="Preview:")
                 box.template_icon(icon_value=pcoll[selected_item.name].icon_id, scale=10.0)
+
+
+
+def register():
+    # 注册预览图集合
+    fast_pcoll = bpy.utils.previews.new()
+    fast_preview_collections["main"] = fast_pcoll
+
+    bpy.utils.register_class(SSMT_ImportTexture_ImageListItem)
+    bpy.utils.register_class(SSMT_UL_FastImportTextureList)
+    bpy.utils.register_class(SSMT_ImportTexture_WM_OT_ApplyImageToMaterial)
+    bpy.utils.register_class(SSMT_ImportTexture_WM_OT_AutoDetectTextureFolder)
+    bpy.utils.register_class(SSMT_FastTexture_ComponentOnly)
+    bpy.utils.register_class(SSMT_ImportTexture_VIEW3D_PT_ImageMaterialPanel)
+
+    bpy.types.Scene.image_list = CollectionProperty(type=SSMT_ImportTexture_ImageListItem)
+    bpy.types.Scene.image_list_index = IntProperty(default=0)
+
+def unregister():
+    del bpy.types.Scene.image_list
+    del bpy.types.Scene.image_list_index
+
+    # 移除预览图集合
+    for pcoll in fast_preview_collections.values():
+        bpy.utils.previews.remove(pcoll)
+    fast_preview_collections.clear()
+
+    bpy.utils.unregister_class(SSMT_ImportTexture_VIEW3D_PT_ImageMaterialPanel)
+    bpy.utils.unregister_class(SSMT_FastTexture_ComponentOnly)
+    bpy.utils.unregister_class(SSMT_ImportTexture_WM_OT_AutoDetectTextureFolder)
+    bpy.utils.unregister_class(SSMT_ImportTexture_WM_OT_ApplyImageToMaterial)
+    bpy.utils.unregister_class(SSMT_UL_FastImportTextureList)
+    bpy.utils.unregister_class(SSMT_ImportTexture_ImageListItem)

@@ -1,6 +1,7 @@
 
 import bpy
 from bpy.types import NodeTree, Node, NodeSocket
+
 import nodeitems_utils
 from nodeitems_utils import NodeCategory, NodeItem
 

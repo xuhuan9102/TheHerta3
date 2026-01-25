@@ -57,3 +57,11 @@ class THEHERTA3_PT_ShaderWindow(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         layout.operator("theherta3.open_persistent_blueprint", icon='NODETREE')
+
+def register():
+    bpy.utils.register_class(THEHERTA3_OT_OpenPersistentBlueprint)
+    bpy.utils.register_class(THEHERTA3_PT_ShaderWindow)
+
+def unregister():
+    bpy.utils.unregister_class(THEHERTA3_PT_ShaderWindow)
+    bpy.utils.unregister_class(THEHERTA3_OT_OpenPersistentBlueprint)

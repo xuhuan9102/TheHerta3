@@ -71,3 +71,10 @@ class Properties_WWMI(bpy.types.PropertyGroup):
         '''
         return bpy.context.scene.properties_wwmi.export_add_missing_vertex_groups
     
+def register():
+    bpy.utils.register_class(Properties_WWMI)
+    bpy.types.Scene.properties_wwmi = bpy.props.PointerProperty(type=Properties_WWMI)
+
+def unregister():
+    del bpy.types.Scene.properties_wwmi
+    bpy.utils.unregister_class(Properties_WWMI)
