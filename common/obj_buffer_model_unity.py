@@ -61,7 +61,10 @@ class ObjBufferModelUnity:
 
         self.shape_key_buffer_dict = {}
 
-        if self.obj.data.shape_keys and self.obj.data.shape_keys.key_blocks:
+        # 开关判断：是否生成 ShapeKey Slider Buffer
+        is_generate_shapekey = Properties_GenerateMod.generate_shapekey_slider_buffer()
+        
+        if is_generate_shapekey and self.obj.data.shape_keys and self.obj.data.shape_keys.key_blocks:
             # 获取所有以 Shape. 开头的形态键
             shape_keys = [sk for sk in self.obj.data.shape_keys.key_blocks if sk.name.startswith("Shape.")]
             

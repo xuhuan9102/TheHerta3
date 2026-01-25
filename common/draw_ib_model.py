@@ -334,7 +334,8 @@ class DrawIBModel:
         if self.shapekey_name_bytelist_dict:
             print("Export ShapeKey Buffers::")
             for sk_name, sk_buf in self.shapekey_name_bytelist_dict.items():
-                sk_filename = "Position." + sk_name + ".buf" 
+                shapekey_realname = sk_name.replace("Shape.","")
+                sk_filename = "Position." + shapekey_realname + ".buf" 
                 # 这里根据需求，也许需要加上 hash 前缀，如 self.draw_ib + "-" + sk_filename
                 # 但根据用户指示："名字就是Position.形态键名称.buf", 这里直接拼接在 hash 后面比较稳妥
                 # 通常格式: [Hash]-Position.[SKName].buf
