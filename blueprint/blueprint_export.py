@@ -22,6 +22,7 @@ from ..games.wwmi import ModModelWWMI
 from ..games.snowbreak import ModModelSnowBreak
 from ..config.properties_generate_mod import Properties_GenerateMod
 
+from .blueprint_model import BluePrintModel
 
 
 '''
@@ -43,10 +44,12 @@ TODO
 所以目前的工作空间集合的颜色是红色的这一条可以去掉
 也就是把导入和导出解耦合了，导入就只是导入，导出就只是导出，无需依赖于工作空间为名称的集合
 
+
 5.之前老高加了一个导入和导出的快捷键，这个很少人用到，后续考虑删除掉
 不过我在测试的时候既不会删除，也不会专门新增这个快捷键去测试
 
 '''
+
 
 class SSMTGenerateModBlueprint(bpy.types.Operator):
     bl_idname = "ssmt.generate_mod_blueprint"
@@ -73,70 +76,15 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         # 也就顺利实现了WWMI的多IB支持
         # 并且也可以像WWMITools那样分开不同的文件夹，每个文件夹一个单独的DrawIB了，通过组节点来实现即可
         # 新的蓝图架构潜力非常大，能够任意扩展，基本上所有的目前现存的需求都能得到解决。
-        
-        workspace_collection = context.scene.active_workspace_collection
-       
-    
-        # 调用对应游戏的生成Mod逻辑
-        if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
-            migoto_mod_model = ModModelWWMI(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unreal_vs_config_ini()
-        elif GlobalConfig.logic_name == LogicName.YYSLS:
-            migoto_mod_model = ModModelYYSLS(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_vs_config_ini()
 
-        elif GlobalConfig.logic_name == LogicName.CTXMC or GlobalConfig.logic_name == LogicName.IdentityV2 or GlobalConfig.logic_name == LogicName.NierR:
-            migoto_mod_model = ModModelIdentityV(workspace_collection=workspace_collection)
 
-            migoto_mod_model.generate_unity_vs_config_ini()
-        
-        # 老米四件套
-        elif GlobalConfig.logic_name == LogicName.HIMI:
-            migoto_mod_model = ModModelHIMI(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_vs_config_ini()
-        elif GlobalConfig.logic_name == LogicName.GIMI:
-            migoto_mod_model = ModModelGIMI(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_vs_config_ini()
-        elif GlobalConfig.logic_name == LogicName.SRMI:
-            migoto_mod_model = ModModelSRMI(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_cs_config_ini()
-        elif GlobalConfig.logic_name == LogicName.ZZMI:
-            migoto_mod_model = ModModelZZMI(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_vs_config_ini()
+        # TODO 暂时现在这里测试流程，流程通过后迁移到zzmi_new.py里去
+        blueprint_model:BluePrintModel = BluePrintModel()
 
-        # UnityVS
-        elif GlobalConfig.logic_name == LogicName.UnityVS:
-            migoto_mod_model = ModModelUnity(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_vs_config_ini()
-
-        # AILIMIT
-        elif GlobalConfig.logic_name == LogicName.AILIMIT or GlobalConfig.logic_name == LogicName.UnityCS:
-            migoto_mod_model = ModModelUnity(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_cs_config_ini()
-        
-        # UnityCPU 例如少女前线2、虚空之眼等等，绝大部分手游都是UnityCPU
-        elif GlobalConfig.logic_name == LogicName.UnityCPU:
-            migoto_mod_model = ModModelUnity(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_vs_config_ini()
-        
-        # UnityCSM
-        elif GlobalConfig.logic_name == LogicName.UnityCSM:
-            migoto_mod_model = ModModelUnity(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_unity_cs_config_ini()
-
-        # 尘白禁区、卡拉比丘
-        elif GlobalConfig.logic_name == LogicName.SnowBreak:
-            migoto_mod_model = ModModelSnowBreak(workspace_collection=workspace_collection)
-            migoto_mod_model.generate_ini()
-        else:
-            self.report({'ERROR'},"当前逻辑暂不支持生成Mod")
-            return {'FINISHED'}
-        
 
         self.report({'INFO'},TR.translate("Generate Mod Success!"))
         TimerUtils.End("GenerateMod Mod")
-
-        CommandUtils.OpenGeneratedModFolder()
+        # CommandUtils.OpenGeneratedModFolder()
         return {'FINISHED'}
     
 

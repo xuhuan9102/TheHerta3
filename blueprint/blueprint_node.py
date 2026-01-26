@@ -101,7 +101,7 @@ class SSMTNode_Object_Group(SSMTNodeBase):
 class SSMTNode_Result_Output(SSMTNodeBase):
     '''Result Output Node'''
     bl_idname = 'SSMTNode_Result_Output'
-    bl_label = 'Mod Output'
+    bl_label = 'Generate Mod'
     bl_icon = 'EXPORT'
 
     def init(self, context):
@@ -137,6 +137,11 @@ def draw_node_add_menu(self, context):
     layout.operator("node.add_node", text="Object Info", icon='OBJECT_DATAMODE').type = "SSMTNode_Object_Info"
     layout.operator("node.add_node", text="Group", icon='GROUP').type = "SSMTNode_Object_Group"
     layout.operator("node.add_node", text="Mod Output", icon='EXPORT').type = "SSMTNode_Result_Output"
+    layout.separator()
+
+    # Frame节点没有任何功能，它是Blender自带的一种辅助节点，用于在节点编辑器中组织和分组节点
+    # 反正就当一个区域划分来用就行了
+    layout.operator("node.add_node", text="Frame", icon='FILE_PARENT').type = "NodeFrame"
     layout.separator()
 
 # 注册与注销函数，在大型Blender插件开发中，不能在最外面的__init__.py中直接注册

@@ -143,9 +143,14 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
         # 2. 清空现有节点并重新生成
         tree.nodes.clear()
         
+        # 创建 Frame 节点
+        frame_node = tree.nodes.new('NodeFrame')
+        frame_node.label = "Default"
+        
         # 创建 Group 节点 (并在循环中连接)
         group_node = tree.nodes.new('SSMTNode_Object_Group')
         group_node.label = "Default Group"
+        group_node.parent = frame_node
         
         # 3. 遍历导入的对象并创建对应节点
         current_x = 0
@@ -183,6 +188,7 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
                  if obj.type == 'MESH':
                     # 创建节点
                     node = tree.nodes.new('SSMTNode_Object_Info')
+                    node.parent = frame_node
                     node.location = (current_x, current_y)
                     
                     # 填充属性
@@ -224,7 +230,7 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
 
         output_node = tree.nodes.new('SSMTNode_Result_Output')
         output_node.location = (current_x + 800, final_center_y)
-        output_node.label = "Mod Output"
+        output_node.label = "Generate Mod"
         
         # 连接 Group 到 Output
         if len(output_node.inputs) > 0 and len(group_node.outputs) > 0:
