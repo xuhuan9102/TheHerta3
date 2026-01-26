@@ -347,12 +347,18 @@ def register():
     bpy.types.Scene.image_list_index = IntProperty(default=0)
 
 def unregister():
-    del bpy.types.Scene.image_list
-    del bpy.types.Scene.image_list_index
+    try:
+        del bpy.types.Scene.image_list
+        del bpy.types.Scene.image_list_index
+    except Exception:
+        pass
 
     # 移除预览图集合
     for pcoll in fast_preview_collections.values():
-        bpy.utils.previews.remove(pcoll)
+        try:
+            bpy.utils.previews.remove(pcoll)
+        except Exception:
+            pass
     fast_preview_collections.clear()
 
     bpy.utils.unregister_class(SSMT_ImportTexture_VIEW3D_PT_ImageMaterialPanel)

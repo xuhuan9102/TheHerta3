@@ -9,7 +9,9 @@ from .ui import ui_panel_export
 from .ui import ui_panel_import
 from .ui import ui_panel_fast_texture
 from .ui import ui_window_blueprint
-from .blueprint import node as blueprint_system
+from .blueprint import blueprint_node
+from .blueprint import blueprint_import
+from .blueprint import blueprint_export
 
 # 自动更新功能
 from . import addon_updater_ops
@@ -135,11 +137,20 @@ def register():
     ui_panel_import.register()
     ui_panel_fast_texture.register()
     ui_window_blueprint.register()
-    blueprint_system.register()
+
+    # 蓝图系统
+    blueprint_node.register()
+    blueprint_import.register()
+    blueprint_export.register()
+
 
 
 def unregister():
-    blueprint_system.unregister()
+    # 蓝图系统
+    blueprint_node.unregister()
+    blueprint_import.unregister()
+    blueprint_export.unregister()
+
     ui_window_blueprint.unregister()
     ui_panel_fast_texture.unregister()
     ui_panel_import.unregister()

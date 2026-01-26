@@ -408,12 +408,18 @@ def register():
     bpy.types.Scene.sword_image_list_index = IntProperty(default=0)
 
 def unregister():
-    del bpy.types.Scene.sword_image_list
-    del bpy.types.Scene.sword_image_list_index
+    try:
+        del bpy.types.Scene.sword_image_list
+        del bpy.types.Scene.sword_image_list_index
+    except Exception:
+        pass
 
     # 移除预览图集合
     for pcoll in preview_collections.values():
-        bpy.utils.previews.remove(pcoll)
+        try:
+            bpy.utils.previews.remove(pcoll)
+        except Exception:
+            pass
     preview_collections.clear()
 
     bpy.utils.unregister_class(Sword_SplitModel_By_DrawIndexed_Panel)
