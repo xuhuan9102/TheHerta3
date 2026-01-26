@@ -194,6 +194,8 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
                     else:
                         node.component = "1"
                         
+                    node.alias_name = alias_name
+                        
                     node.label = obj.name # 设置节点标题方便识别
 
                     # ----------------------
@@ -231,7 +233,7 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
         # 触发一次group node的更新（虽然脚本连线有时不需要，但为了保险起见）
         if hasattr(group_node, "update"):
              group_node.update()
-        
+
         print(f"Blueprint {tree_name} updated with imported objects.")
         
     except Exception as e:

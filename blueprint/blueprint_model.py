@@ -142,6 +142,11 @@ class BluePrintModel:
                         self.parse_current_node(switch_node, tmp_chain_key_list)
             elif unknown_node.bl_idname == "SSMTNode_Object_Info":
                 obj_model = ObjDataModel(obj_name=unknown_node.object_name)
+                
+                obj_model.draw_ib = unknown_node.draw_ib
+                obj_model.component_count = int(unknown_node.component) 
+                obj_model.obj_alias_name = unknown_node.alias_name
+
                 obj_model.condition = M_Condition(work_key_list=copy.deepcopy(chain_key_list))
                 
                 # 每遇到一个obj，都把这个obj加入顺序渲染列表

@@ -46,10 +46,12 @@ class SSMTNode_Object_Info(SSMTNodeBase):
             self.label = self.object_name
         else:
             self.label = "Object Info"
+    object_name: bpy.props.StringProperty(name="Object Name", default="", update=update_object_name) # type: ignore
+
 
     draw_ib: bpy.props.StringProperty(name="DrawIB", default="") # type: ignore
     component: bpy.props.StringProperty(name="Component", default="") # type: ignore
-    object_name: bpy.props.StringProperty(name="Object Name", default="", update=update_object_name) # type: ignore
+    alias_name: bpy.props.StringProperty(name="Alias Name", default="") # type: ignore
 
     def init(self, context):
         self.outputs.new('SSMTSocketObject', "Object")
@@ -64,6 +66,8 @@ class SSMTNode_Object_Info(SSMTNodeBase):
         # 2. DrawIB 和 Component 自由修改
         layout.prop(self, "draw_ib", text="DrawIB")
         layout.prop(self, "component", text="Component")
+        layout.prop(self, "alias_name", text="Alias Name")
+
 
 # 组合节点：用于将多个 Object Info 按顺序组合
 class SSMTNode_Object_Group(SSMTNodeBase):
