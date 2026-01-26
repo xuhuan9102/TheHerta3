@@ -2,21 +2,7 @@
 import bpy
 from bpy.types import NodeTree, Node, NodeSocket
 
-import nodeitems_utils
-from nodeitems_utils import NodeCategory, NodeItem
-
 # Custom Socket Types
-class SSMTSocketFlow(NodeSocket):
-    '''Custom Socket for Execution Flow'''
-    bl_idname = 'SSMTSocketFlow'
-    bl_label = 'Flow Socket'
-
-    def draw_color(self, context, node):
-        return (0.9, 0.9, 0.9, 1.0) # White
-
-    def draw(self, context, layout, node, text):
-        layout.label(text=text)
-
 class SSMTSocketObject(NodeSocket):
     '''Custom Socket for Object Data'''
     bl_idname = 'SSMTSocketObject'
@@ -42,13 +28,13 @@ class SSMTNodeBase(Node):
         return ntree.bl_idname == 'SSMTBlueprintTreeType'
 
 
-
 # 对象信息节点
 class SSMTNode_Object_Info(SSMTNodeBase):
     '''Object Info Node'''
     bl_idname = 'SSMTNode_Object_Info'
     bl_label = 'Object Info'
     bl_icon = 'OBJECT_DATAMODE'
+    bl_width_min = 300
     
     # 定义属性用于存储信息
     # 使用 props.PointerProperty 指向 Object 可能会有上下文问题（特别是跨文件保存时），
@@ -67,7 +53,7 @@ class SSMTNode_Object_Info(SSMTNodeBase):
 
     def init(self, context):
         self.outputs.new('SSMTSocketObject', "Object")
-        self.width = 220 # 让节点宽一点
+        # self.width = 300 # 让节点宽一点
 
     def draw_buttons(self, context, layout):
         # 1. 物体选择：使用 prop_search 让用户可以像属性面板一样搜索选择
@@ -79,6 +65,38 @@ class SSMTNode_Object_Info(SSMTNodeBase):
         layout.prop(self, "draw_ib", text="DrawIB")
         layout.prop(self, "component", text="Component")
 
+# 组合节点：用于将多个 Object Info 按顺序组合
+class SSMTNode_Object_Group(SSMTNodeBase):
+    '''Merge multiple objects in order'''
+    bl_idname = 'SSMTNode_Object_Group'
+    bl_label = 'Group'
+    bl_icon = 'GROUP'
+
+    key_name: bpy.props.StringProperty(name="Key Name", default="") # type: ignore
+    values: bpy.props.StringProperty(name="Values", default="") # type: ignore
+    value_type: bpy.props.StringProperty(name="Type", default="") # type: ignore
+
+    def init(self, context):
+        self.inputs.new('SSMTSocketObject', "Input 1")
+        self.outputs.new('SSMTSocketObject', "Output")
+        self.width = 200
+
+    def draw_buttons(self, context, layout):
+        layout.prop(self, "key_name", text="Key")
+        layout.prop(self, "values", text="Values")
+        layout.prop(self, "value_type", text="Type")
+
+    def update(self):
+        # 类似 Join Geometry 的逻辑：总保持最后一个为空，方便连接新的
+        if self.inputs and self.inputs[-1].is_linked:
+            self.inputs.new('SSMTSocketObject', f"Input {len(self.inputs) + 1}")
+        
+        # 移除中间断开的连接，或者整理列表（可选）
+        # 这里实现一个简单的逻辑：如果倒数第二个也没有连接，就移除最后一个
+        # 防止无限增长，或者用户断开最后一个连接的情况
+        if len(self.inputs) > 1 and not self.inputs[-1].is_linked and not self.inputs[-2].is_linked:
+             self.inputs.remove(self.inputs[-1])
+
 # 结果输出节点
 class SSMTNode_Result_Output(SSMTNodeBase):
     '''Result Output Node'''
@@ -87,33 +105,39 @@ class SSMTNode_Result_Output(SSMTNodeBase):
     bl_icon = 'EXPORT'
 
     def init(self, context):
-        self.inputs.new('SSMTSocketFlow', "Prev")
-        self.inputs.new('SSMTSocketObject', "Object")
+        self.inputs.new('SSMTSocketObject', "Group 1")
+        self.width = 200
+
+    def update(self):
+        # 类似 Join Geometry 的逻辑：总保持最后一个为空，方便连接新的
+        if self.inputs and self.inputs[-1].is_linked:
+            self.inputs.new('SSMTSocketObject', f"Group {len(self.inputs) + 1}")
+        
+        # 移除中间断开的连接
+        # 保留 inputs[0](至少一个Group)
+        if len(self.inputs) > 1 and not self.inputs[-1].is_linked and not self.inputs[-2].is_linked:
+             self.inputs.remove(self.inputs[-1])
 
 # 3. 注册列表
 classes = (
-    SSMTSocketFlow,
     SSMTSocketObject,
     SSMTBlueprintTree,
     SSMTNode_Object_Info,
+    SSMTNode_Object_Group,
     SSMTNode_Result_Output
 )
 
-# 4. 节点分类菜单配置
-class SSMTNodeCategory(NodeCategory):
-    @classmethod
-    def poll(cls, context):
-        return context.space_data.tree_type == 'SSMTBlueprintTreeType'
-
-node_categories = [
-    SSMTNodeCategory("SSMT_DATA", "Data", items=[
-        NodeItem("SSMTNode_Object_Info"),
-    ]),
-    SSMTNodeCategory("SSMT_OUTPUTS", "Outputs", items=[
-        NodeItem("SSMTNode_Result_Output"),
-    ]),
-]
-
+def draw_node_add_menu(self, context):
+    if not isinstance(context.space_data, bpy.types.SpaceNodeEditor):
+        return
+    if context.space_data.tree_type != 'SSMTBlueprintTreeType':
+        return
+    
+    layout = self.layout
+    layout.operator("node.add_node", text="Object Info", icon='OBJECT_DATAMODE').type = "SSMTNode_Object_Info"
+    layout.operator("node.add_node", text="Group", icon='GROUP').type = "SSMTNode_Object_Group"
+    layout.operator("node.add_node", text="Mod Output", icon='EXPORT').type = "SSMTNode_Result_Output"
+    layout.separator()
 
 # 注册与注销函数，在大型Blender插件开发中，不能在最外面的__init__.py中直接注册
 # 否则会导致__init__.py过于臃肿，不利于维护，所以在各自的模块中定义register和unregister函数
@@ -123,17 +147,11 @@ def register():
             bpy.utils.register_class(cls)
         except ValueError:
             pass # Already registered
-    
-    try:
-        nodeitems_utils.register_node_categories('SSMT_NODES', node_categories)
-    except:
-        pass
+        
+    bpy.types.NODE_MT_add.prepend(draw_node_add_menu)
 
 def unregister():
-    try:
-        nodeitems_utils.unregister_node_categories('SSMT_NODES')
-    except:
-        pass
+    bpy.types.NODE_MT_add.remove(draw_node_add_menu)
 
     for cls in classes:
         try:

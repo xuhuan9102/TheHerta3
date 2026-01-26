@@ -131,10 +131,6 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
         tree_name = f"Mod_{GlobalConfig.workspacename}" if GlobalConfig.workspacename else "SSMT_Mod_Logic"
         tree = bpy.data.node_groups.get(tree_name)
         if not tree:
-            # 重要：先检查类型是否已注册
-            if 'SSMTBlueprintTreeType' in bpy.types.NodeTree.bl_rna.properties['type'].enum_items:
-                 pass # 如果能直接 new 最好
-                 
             try:
                 tree = bpy.data.node_groups.new(name=tree_name, type='SSMTBlueprintTreeType')
             except Exception as e:
@@ -147,10 +143,14 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
         # 2. 清空现有节点并重新生成
         tree.nodes.clear()
         
+        # 创建 Group 节点 (并在循环中连接)
+        group_node = tree.nodes.new('SSMTNode_Object_Group')
+        group_node.label = "Default Group"
+        
         # 3. 遍历导入的对象并创建对应节点
-        current_x = 200
+        current_x = 0
         current_y = 0
-        y_gap = 250 # 增加垂直间距
+        y_gap = 100 # 增加垂直间距
         
         count = 0
         
@@ -158,9 +158,14 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
         # 且导入的模型都放在这个集合里
         if 'workspace_collection' in locals() and workspace_collection:
              target_objects = workspace_collection.objects
+        else:
+             target_objects = [] # Fallback
 
         if not target_objects:
              print("Warning: Could not find Workspace collection to generate blueprint nodes.")
+
+        # 使用列表手动计算布局中心
+        min_y = 0
 
         for draw_ib_pair in draw_ib_pair_list:
             draw_ib = draw_ib_pair.DrawIB
@@ -180,27 +185,62 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
                     node = tree.nodes.new('SSMTNode_Object_Info')
                     node.location = (current_x, current_y)
                     
-                    # 排列逻辑：每列排 5 个
-                    count += 1
-                    current_y -= y_gap
-                    if count % 5 == 0:
-                            current_y = 0
-                            current_x += 300
-                    
                     # 填充属性
                     node.object_name = obj.name
                     node.draw_ib = draw_ib
-                    node.component = real_alias_name
+                    
+                    # 解析 Part 部分作为 Component (即 DrawIB-Part-Alias 中的 Part)
+                    name_parts = obj.name.split('-')
+                    if len(name_parts) >= 2:
+                        node.component = name_parts[1]
+                    else:
+                        node.component = "1"
+                        
                     node.label = obj.name # 设置节点标题方便识别
-                        
-        print(f"Blueprint {tree_name} updated with imported objects.")
-                        
+
+                    # ----------------------
+                    # 自动连线到 Group
+                    # ----------------------
+                    # 如果 Group 最后一个插槽已被占用，手动扩展一个
+                    if group_node.inputs[-1].is_linked:
+                        group_node.inputs.new('SSMTSocketObject', f"Input {len(group_node.inputs) + 1}")
+                    
+                    tree.links.new(node.outputs[0], group_node.inputs[-1])
+                    
+                    # 布局计算
+                    count += 1
+                    current_y -= y_gap
+                    min_y = min(min_y, current_y)
+
+                    if count % 5 == 0:
+                            current_y = 0
+                            current_x += 300
+        
+        # 4. 放置 Group 和 Output 节点
+        # 计算垂直中心大致位置
+        final_center_y = min_y / 2 if count <= 5 else -200 # 简单估算
+        
+        group_node.location = (current_x + 400, final_center_y)
+
+        output_node = tree.nodes.new('SSMTNode_Result_Output')
+        output_node.location = (current_x + 800, final_center_y)
+        output_node.label = "Mod Output"
+        
+        # 连接 Group 到 Output
+        if len(output_node.inputs) > 0 and len(group_node.outputs) > 0:
+            tree.links.new(group_node.outputs[0], output_node.inputs[0])
+
+        # 触发一次group node的更新（虽然脚本连线有时不需要，但为了保险起见）
+        if hasattr(group_node, "update"):
+             group_node.update()
+
         print(f"Blueprint {tree_name} updated with imported objects.")
         
     except Exception as e:
         print(f"Error generating blueprint nodes: {e}")
         import traceback
         traceback.print_exc()
+
 
 class SSMTImportAllFromCurrentWorkSpaceBlueprint(bpy.types.Operator):
     bl_idname = "ssmt.import_all_from_workspace_blueprint"
