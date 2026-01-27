@@ -257,28 +257,12 @@ class SSMTImportAllFromCurrentWorkSpaceBlueprint(bpy.types.Operator):
         
         return {'FINISHED'}
     
-addon_keymaps = []
 
 def register():
     bpy.utils.register_class(SSMTImportAllFromCurrentWorkSpaceBlueprint)
 
-    # 添加快捷键
-    wm = bpy.context.window_manager
-    kc = wm.keyconfigs.addon
-    if kc:
-        km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
-        kmi = km.keymap_items.new(SSMTImportAllFromCurrentWorkSpaceBlueprint.bl_idname, 
-                                    type='I', value='PRESS', 
-                                    ctrl=True, alt=True, shift=False)
-        addon_keymaps.append((km, kmi))
-
 
 def unregister():
-    # 移除快捷键
-    for km, kmi in addon_keymaps:
-        km.keymap_items.remove(kmi)
-    addon_keymaps.clear()
-
     bpy.utils.unregister_class(SSMTImportAllFromCurrentWorkSpaceBlueprint)
 
 

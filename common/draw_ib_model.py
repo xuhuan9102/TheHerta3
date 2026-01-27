@@ -90,7 +90,7 @@ class DrawIBModel:
         all_ordered_objects: list[ObjDataModel] = []
         unique_shape_key_names = set()
         processed_obj_names = set()
-
+        
         for component_model in self._component_model_list:
             for obj_model in component_model.final_ordered_draw_obj_model_list:
                 if obj_model.obj_name in processed_obj_names:

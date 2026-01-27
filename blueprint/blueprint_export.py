@@ -141,26 +141,12 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         CommandUtils.OpenGeneratedModFolder()
         return {'FINISHED'}
     
-addon_keymaps = []
 
 def register():
     bpy.utils.register_class(SSMTGenerateModBlueprint)
 
-    # 添加快捷键
-    wm = bpy.context.window_manager
-    kc = wm.keyconfigs.addon
-    if kc:
-        km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
-        kmi = km.keymap_items.new(SSMTGenerateModBlueprint.bl_idname, 
-                                    type='O', value='PRESS',
-                                    ctrl=True, alt=True, shift=False)
-        addon_keymaps.append((km, kmi))
 
 def unregister():
-    for km, kmi in addon_keymaps:
-        km.keymap_items.remove(kmi)
-    addon_keymaps.clear()
-
     bpy.utils.unregister_class(SSMTGenerateModBlueprint)
 
 
