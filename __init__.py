@@ -3,7 +3,6 @@ import bpy
 # UI界面
 from .ui import ui_panel_basic
 from .ui import ui_panel_model
-from .ui import ui_panel_rightclick
 from .ui import ui_panel_sword
 from .ui import ui_panel_export
 from .ui import ui_panel_import
@@ -33,7 +32,7 @@ bl_info = {
     "name": "TheHerta3",
     "description": "SSMT3.0 Series's Blender Plugin.",
     "blender": (4, 5, 0),
-    "version": (3, 3, 5),
+    "version": (3, 3, 6),
     "location": "View3D",
     "min_ssmt_version": 352, # 确保TheHerta3正确工作的SSMT最低版本号
     "category": "Generic"
@@ -131,7 +130,6 @@ def register():
     # 3. UI Panels & Logic
     ui_panel_basic.register()
     ui_panel_model.register()
-    ui_panel_rightclick.register()
     ui_panel_sword.register()
     ui_panel_export.register()
     ui_panel_import.register()
@@ -156,7 +154,6 @@ def unregister():
     ui_panel_import.unregister()
     ui_panel_export.unregister()
     ui_panel_sword.unregister()
-    ui_panel_rightclick.unregister()
     ui_panel_model.unregister()
     ui_panel_basic.unregister()
 
