@@ -48,9 +48,7 @@ class SSMTNode_Object_Info(SSMTNodeBase):
                 obj_name_split = self.object_name.split("-")
                 self.draw_ib = obj_name_split[0]
                 self.component = obj_name_split[1]
-
-                if self.alias_name == "":
-                    self.alias_name = obj_name_split[2]
+                self.alias_name = obj_name_split[2]
         else:
             self.label = "Object Info"
     object_name: bpy.props.StringProperty(name="Object Name", default="", update=update_object_name) # type: ignore
