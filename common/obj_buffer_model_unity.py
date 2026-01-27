@@ -101,6 +101,9 @@ class ObjBufferModelUnity:
                     
                     # 3. 必须进行三角化，确保几何结构一致
                     ObjUtils.mesh_triangulate(mesh_eval)
+
+                    # 计算TANGENT，不然导出丢失部分TANGENT数据导致光影效果错误
+                    mesh_eval.calc_tangents()
                     
                     # 4. 构建 ShapeKeyBufferModel (它会自动在 __post_init__ 中计算数据)
                     sb_model = ShapeKeyBufferModel(
