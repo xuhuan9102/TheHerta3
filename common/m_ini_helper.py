@@ -153,6 +153,11 @@ class M_IniHelper:
                 if not os.path.exists(target_path):
                     print("Move Texture File: " + texture_markup_info.mark_filename)
                     shutil.copy2(source_path,target_path)
+    
+    @staticmethod
+    def add_shapekey_ini_sections(ini_builder:M_IniBuilder):
+        
+        pass
 
     @classmethod
     def add_branch_key_sections(cls,ini_builder:M_IniBuilder,key_name_mkey_dict:dict[str,M_Key]):

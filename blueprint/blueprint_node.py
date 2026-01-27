@@ -4,30 +4,7 @@ from bpy.types import NodeTree, Node, NodeSocket
 
 from ..config.main_config import GlobalConfig
 
-# Custom Socket Types
-class SSMTSocketObject(NodeSocket):
-    '''Custom Socket for Object Data'''
-    bl_idname = 'SSMTSocketObject'
-    bl_label = 'Object Socket'
-
-    def draw_color(self, context, node):
-        return (0.0, 0.8, 0.8, 1.0) # Cyan/Teal
-
-    def draw(self, context, layout, node, text):
-        layout.label(text=text)
-
-# 1. 定义自定义节点树类型
-class SSMTBlueprintTree(NodeTree):
-    '''SSMT Mod Logic Blueprint'''
-    bl_idname = 'SSMTBlueprintTreeType'
-    bl_label = 'SSMT BluePrint'
-    bl_icon = 'NODETREE'
-
-# 2. 定义基础节点
-class SSMTNodeBase(Node):
-    @classmethod
-    def poll(cls, ntree):
-        return ntree.bl_idname == 'SSMTBlueprintTreeType'
+from .blueprint_node_base import SSMTBlueprintTree, SSMTNodeBase
 
 
 # 对象信息节点
@@ -396,8 +373,6 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
 # 3. 注册列表
 classes = (
     SSMT_OT_View_Group_Objects,
-    SSMTSocketObject,
-    SSMTBlueprintTree,
     SSMTNode_Object_Info,
     SSMTNode_Object_Group,
     SSMTNode_Result_Output,
@@ -432,10 +407,7 @@ def draw_node_add_menu(self, context):
 # 否则会导致__init__.py过于臃肿，不利于维护，所以在各自的模块中定义register和unregister函数
 def register():
     for cls in classes:
-        try:
-            bpy.utils.register_class(cls)
-        except ValueError:
-            pass # Already registered
+        bpy.utils.register_class(cls)
         
     bpy.types.NODE_MT_add.prepend(draw_node_add_menu)
     # 添加到 3D 视图物体右键菜单
@@ -446,10 +418,7 @@ def unregister():
     bpy.types.VIEW3D_MT_object_context_menu.remove(draw_objects_context_menu_add)
 
     for cls in classes:
-        try:
-            bpy.utils.unregister_class(cls)
-        except ValueError:
-            pass
+        bpy.utils.unregister_class(cls)
 
 
 

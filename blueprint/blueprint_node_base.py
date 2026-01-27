@@ -1,6 +1,42 @@
+'''
+存放一些构建SSMT蓝图架构的基础节点
+每种节点放在单独的py文件中
+方便阅读理解
+'''
 import bpy
+from bpy.types import NodeTree, Node, NodeSocket
+
 from ..utils.translate_utils import TR
 from ..config.main_config import GlobalConfig
+
+
+
+# Custom Socket Types
+class SSMTSocketObject(NodeSocket):
+    '''Custom Socket for Object Data'''
+    bl_idname = 'SSMTSocketObject'
+    bl_label = 'Object Socket'
+
+    def draw_color(self, context, node):
+        return (0.0, 0.8, 0.8, 1.0) # Cyan/Teal
+
+    def draw(self, context, layout, node, text):
+        layout.label(text=text)
+
+# 1. 定义自定义节点树类型
+class SSMTBlueprintTree(NodeTree):
+    '''SSMT Mod Logic Blueprint'''
+    bl_idname = 'SSMTBlueprintTreeType'
+    bl_label = 'SSMT BluePrint'
+    bl_icon = 'NODETREE'
+
+
+# 2. 定义基础节点
+class SSMTNodeBase(Node):
+    @classmethod
+    def poll(cls, ntree):
+        return ntree.bl_idname == 'SSMTBlueprintTreeType'
+    
 
 class THEHERTA3_OT_OpenPersistentBlueprint(bpy.types.Operator):
     bl_idname = "theherta3.open_persistent_blueprint"
@@ -46,10 +82,16 @@ class THEHERTA3_OT_OpenPersistentBlueprint(bpy.types.Operator):
                         # 尝试调整视图 (可选)
                         
         return {'FINISHED'}
-
-
+    
 def register():
+    bpy.utils.register_class(SSMTBlueprintTree)
+    bpy.utils.register_class(SSMTSocketObject)
     bpy.utils.register_class(THEHERTA3_OT_OpenPersistentBlueprint)
 
+
 def unregister():
+    bpy.utils.unregister_class(SSMTSocketObject)
     bpy.utils.unregister_class(THEHERTA3_OT_OpenPersistentBlueprint)
+    bpy.utils.unregister_class(SSMTBlueprintTree)
+
+

@@ -7,10 +7,10 @@ from .ui import ui_panel_sword
 from .ui import ui_panel_export
 from .ui import ui_panel_import
 from .ui import ui_panel_fast_texture
-from .ui import ui_window_blueprint
 from .blueprint import blueprint_node
 from .blueprint import blueprint_import
 from .blueprint import blueprint_export
+from .blueprint import blueprint_node_base
 
 # 自动更新功能
 from . import addon_updater_ops
@@ -128,13 +128,13 @@ def register():
     bpy.utils.register_class(HertaUpdatePreference)
 
     # 3. UI Panels & Logic
+    blueprint_node_base.register()
     ui_panel_basic.register()
     ui_panel_model.register()
     ui_panel_sword.register()
     ui_panel_export.register()
     ui_panel_import.register()
     ui_panel_fast_texture.register()
-    ui_window_blueprint.register()
 
     # 蓝图系统
     blueprint_node.register()
@@ -149,7 +149,7 @@ def unregister():
     blueprint_import.unregister()
     blueprint_export.unregister()
 
-    ui_window_blueprint.unregister()
+    blueprint_node_base.unregister()
     ui_panel_fast_texture.unregister()
     ui_panel_import.unregister()
     ui_panel_export.unregister()

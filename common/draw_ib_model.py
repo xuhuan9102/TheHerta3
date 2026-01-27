@@ -1,7 +1,8 @@
 import numpy
 import struct
 import copy
-
+import os
+import shutil
 
 from ..utils.config_utils import ConfigUtils
 from ..utils.collection_utils import *
@@ -333,6 +334,20 @@ class DrawIBModel:
 
         # Export ShapeKey buffer files.
         if self.shapekey_name_bytelist_dict:
+            # 需要把Shape.hlsl复制到Mod文件夹下面的res文件夹下面
+            res_path = os.path.join(GlobalConfig.path_generate_mod_folder(),"res\\")
+
+            # 获取当前文件(draw_ib_model.py)所在目录下的res文件夹
+            current_res_path = os.path.join(os.path.dirname(__file__), "res")
+            shape_hlsl_path = os.path.join(current_res_path, "Shape.hlsl")
+            
+            if os.path.exists(shape_hlsl_path):
+                if not os.path.exists(res_path):
+                    os.makedirs(res_path)
+                
+                shutil.copy(shape_hlsl_path, res_path)
+                print(f"Copied Shape.hlsl to {res_path}")
+
             print("Export ShapeKey Buffers::")
             for sk_name, sk_buf in self.shapekey_name_bytelist_dict.items():
                 shapekey_realname = sk_name.replace("Shape.","")
