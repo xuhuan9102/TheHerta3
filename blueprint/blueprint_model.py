@@ -113,7 +113,10 @@ class BluePrintModel:
             
             # 获取有效的分支数量（除去最后一个为了方便添加而存在的空端口）
             # 只有当最后一个端口确实没有连接的时候才能排除，虽然Node定义里是这样写的逻辑，但最好判断一下link
-            valid_input_sockets = unknown_node.inputs[:-1] if (len(unknown_node.inputs) > 1 and not unknown_node.inputs[-1].is_linked) else unknown_node.inputs[:]
+            # valid_input_sockets = unknown_node.inputs[:-1] if (len(unknown_node.inputs) > 1 and not unknown_node.inputs[-1].is_linked) else unknown_node.inputs[:]
+            
+            # 修正：对于SwitchKey节点，所有的Input都是有效的分支，因为可以手动添加/删除Socket，且空Socket代表空状态（什么都不显示）
+            valid_input_sockets = unknown_node.inputs[:]
             
             # 如果所有端口都没有连接，则直接跳过
             is_all_socket_linked = False
