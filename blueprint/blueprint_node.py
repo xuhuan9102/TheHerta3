@@ -44,6 +44,13 @@ class SSMTNode_Object_Info(SSMTNodeBase):
     def update_object_name(self, context):
         if self.object_name:
             self.label = self.object_name
+            if "-" in self.object_name:
+                obj_name_split = self.object_name.split("-")
+                self.draw_ib = obj_name_split[0]
+                self.component = obj_name_split[1]
+
+                if self.alias_name == "":
+                    self.alias_name = obj_name_split[2]
         else:
             self.label = "Object Info"
     object_name: bpy.props.StringProperty(name="Object Name", default="", update=update_object_name) # type: ignore
@@ -71,7 +78,7 @@ class SSMTNode_Object_Info(SSMTNodeBase):
 
 # 组合节点：用于将多个 Object Info 按顺序组合
 class SSMTNode_Object_Group(SSMTNodeBase):
-    '''Merge multiple objects in order'''
+    '''单纯用于分组的节点，可以接受任何节点作为输入，放在一个组里'''
     bl_idname = 'SSMTNode_Object_Group'
     bl_label = 'Group'
     bl_icon = 'GROUP'
@@ -109,7 +116,11 @@ class SSMTNode_ToggleKey(SSMTNodeBase):
         self.width = 200
 
     def draw_buttons(self, context, layout):
-        layout.prop(self, "key_name", text="按键")
+        # layout.prop(self, "key_name", text="按键")
+        row = layout.row(align=True)
+        row.prop(self, "key_name", text="按键")
+        row.operator("wm.url_open", text="", icon='HELP').url = "https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes"
+        
         layout.prop(self, "default_on", text="默认开启")
 
     def update(self):
@@ -173,7 +184,9 @@ class SSMTNode_SwitchKey(SSMTNodeBase):
         self.width = 200
 
     def draw_buttons(self, context, layout):
-        layout.prop(self, "key_name", text="按键")
+        row = layout.row(align=True)
+        row.prop(self, "key_name", text="按键")
+        row.operator("wm.url_open", text="", icon='HELP').url = "https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes"
         
         row = layout.row(align=True)
         op_add = row.operator("ssmt.switch_add_socket", text="Add", icon='ADD')
