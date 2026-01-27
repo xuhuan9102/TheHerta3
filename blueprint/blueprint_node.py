@@ -94,7 +94,7 @@ class SSMTNode_Object_Group(SSMTNodeBase):
 
 
 class SSMTNode_ToggleKey(SSMTNodeBase):
-    '''【按键开关】会控制所有连接到它输入端口的对象'''
+    '''【按键开关】会控制所有连接到它输入端口的对象,是【按键切换】的一个特殊情况，因为常用所以单独做成了一个节点'''
     bl_idname = 'SSMTNode_ToggleKey'
     bl_label = 'Toggle Key'
     bl_icon = 'GROUP'
@@ -124,6 +124,40 @@ class SSMTNode_ToggleKey(SSMTNodeBase):
              self.inputs.remove(self.inputs[-1])
 
 
+
+class SSMT_OT_SwitchKey_AddSocket(bpy.types.Operator):
+    '''Add a new socket to the switch node'''
+    bl_idname = "ssmt.switch_add_socket"
+    bl_label = "Add Socket"
+    
+    node_name: bpy.props.StringProperty() # type: ignore
+
+    def execute(self, context):
+        tree = getattr(context.space_data, "edit_tree", None) or context.space_data.node_tree
+        if not tree:
+             return {'CANCELLED'}
+        node = tree.nodes.get(self.node_name)
+        if node:
+             node.inputs.new('SSMTSocketObject', f"Status {len(node.inputs)}")
+        return {'FINISHED'}
+
+class SSMT_OT_SwitchKey_RemoveSocket(bpy.types.Operator):
+    '''Remove the last socket from the switch node'''
+    bl_idname = "ssmt.switch_remove_socket"
+    bl_label = "Remove Socket"
+    
+    node_name: bpy.props.StringProperty() # type: ignore
+
+    def execute(self, context):
+        tree = getattr(context.space_data, "edit_tree", None) or context.space_data.node_tree
+        if not tree:
+             return {'CANCELLED'}
+        node = tree.nodes.get(self.node_name)
+        if node and len(node.inputs) > 0:
+            node.inputs.remove(node.inputs[-1])
+        return {'FINISHED'}
+
+
 class SSMTNode_SwitchKey(SSMTNodeBase):
     '''【按键切换】会把每个连入的分支分配到单独的变量'''
     bl_idname = 'SSMTNode_SwitchKey'
@@ -134,23 +168,19 @@ class SSMTNode_SwitchKey(SSMTNodeBase):
 
     def init(self, context):
         self.label = "按键切换"
-        self.inputs.new('SSMTSocketObject', "分支 1")
+        self.inputs.new('SSMTSocketObject', "Status 0")
         self.outputs.new('SSMTSocketObject', "Output")
         self.width = 200
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "key_name", text="按键")
-
-    def update(self):
-        # 类似 Join Geometry 的逻辑：总保持最后一个为空，方便连接新的
-        if self.inputs and self.inputs[-1].is_linked:
-            self.inputs.new('SSMTSocketObject', f"分支 {len(self.inputs) + 1}")
         
-        # 移除中间断开的连接，或者整理列表（可选）
-        # 这里实现一个简单的逻辑：如果倒数第二个也没有连接，就移除最后一个
-        # 防止无限增长，或者用户断开最后一个连接的情况
-        if len(self.inputs) > 1 and not self.inputs[-1].is_linked and not self.inputs[-2].is_linked:
-             self.inputs.remove(self.inputs[-1])
+        row = layout.row(align=True)
+        op_add = row.operator("ssmt.switch_add_socket", text="Add", icon='ADD')
+        op_add.node_name = self.name
+        
+        op_rem = row.operator("ssmt.switch_remove_socket", text="Remove", icon='REMOVE')
+        op_rem.node_name = self.name
 
 
 # 结果输出节点
@@ -183,6 +213,8 @@ classes = (
     SSMTNode_Result_Output,
     SSMTNode_ToggleKey,
     SSMTNode_SwitchKey,
+    SSMT_OT_SwitchKey_AddSocket,
+    SSMT_OT_SwitchKey_RemoveSocket,
 )
 
 def draw_node_add_menu(self, context):
