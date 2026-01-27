@@ -117,6 +117,8 @@ class SSMTNode_ToggleKey(SSMTNodeBase):
         self.inputs.new('SSMTSocketObject', "Input 1")
         self.outputs.new('SSMTSocketObject', "Output")
         self.width = 200
+        self.use_custom_color = True
+        self.color = (0.41, 0.42, 0.66)
 
     def draw_buttons(self, context, layout):
         # layout.prop(self, "key_name", text="按键")
@@ -185,6 +187,8 @@ class SSMTNode_SwitchKey(SSMTNodeBase):
         self.inputs.new('SSMTSocketObject', "Status 0")
         self.outputs.new('SSMTSocketObject', "Output")
         self.width = 200
+        self.use_custom_color = True
+        self.color = (0.34, 0.54, 0.34)
 
     def draw_buttons(self, context, layout):
         row = layout.row(align=True)
