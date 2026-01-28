@@ -12,6 +12,7 @@ from ..base.m_key import M_Key
 from ..base.obj_data_model import ObjDataModel
 from .workspace_helper import WorkSpaceHelper
 from ..utils.format_utils import Fatal
+from ..blueprint.blueprint_export_helper import BlueprintExportHelper
 
 class M_IniHelper:
     @classmethod
@@ -154,10 +155,106 @@ class M_IniHelper:
                     print("Move Texture File: " + texture_markup_info.mark_filename)
                     shutil.copy2(source_path,target_path)
     
-    @staticmethod
-    def add_shapekey_ini_sections(ini_builder:M_IniBuilder):
+    @classmethod
+    def add_shapekey_ini_sections(cls, ini_builder:M_IniBuilder,drawib_drawibmodel_dict:dict[str,DrawIBModel]):
+        shapekeyname_mkey_dict = BlueprintExportHelper.get_current_shapekeyname_mkey_dict()
+        if len(shapekeyname_mkey_dict.keys()) == 0:
+            return
+
+        # [Constants]
+        constants_section = M_IniSection(M_SectionType.Constants)
+        constants_section.append("[Constants]")
+        constants_section.append("global persist $shapekey_first_run = 1")
+
+        for shapekey_name, m_key in shapekeyname_mkey_dict.items():
+            constants_section.append("; ShapeKey: " + shapekey_name)
+            constants_section.append("global persist " + m_key.key_name + " = " + str(m_key.initialize_value))
+            constants_section.new_line()
+
+        ini_builder.append_section(constants_section)
+
+        # [Present]
+        present_section = M_IniSection(M_SectionType.Present)
+        present_section.append("[Present]")
+        present_section.append("if $shapekey_first_run")
+
+        ib_number = 1
+        for drawib, drawib_model in drawib_drawibmodel_dict.items():
+            original_position_buffer_resource_name ="Resource" + drawib + "Position"     
+            duplicated_position_buffer_resource_name = "Resource" + drawib + "Position.1"
+
+            present_section.append("  " + original_position_buffer_resource_name + " = copy " + duplicated_position_buffer_resource_name)
+            present_section.append("  run = CustomShaderComputeShapes" + str(ib_number))
+
+            ib_number += 1
         
-        pass
+        present_section.append("  $shapekey_first_run = 0")
+        present_section.append("endif")
+
+        ib_number = 1
+        for drawib, drawib_model in drawib_drawibmodel_dict.items():
+            present_section.append("  run = CustomShaderComputeShapes" + str(ib_number))
+            ib_number += 1
+
+        ini_builder.append_section(present_section)
+        
+        # [CustomShaderComputeShapes]
+        customshader_section = M_IniSection(M_SectionType.CommandList)
+
+        ib_number = 1
+        for drawib, drawib_model in drawib_drawibmodel_dict.items():
+            
+            customshader_section.append("[CustomShaderComputeShapes" + str(ib_number) + "]")
+            customshader_section.append("cs = ./res/Shapes.hlsl")
+            customshader_section.append("cs-u5 = copy " + "Resource" + drawib + "Position.1")
+            customshader_section.new_line()
+
+            # 对于每个形态键buffer都进行计算
+            for shapekey_name, m_key in shapekeyname_mkey_dict.items():
+                shapekey_name_less = shapekey_name.replace("Shape.","")
+
+                customshader_section.append("x88 = " + m_key.key_name)
+                customshader_section.append("cs-t50 = copy " + "Resource" + drawib + "Position.1")
+                customshader_section.append("cs-t51 = copy " + "Resource" + drawib + "Position." +shapekey_name_less)
+                customshader_section.append("Resource" + drawib + "Position = ref cs-u5")
+                customshader_section.append("Dispatch = " + str(drawib_model.draw_number) + " ,1 ,1")
+                customshader_section.new_line()
+
+            ib_number += 1
+
+            customshader_section.append("cs-u5 = null")
+            customshader_section.append("cs-t50 = null")
+            customshader_section.append("cs-t51 = null")
+
+        ini_builder.append_section(customshader_section)
+
+        # [Resources]
+        resource_section = M_IniSection(M_SectionType.ResourceBuffer)
+
+
+        ib_number = 1
+        for drawib, drawib_model in drawib_drawibmodel_dict.items():
+            # 原本的Buffer
+            resource_section.append("[Resource" + drawib + "Position.1]")
+            resource_section.append("type = buffer")
+            resource_section.append("stride = " + str(drawib_model.d3d11GameType.CategoryStrideDict["Position"]))
+            resource_section.append("filename = Buffer/" + drawib + "-" + "Position.buf")
+            resource_section.new_line()
+
+            # 各个形态键的Buffer
+            for shapekey_name, m_key in shapekeyname_mkey_dict.items():
+                shapekey_name_less = shapekey_name.replace("Shape.","")
+                resource_section.append("[Resource" + drawib + "Position." + shapekey_name_less + "]")
+                resource_section.append("type = buffer")
+                resource_section.append("stride = " + str(drawib_model.d3d11GameType.CategoryStrideDict["Position"]))
+                resource_section.append("filename = Buffer/" + drawib + "-" + "Position." + shapekey_name_less + ".buf")
+                resource_section.new_line()
+
+            ib_number += 1
+        
+        ini_builder.append_section(resource_section)
+
+
 
     @classmethod
     def add_branch_key_sections(cls,ini_builder:M_IniBuilder,key_name_mkey_dict:dict[str,M_Key]):

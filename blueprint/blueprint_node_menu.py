@@ -108,6 +108,86 @@ class SSMT_MT_NodeMenu_ShapeKey(bpy.types.Menu):
         layout.operator("node.add_node", text="Generate ShapeKey Buffer", icon='EXPORT').type = "SSMTNode_ShapeKey_Output"
 
 
+class SSMT_OT_AddCommonKeySwitches(bpy.types.Operator):
+    '''Add 9 Toggle Key nodes (CTRL 1-9), group them and connect to Output'''
+    bl_idname = "ssmt.add_common_key_switches"
+    bl_label = "常用按键开关"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        # 1. Get/Create Node Tree
+        workspace_name = "Mod_" + GlobalConfig.workspacename
+        node_tree = bpy.data.node_groups.get(workspace_name)
+        if not node_tree or node_tree.bl_idname != 'SSMTBlueprintTreeType':
+            node_tree = bpy.data.node_groups.new(name=workspace_name, type='SSMTBlueprintTreeType')
+
+        # 2. Add Nodes
+        nodes = node_tree.nodes
+        links = node_tree.links
+        
+        # Base location
+        base_x, base_y = 0, 0
+        
+        # Create Frame Node
+        frame_node = nodes.new(type='NodeFrame')
+        frame_node.label = "常用按键开关组"
+        frame_node.location = (base_x - 50, base_y + 100)
+
+        # Create Group Node
+        group_node = nodes.new(type='SSMTNode_Object_Group')
+        group_node.location = (base_x + 300, base_y)
+        group_node.parent = frame_node
+        
+        # Create or Find Output Node
+        output_node = None
+        for node in nodes:
+            if node.bl_idname == 'SSMTNode_Result_Output':
+                output_node = node
+                break
+        
+        if not output_node:
+            output_node = nodes.new(type='SSMTNode_Result_Output')
+            output_node.location = (base_x + 600, base_y)
+        else:
+            # If finding existing one, maybe move it if it's far? No, keep it.
+            pass
+
+        # Connect Group -> Output
+        if output_node.inputs:
+            target_socket = output_node.inputs[-1]
+            links.new(group_node.outputs[0], target_socket)
+            if hasattr(output_node, "update"):
+                output_node.update()
+
+        # Create 9 Keys
+        key_names = [f"CTRL {i}" for i in range(1, 10)]
+        
+        for i, key_name in enumerate(key_names):
+            key_node = nodes.new(type='SSMTNode_ToggleKey')
+            key_node.location = (base_x, base_y - i * 200)
+            key_node.key_name = key_name
+            key_node.default_on = True
+            key_node.parent = frame_node
+            # key_node.label = key_name # Optional: override label? No need.
+            
+            # Connect Key -> Group
+            if group_node.inputs:
+                target_socket = group_node.inputs[-1]
+                links.new(key_node.outputs[0], target_socket)
+                if hasattr(group_node, "update"):
+                    group_node.update()
+
+        return {'FINISHED'}
+
+
+class SSMT_MT_NodeMenu_Preset(bpy.types.Menu):
+    bl_label = "预设"
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("ssmt.add_common_key_switches", text="常用按键开关", icon='PRESET')
+
+
 def draw_node_add_menu(self, context):
     if not isinstance(context.space_data, bpy.types.SpaceNodeEditor):
         return
@@ -115,6 +195,7 @@ def draw_node_add_menu(self, context):
         return
     
     layout = self.layout
+    layout.menu("SSMT_MT_NodeMenu_Preset", text="预设", icon='PRESET')
     layout.menu("SSMT_MT_NodeMenu_Branch", text="分支", icon='RNA')
     layout.menu("SSMT_MT_NodeMenu_ShapeKey", text="形态键", icon='SHAPEKEY_DATA')
     layout.separator()
@@ -128,7 +209,9 @@ def draw_node_add_menu(self, context):
 
 def register():
     bpy.utils.register_class(SSMT_OT_CreateGroupFromSelection)
+    bpy.utils.register_class(SSMT_OT_AddCommonKeySwitches)
     bpy.utils.register_class(SSMT_MT_ObjectContextMenuSub)
+    bpy.utils.register_class(SSMT_MT_NodeMenu_Preset)
     bpy.utils.register_class(SSMT_MT_NodeMenu_Branch)
     bpy.utils.register_class(SSMT_MT_NodeMenu_ShapeKey)
 
@@ -142,5 +225,7 @@ def unregister():
 
     bpy.utils.unregister_class(SSMT_MT_NodeMenu_ShapeKey)
     bpy.utils.unregister_class(SSMT_MT_NodeMenu_Branch)
+    bpy.utils.unregister_class(SSMT_MT_NodeMenu_Preset)
     bpy.utils.unregister_class(SSMT_MT_ObjectContextMenuSub)
+    bpy.utils.unregister_class(SSMT_OT_AddCommonKeySwitches)
     bpy.utils.unregister_class(SSMT_OT_CreateGroupFromSelection)
