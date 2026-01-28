@@ -286,7 +286,6 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
 
         return {'FINISHED'}
 
-# 3. 注册列表
 classes = (
     SSMT_OT_View_Group_Objects,
     SSMTNode_Object_Info,
@@ -298,12 +297,9 @@ classes = (
     SSMT_OT_SwitchKey_RemoveSocket,
 )
 
-# 注册与注销函数，在大型Blender插件开发中，不能在最外面的__init__.py中直接注册
-# 否则会导致__init__.py过于臃肿，不利于维护，所以在各自的模块中定义register和unregister函数
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-        
 
 def unregister():
 

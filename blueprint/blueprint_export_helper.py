@@ -1,8 +1,11 @@
 import bpy
 from ..config.main_config import GlobalConfig
-
+from ..base.m_key import M_Key
 
 class BlueprintExportHelper:
+
+
+    
     
     @staticmethod
     def get_current_blueprint_tree():
@@ -12,12 +15,12 @@ class BlueprintExportHelper:
         return tree
 
     @staticmethod
-    def get_output_node(tree):
+    def get_node_from_bl_idname(tree, node_type:str):
         """在树中查找输出节点 (假设只有一个)"""
         if not tree:
             return None
         for node in tree.nodes:
-            if node.bl_idname == 'SSMTNode_Result_Output':
+            if node.bl_idname == node_type:
                 return node
         return None
     
@@ -87,3 +90,39 @@ class BlueprintExportHelper:
                         }
                         objects_info.append(info)
         return objects_info
+    
+
+    @staticmethod
+    def get_current_shapekeyname_mkey_dict():
+        """获取当前蓝图中所有 ShapeKey 节点的形态键名称和按键列表"""
+        tree = BlueprintExportHelper.get_current_blueprint_tree()
+        shapekey_output_node = BlueprintExportHelper.get_node_from_bl_idname(tree, 'SSMTNode_ShapeKey_Output')
+
+        # 获取连接到shapekey_output_node的所有shapekey节点
+        shapekey_nodes = BlueprintExportHelper.get_connected_nodes(shapekey_output_node)
+
+        shapekey_name_mkey_dict = {}
+
+        key_index = 0
+        for shapekey_node in shapekey_nodes:
+            if shapekey_node.bl_idname != 'SSMTNode_ShapeKey':
+                continue
+
+            shapekey_name = shapekey_node.shapekey_name
+            key = shapekey_node.key
+
+            m_key = M_Key()
+            m_key.key_name = "$shapekey" + str(key_index)
+            m_key.initialize_value = 0
+            m_key.initialize_vk_str = key
+
+            shapekey_name_mkey_dict[shapekey_name] = m_key
+
+            key_index += 1
+        
+        return shapekey_name_mkey_dict
+
+
+
+            
+        

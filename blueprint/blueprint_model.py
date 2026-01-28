@@ -35,9 +35,11 @@ class BluePrintModel:
 
         # 从输出节点开始递归解析所有的节点
         tree = BlueprintExportHelper.get_current_blueprint_tree()
-        output_node = BlueprintExportHelper.get_output_node(tree)
+        output_node = BlueprintExportHelper.get_node_from_bl_idname(tree, 'SSMTNode_Result_Output')
         self.parse_current_node(output_node, [])
 
+        # TODO
+        # 然后开始解析形态键节点
 
         self.draw_ib__component_count_list__dict = {}
 

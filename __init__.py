@@ -12,6 +12,7 @@ from .blueprint import blueprint_import
 from .blueprint import blueprint_export
 from .blueprint import blueprint_node_base
 from .blueprint import blueprint_node_menu
+from .blueprint import blueprint_node_shapekey
 
 # 自动更新功能
 from . import addon_updater_ops
@@ -142,6 +143,7 @@ def register():
     blueprint_import.register()
     blueprint_export.register()
     blueprint_node_menu.register()
+    blueprint_node_shapekey.register()
 
 
 
@@ -153,6 +155,8 @@ def unregister():
     blueprint_node_menu.unregister()
 
     blueprint_node_base.unregister()
+    blueprint_node_shapekey.unregister()
+
     ui_panel_fast_texture.unregister()
     ui_panel_import.unregister()
     ui_panel_export.unregister()

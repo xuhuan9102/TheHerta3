@@ -88,6 +88,26 @@ class SSMT_MT_ObjectContextMenuSub(bpy.types.Menu):
         layout.operator("ssmt.create_group_from_selection", text="将所选物体新建到组节点", icon='GROUP')
 
 
+class SSMT_MT_NodeMenu_Branch(bpy.types.Menu):
+    bl_label = "分支"
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("node.add_node", text="Object Info", icon='OBJECT_DATAMODE').type = "SSMTNode_Object_Info"
+        layout.operator("node.add_node", text="Group", icon='GROUP').type = "SSMTNode_Object_Group"
+        layout.operator("node.add_node", text="Mod Output", icon='EXPORT').type = "SSMTNode_Result_Output"
+        layout.operator("node.add_node", text="Toggle Key", icon='GROUP').type = "SSMTNode_ToggleKey"
+        layout.operator("node.add_node", text="Switch Key", icon='GROUP').type = "SSMTNode_SwitchKey"
+
+class SSMT_MT_NodeMenu_ShapeKey(bpy.types.Menu):
+    bl_label = "形态键"
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.operator("node.add_node", text="Shape Key", icon='SHAPEKEY_DATA').type = "SSMTNode_ShapeKey"
+        layout.operator("node.add_node", text="Generate ShapeKey Buffer", icon='EXPORT').type = "SSMTNode_ShapeKey_Output"
+
+
 def draw_node_add_menu(self, context):
     if not isinstance(context.space_data, bpy.types.SpaceNodeEditor):
         return
@@ -95,11 +115,8 @@ def draw_node_add_menu(self, context):
         return
     
     layout = self.layout
-    layout.operator("node.add_node", text="Object Info", icon='OBJECT_DATAMODE').type = "SSMTNode_Object_Info"
-    layout.operator("node.add_node", text="Group", icon='GROUP').type = "SSMTNode_Object_Group"
-    layout.operator("node.add_node", text="Mod Output", icon='EXPORT').type = "SSMTNode_Result_Output"
-    layout.operator("node.add_node", text="Toggle Key", icon='GROUP').type = "SSMTNode_ToggleKey"
-    layout.operator("node.add_node", text="Switch Key", icon='GROUP').type = "SSMTNode_SwitchKey"
+    layout.menu("SSMT_MT_NodeMenu_Branch", text="分支", icon='RNA')
+    layout.menu("SSMT_MT_NodeMenu_ShapeKey", text="形态键", icon='SHAPEKEY_DATA')
     layout.separator()
 
     # Frame节点没有任何功能，它是Blender自带的一种辅助节点，用于在节点编辑器中组织和分组节点
@@ -112,6 +129,8 @@ def draw_node_add_menu(self, context):
 def register():
     bpy.utils.register_class(SSMT_OT_CreateGroupFromSelection)
     bpy.utils.register_class(SSMT_MT_ObjectContextMenuSub)
+    bpy.utils.register_class(SSMT_MT_NodeMenu_Branch)
+    bpy.utils.register_class(SSMT_MT_NodeMenu_ShapeKey)
 
     bpy.types.NODE_MT_add.prepend(draw_node_add_menu)
     # 添加到 3D 视图物体右键菜单
@@ -121,5 +140,7 @@ def unregister():
     bpy.types.NODE_MT_add.remove(draw_node_add_menu)
     bpy.types.VIEW3D_MT_object_context_menu.remove(draw_objects_context_menu_add)
 
+    bpy.utils.unregister_class(SSMT_MT_NodeMenu_ShapeKey)
+    bpy.utils.unregister_class(SSMT_MT_NodeMenu_Branch)
     bpy.utils.unregister_class(SSMT_MT_ObjectContextMenuSub)
     bpy.utils.unregister_class(SSMT_OT_CreateGroupFromSelection)
