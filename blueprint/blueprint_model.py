@@ -262,7 +262,8 @@ class BluePrintModel:
                 # 不过懒得搞了，以后再说吧
                 if (GlobalConfig.logic_name == LogicName.SRMI 
                     or GlobalConfig.logic_name == LogicName.GIMI
-                    or GlobalConfig.logic_name == LogicName.HIMI):
+                    or GlobalConfig.logic_name == LogicName.HIMI
+                    or GlobalConfig.logic_name == LogicName.YYSLS):
                     ObjUtils.select_obj(obj)
 
                     obj.rotation_euler[0] = math.radians(-90)
@@ -277,7 +278,8 @@ class BluePrintModel:
                 # 后处理翻转回来
                 if (GlobalConfig.logic_name == LogicName.SRMI 
                     or GlobalConfig.logic_name == LogicName.GIMI
-                    or GlobalConfig.logic_name == LogicName.HIMI):
+                    or GlobalConfig.logic_name == LogicName.HIMI
+                    or GlobalConfig.logic_name == LogicName.YYSLS):
                     ObjUtils.select_obj(obj)
 
                     obj.rotation_euler[0] = math.radians(90)

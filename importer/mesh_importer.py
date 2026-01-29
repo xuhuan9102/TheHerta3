@@ -269,15 +269,16 @@ class MeshImporter:
         # 翻转索引顺序以改变面朝向，只能改变面朝向，模型依然是镜像的
         # print(mbf.ib_data[0],mbf.ib_data[1],mbf.ib_data[2])
 
-        # 鸣潮的模型导入时必须翻转面朝向
-        if mbf.fmt_file.logic_name == LogicName.WWMI or mbf.fmt_file.logic_name == LogicName.WuWa:
+        # 部分游戏模型导入时必须翻转面朝向，并在生成Mod时翻转面朝向
+        if (mbf.fmt_file.logic_name == LogicName.WWMI 
+            or mbf.fmt_file.logic_name == LogicName.WuWa
+            or mbf.fmt_file.logic_name == LogicName.YYSLS):
             flipped_indices = []
             for i in range(0, len(mbf.ib_data), 3):
                 triangle = mbf.ib_data[i:i+3]
                 flipped_triangle = triangle[::-1]
                 flipped_indices.extend(flipped_triangle)
             mbf.ib_data = flipped_indices
-        
         
         # 输出查看翻转后的前三个索引
         # print(mbf.ib_data[0],mbf.ib_data[1],mbf.ib_data[2])
