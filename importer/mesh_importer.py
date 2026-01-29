@@ -248,8 +248,12 @@ class MeshImporter:
             obj.rotation_euler[0] = 0
             obj.rotation_euler[1] = 0
             obj.rotation_euler[2] = 0
-
         
+        # 懒得调整了，躺倒就躺倒吧
+        if mbf.fmt_file.logic_name == LogicName.AEMI:
+            obj.rotation_euler[0] = 0
+            obj.rotation_euler[1] = 0
+            obj.rotation_euler[2] = 0
 
         # WWMI的Merged架构需要清理空顶点组，这里我们PerCompoennt也清理算了，不然做出区分后续优化太麻烦
         if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:

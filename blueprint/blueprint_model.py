@@ -265,8 +265,7 @@ class BluePrintModel:
                     or GlobalConfig.logic_name == LogicName.HIMI
                     or GlobalConfig.logic_name == LogicName.YYSLS
                     or GlobalConfig.logic_name == LogicName.CTXMC
-                    or GlobalConfig.logic_name == LogicName.IdentityV2
-                    or GlobalConfig.logic_name == LogicName.AEMI):
+                    or GlobalConfig.logic_name == LogicName.IdentityV2):
                     ObjUtils.select_obj(obj)
 
                     obj.rotation_euler[0] = math.radians(-90)
@@ -275,6 +274,16 @@ class BluePrintModel:
                 
                     # 应用旋转和缩放
                     bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+                elif GlobalConfig.logic_name == LogicName.AEMI:
+                    ObjUtils.select_obj(obj)
+
+                    obj.rotation_euler[0] = 0
+                    obj.rotation_euler[1] = 0
+                    obj.rotation_euler[2] = 0
+                
+                    # 应用旋转和缩放
+                    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+                    
 
                 obj_buffer_model = ObjBufferModelUnity(obj=obj, d3d11_game_type=d3d11_game_type)
 
@@ -284,11 +293,19 @@ class BluePrintModel:
                     or GlobalConfig.logic_name == LogicName.HIMI
                     or GlobalConfig.logic_name == LogicName.YYSLS
                     or GlobalConfig.logic_name == LogicName.CTXMC
-                    or GlobalConfig.logic_name == LogicName.IdentityV2
-                    or GlobalConfig.logic_name == LogicName.AEMI):
+                    or GlobalConfig.logic_name == LogicName.IdentityV2):
                     ObjUtils.select_obj(obj)
 
                     obj.rotation_euler[0] = math.radians(90)
+                    obj.rotation_euler[1] = 0
+                    obj.rotation_euler[2] = 0
+                
+                    # 应用旋转和缩放
+                    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+                elif GlobalConfig.logic_name == LogicName.AEMI:
+                    ObjUtils.select_obj(obj)
+
+                    obj.rotation_euler[0] = 0
                     obj.rotation_euler[1] = 0
                     obj.rotation_euler[2] = 0
                 
