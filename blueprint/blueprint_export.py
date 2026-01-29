@@ -76,6 +76,10 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             migoto_mod_model = ModModelZZMI()
             migoto_mod_model.generate_unity_vs_config_ini()
 
+        # 终末地测试AEMI，到时候老外的NDMI发布之后，再开一套新逻辑兼容他们的，咱们用这个先测试
+        elif GlobalConfig.logic_name == LogicName.AEMI:
+            migoto_mod_model = ModModelYYSLS()
+            migoto_mod_model.generate_unity_vs_config_ini()
         # UnityVS
         elif GlobalConfig.logic_name == LogicName.UnityVS:
             migoto_mod_model = ModModelUnity()

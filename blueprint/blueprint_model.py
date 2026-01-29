@@ -265,7 +265,8 @@ class BluePrintModel:
                     or GlobalConfig.logic_name == LogicName.HIMI
                     or GlobalConfig.logic_name == LogicName.YYSLS
                     or GlobalConfig.logic_name == LogicName.CTXMC
-                    or GlobalConfig.logic_name == LogicName.IdentityV2):
+                    or GlobalConfig.logic_name == LogicName.IdentityV2
+                    or GlobalConfig.logic_name == LogicName.AEMI):
                     ObjUtils.select_obj(obj)
 
                     obj.rotation_euler[0] = math.radians(-90)
@@ -283,7 +284,8 @@ class BluePrintModel:
                     or GlobalConfig.logic_name == LogicName.HIMI
                     or GlobalConfig.logic_name == LogicName.YYSLS
                     or GlobalConfig.logic_name == LogicName.CTXMC
-                    or GlobalConfig.logic_name == LogicName.IdentityV2):
+                    or GlobalConfig.logic_name == LogicName.IdentityV2
+                    or GlobalConfig.logic_name == LogicName.AEMI):
                     ObjUtils.select_obj(obj)
 
                     obj.rotation_euler[0] = math.radians(90)

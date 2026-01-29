@@ -147,6 +147,13 @@ class ObjBufferHelper:
                 result[i][2] = DeConvert(result[i][2])
 
             return FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
+
+        elif d3d11_element.Format == "R32_UINT" and GlobalConfig.logic_name == LogicName.AEMI:
+             # AEMI Octahedral Normal
+             # We need just float3 normals
+             raw_normals = normals.reshape(-1, 3)
+             # Must reshape to (N, 1) to match structured array shape if expected
+             return FormatUtils.convert_normals_to_aemi_octahedral_r32_uint(raw_normals).reshape(-1, 1)
         
         else:
             # 将一维数组 reshape 成 (mesh_loops_length, 3) 形状的二维数组
@@ -258,6 +265,8 @@ class ObjBufferHelper:
                 result = result.astype(numpy.float16)
                 result = result[:, :2]
                 result = FormatUtils.convert_2x_float32_to_r16g16_unorm(result)
+            # TODO 添加八面体压缩法线到R32_UINT的代码
+
             elif d3d11_element.Format == "R16G16_FLOAT":
                 # 
                 result = result[:, :2]
@@ -375,6 +384,8 @@ class ObjBufferHelper:
             return FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
         elif d3d11_element.Format == 'R16G16B16A16_FLOAT':
             return blendweights.astype(numpy.float16)
+        elif d3d11_element.Format == 'R16G16B16A16_UNORM':
+            return FormatUtils.convert_4x_float32_to_r16g16b16a16_unorm(blendweights)
         elif d3d11_element.Format == "R8_UNORM" and d3d11_element.ByteWidth == 8:
             # TimerUtils.Start("WWMI BLENDWEIGHT R8_UNORM特殊处理")
             blendweights = FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm_blendweights(blendweights)
