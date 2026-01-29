@@ -124,19 +124,19 @@ def ImprotFromWorkSpaceSSMTBlueprint(self, context):
     try:
         # 1. 获取或创建蓝图树
         tree_name = f"Mod_{GlobalConfig.workspacename}" if GlobalConfig.workspacename else "SSMT_Mod_Logic"
-        tree = bpy.data.node_groups.get(tree_name)
-        if not tree:
-            try:
-                tree = bpy.data.node_groups.new(name=tree_name, type='SSMTBlueprintTreeType')
-            except Exception as e:
-                print(f"Failed to create new node tree: {e}. Check if SSMTBlueprintTreeType is registered.")
-                # Fallback or return
-                return
-
-            tree.use_fake_user = True
         
-        # 2. 清空现有节点并重新生成
-        tree.nodes.clear()
+        # Nico: 为了防止覆盖用户修改过的蓝图，始终创建新蓝图
+        # 如果已存在同名蓝图，Blender会自动添加.001等后缀，从而保留旧蓝图
+        try:
+            tree = bpy.data.node_groups.new(name=tree_name, type='SSMTBlueprintTreeType')
+        except Exception as e:
+            print(f"Failed to create new node tree: {e}. Check if SSMTBlueprintTreeType is registered.")
+            return
+
+        tree.use_fake_user = True
+        
+        # 2. 新建的蓝图节点树是空的，不需要调用 clear()
+        # tree.nodes.clear()
         
         
         # 创建 Group 节点 (并在循环中连接)
