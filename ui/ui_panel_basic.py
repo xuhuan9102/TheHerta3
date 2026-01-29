@@ -50,6 +50,9 @@ class PanelBasicInformation(bpy.types.Panel):
             layout.label(text="GameType: " + gametypename)
             layout.label(text="RecalculateTANGENT: " + str(recalculate_tangent))
             layout.label(text="RecalculateCOLOR: " + str(recalculate_color))
+            
+        # SSMT蓝图
+        layout.operator("theherta3.open_persistent_blueprint", icon='NODETREE')
 
         # 导入 ib vb fmt格式文件
         layout.operator("import_mesh.migoto_raw_buffers_mmt",icon='IMPORT')
@@ -63,6 +66,9 @@ class PanelBasicInformation(bpy.types.Panel):
 
         # 决定导入时是否调用法线贴图
         layout.prop(context.scene.properties_import_model, "use_normal_map")
+
+        
+
 
 def register():
     bpy.utils.register_class(PanelBasicInformation)

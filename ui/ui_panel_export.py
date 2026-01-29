@@ -52,78 +52,12 @@ class SSMTSelectGenerateModFolder(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
 
-class PanelGenerateModConfig(bpy.types.Panel):
-    '''
-    生成Mod面板
-    '''
-    bl_label = "生成二创模型"
-    bl_idname = "VIEW3D_PT_CATTER_GenerateMod_panel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'TheHerta3'
-    # bl_options = {'DEFAULT_CLOSED'}
 
-    def draw(self, context):
-        layout = self.layout
-
-        # SSMT蓝图
-        layout.operator("theherta3.open_persistent_blueprint", icon='NODETREE')
-
-
-        # 根据当前游戏类型判断哪些应该显示哪些不显示。
-        # 因为UnrealVS显然无法支持这里所有的特性，每个游戏只能支持一部分特性。
-
-        # 任何游戏都能贴图标记
-        if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
-            layout.prop(context.scene.properties_wwmi, "ignore_muted_shape_keys")
-            layout.prop(context.scene.properties_wwmi, "apply_all_modifiers")
-            layout.prop(context.scene.properties_wwmi, "export_add_missing_vertex_groups")
-
-        layout.prop(context.scene.properties_generate_mod, 
-                    "forbid_auto_texture_ini",text="禁止自动贴图流程")
-
-        if GlobalConfig.logic_name != LogicName.UnityCPU:
-            layout.prop(context.scene.properties_generate_mod,
-                        "recalculate_tangent",text="向量归一化法线存入TANGENT(全局)")
-
-        if GlobalConfig.logic_name == LogicName.HIMI:
-            layout.prop(context.scene.properties_generate_mod,
-                        "recalculate_color",text="算术平均归一化法线存入COLOR(全局)")
-
-        # 绝区零特有的SlotFix技术
-        if GlobalConfig.logic_name == LogicName.ZZMI:
-            layout.prop(context.scene.properties_generate_mod, "zzz_use_slot_fix")
-
-        # 原神特有的ORFix与NNFix技术
-        if GlobalConfig.logic_name == LogicName.GIMI:
-            layout.prop(context.scene.properties_generate_mod, "gimi_use_orfix")
-
-        # 所有的游戏都要能支持生成分支架构面板Mod
-        layout.prop(context.scene.properties_generate_mod, "generate_branch_mod_gui",text="生成分支架构Mod面板(测试中)")
-
-        # 默认习惯肯定是要显示这个的，但是由于不经常点击关闭，所以放在最后面
-        layout.prop(context.scene.properties_generate_mod, "open_mod_folder_after_generate_mod",text="生成Mod后打开Mod所在文件夹")
-
-        # 生成Mod到指定的文件夹中吗？什么时候才会有这种需求呢？
-        # 一般生成到当前的3Dmigoto下面的Mods下面不就行了嘛
-        # emmmmm，不管怎么说，还是加上，万一有用呢。
-        layout.prop(context.scene.properties_generate_mod, "use_specific_generate_mod_folder_path")
-
-        if Properties_GenerateMod.use_specific_generate_mod_folder_path():
-            # 显示当前选择的文件夹或提示信息
-            box = layout.box()
-            box.label(text="当前生成Mod位置文件夹:")
-            box.label(text=context.scene.properties_generate_mod.generate_mod_folder_path)
-
-            # 选择文件夹按钮
-            layout.operator("ssmt.select_generate_mod_folder", icon='FILE_FOLDER')
         
 
 def register():
     bpy.utils.register_class(SSMTSelectGenerateModFolder)
-    bpy.utils.register_class(PanelGenerateModConfig)
 
 def unregister():
-    bpy.utils.unregister_class(PanelGenerateModConfig)
     bpy.utils.unregister_class(SSMTSelectGenerateModFolder)
 
