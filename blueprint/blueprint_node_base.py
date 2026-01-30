@@ -55,13 +55,35 @@ class THEHERTA3_OT_OpenPersistentBlueprint(bpy.types.Operator):
             tree = bpy.data.node_groups.new(name=tree_name, type='SSMTBlueprintTreeType')
             tree.use_fake_user = True
         
-        # 1.5 检查是否存在已开启的窗口，如果存在则不再创建
+        # 1.5 检查是否存在已开启的窗口
+        # Blender API 无法直接控制 OS 窗口置顶。为了实现"如果存在则置顶"的效果，
+        # 我们先查找并关闭那个旧窗口，然后重新创建一个新的。
+        target_window = None
         for window in context.window_manager.windows:
             for area in window.screen.areas:
                 if area.type == 'NODE_EDITOR':
                     for space in area.spaces:
                         if space.type == 'NODE_EDITOR' and space.node_tree == tree:
-                            return {'FINISHED'}
+                            target_window = window
+                            break
+                if target_window: break
+            if target_window: break
+            
+        if target_window:
+            # 只有当存在多个窗口时才允许关闭，避免误关主程序
+            if len(context.window_manager.windows) > 1:
+                try:
+                    # 尝试关闭旧窗口
+                    if hasattr(context, 'temp_override'):
+                        with context.temp_override(window=target_window):
+                            bpy.ops.wm.window_close()
+                    else:
+                        override = context.copy()
+                        override['window'] = target_window
+                        override['screen'] = target_window.screen
+                        bpy.ops.wm.window_close(override)
+                except Exception as e:
+                    print(f"SSMT: Failed to close existing window, creating new one anyway. Error: {e}")
 
         # 2. 打开新窗口 (复制当前Context)
         old_windows = set(context.window_manager.windows)
