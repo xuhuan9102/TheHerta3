@@ -14,6 +14,7 @@ from .blueprint import blueprint_node_menu
 from .blueprint import blueprint_node_shapekey
 from .blueprint import blueprint_node_datatype
 from .blueprint import blueprint_node_multifile_export
+from .blueprint import blueprint_drag_drop
 
 # 自动更新功能
 from . import addon_updater_ops
@@ -146,6 +147,7 @@ def register():
     blueprint_node_shapekey.register()
     blueprint_node_datatype.register()
     blueprint_node_multifile_export.register()
+    blueprint_drag_drop.register()
 
 
 
@@ -158,6 +160,7 @@ def unregister():
     blueprint_node_shapekey.unregister()
     blueprint_node_datatype.unregister()
     blueprint_node_multifile_export.unregister()
+    blueprint_drag_drop.unregister()
     blueprint_node_base.unregister()
 
     ui_panel_fast_texture.unregister()

@@ -1,10 +1,13 @@
-
 import bpy
 from bpy.types import NodeTree, Node, NodeSocket
 
 from ..config.main_config import GlobalConfig, LogicName
 from ..config.properties_generate_mod import Properties_GenerateMod
 from .blueprint_node_base import SSMTBlueprintTree, SSMTNodeBase
+
+
+_picking_node_name = None
+_picking_tree_name = None
 
 
 class SSMT_OT_SelectNodeObject(bpy.types.Operator):
@@ -21,13 +24,11 @@ class SSMT_OT_SelectNodeObject(bpy.types.Operator):
         
         obj = bpy.data.objects.get(obj_name)
         if obj:
-            # Deselect all
             try:
                 bpy.ops.object.select_all(action='DESELECT')
             except:
                 pass
                 
-            # Select target
             obj.select_set(True)
             context.view_layer.objects.active = obj
             self.report({'INFO'}, f"Selected: {obj_name}")
@@ -37,53 +38,101 @@ class SSMT_OT_SelectNodeObject(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class SSMT_OT_AdsorbNodeObject(bpy.types.Operator):
-    '''Adsorb currently selected object to this node'''
-    bl_idname = "ssmt.adsorb_node_object"
-    bl_label = "Adsorb Object"
-    bl_description = "将当前选中的物体吸附到此节点"
+class SSMT_OT_StartPickObject(bpy.types.Operator):
+    '''Start picking an object from 3D View'''
+    bl_idname = "ssmt.start_pick_object"
+    bl_label = "Pick Object"
+    bl_description = "点击后在3D视图中选择一个物体"
     
     node_name: bpy.props.StringProperty() # type: ignore
-
+    
     def execute(self, context):
-        # 优先获取激活物体，如果没有则获取第一个选中物体
-        obj = context.active_object
-        if not obj and context.selected_objects:
-            obj = context.selected_objects[0]
+        global _picking_node_name, _picking_tree_name
         
-        if not obj:
-            self.report({'WARNING'}, "请先在3D视图中选中一个物体")
-            return {'CANCELLED'}
-        
-        # 获取当前节点树
         tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
         
         if not tree:
-             self.report({'WARNING'}, "无法获取节点树上下文")
-             return {'CANCELLED'}
+            self.report({'WARNING'}, "无法获取节点树上下文")
+            return {'CANCELLED'}
         
-        node = tree.nodes.get(self.node_name)
-        if node:
-            node.object_name = obj.name
-            self.report({'INFO'}, f"已吸附物体: {obj.name}")
-        else:
-            self.report({'WARNING'}, f"无法找到节点: {self.node_name}")
+        _picking_node_name = self.node_name
+        _picking_tree_name = tree.name
+        self.report({'INFO'}, "请在3D视图中点击选择一个物体")
+        
+        bpy.ops.ssmt.pick_object_modal('INVOKE_DEFAULT')
         
         return {'FINISHED'}
 
 
-# 对象信息节点
+class SSMT_OT_PickObjectModal(bpy.types.Operator):
+    '''Modal operator for picking objects in 3D View'''
+    bl_idname = "ssmt.pick_object_modal"
+    bl_label = "Pick Object"
+    bl_options = {'REGISTER', 'INTERNAL'}
+    
+    def __init__(self):
+        self._initial_selected_objs = set()
+        self._last_selected_obj = None
+    
+    def invoke(self, context, event):
+        global _picking_node_name
+        
+        if not _picking_node_name:
+            return {'CANCELLED'}
+        
+        self._initial_selected_objs = set(context.selected_objects)
+        if context.selected_objects:
+            self._last_selected_obj = context.selected_objects[0]
+        
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+    
+    def modal(self, context, event):
+        global _picking_node_name, _picking_tree_name
+        
+        if event.type == 'ESC':
+            _picking_node_name = None
+            _picking_tree_name = None
+            return {'CANCELLED'}
+        
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            for area in context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    region = next((r for r in area.regions if r.type == 'WINDOW'), None)
+                    if region and area.x <= event.mouse_x <= area.x + area.width and area.y <= event.mouse_y <= area.y + area.height:
+                        return {'PASS_THROUGH'}
+        
+        if event.type == 'MOUSEMOVE':
+            current_selected = context.selected_objects
+            if current_selected:
+                current_obj = current_selected[0]
+                if current_obj != self._last_selected_obj and current_obj not in self._initial_selected_objs:
+                    tree = bpy.data.node_groups.get(_picking_tree_name)
+                    if tree:
+                        node = tree.nodes.get(_picking_node_name)
+                        if node:
+                            node.object_name = current_obj.name
+                            self.report({'INFO'}, f"已选择物体: {current_obj.name}")
+                    
+                    _picking_node_name = None
+                    _picking_tree_name = None
+                    return {'FINISHED'}
+        
+        return {'PASS_THROUGH'}
+
+
+def draw_view3d_header(self, context):
+    global _picking_node_name
+    if _picking_node_name:
+        self.layout.label(text="请在3D视图中点击选择一个物体...", icon='EYEDROPPER')
+
+
 class SSMTNode_Object_Info(SSMTNodeBase):
     '''Object Info Node'''
     bl_idname = 'SSMTNode_Object_Info'
     bl_label = 'Object Info'
     bl_icon = 'OBJECT_DATAMODE'
     bl_width_min = 300
-    
-    # 定义属性用于存储信息
-    # 使用 props.PointerProperty 指向 Object 可能会有上下文问题（特别是跨文件保存时），
-    # 但在 Runtime UI 中通常结合 prop_search 使用 StringProperty 来模拟体验。
-    # 为了更好的体验，我们使用 StringProperty 并配合 prop_search 绘制。
     
     def update_object_name(self, context):
         if self.object_name:
@@ -104,34 +153,24 @@ class SSMTNode_Object_Info(SSMTNodeBase):
 
     def init(self, context):
         self.outputs.new('SSMTSocketObject', "Object")
-        # self.width = 300 # 让节点宽一点
 
     def draw_buttons(self, context, layout):
-        # 1. 物体选择：使用 prop_search 让用户可以像属性面板一样搜索选择
-        # 但是 node 本身没有 PointerProperty 指向 ID 类型的简单 GUI 支持，
-        # 所以通常是用 search 指向 bpy.data.objects
-        
         row = layout.row(align=True)
-        
-
 
         row.prop_search(self, "object_name", bpy.data, "objects", text="", icon='OBJECT_DATA')
         
-        # 吸附按钮
-        op_ad = row.operator("ssmt.adsorb_node_object", text="", icon='EYEDROPPER')
-        op_ad.node_name = self.name
+        op = row.operator("ssmt.start_pick_object", text="", icon='EYEDROPPER')
+        op.node_name = self.name
 
         if self.object_name:
             op = row.operator("ssmt.select_node_object", text="", icon='RESTRICT_SELECT_OFF')
             op.object_name = self.object_name
 
-        # 2. DrawIB 和 Component 自由修改
         layout.prop(self, "draw_ib", text="DrawIB")
         layout.prop(self, "component", text="Component")
         layout.prop(self, "alias_name", text="Alias Name")
 
 
-# 组合节点：用于将多个 Object Info 按顺序组合
 class SSMTNode_Object_Group(SSMTNodeBase):
     '''单纯用于分组的节点，可以接受任何节点作为输入，放在一个组里'''
     bl_idname = 'SSMTNode_Object_Group'
@@ -147,13 +186,9 @@ class SSMTNode_Object_Group(SSMTNodeBase):
         layout.operator("ssmt.view_group_objects", text="查看递归解析预览", icon='HIDE_OFF').node_name = self.name
 
     def update(self):
-        # 类似 Join Geometry 的逻辑：总保持最后一个为空，方便连接新的
         if self.inputs and self.inputs[-1].is_linked:
             self.inputs.new('SSMTSocketObject', f"Input {len(self.inputs) + 1}")
         
-        # 移除中间断开的连接，或者整理列表（可选）
-        # 这里实现一个简单的逻辑：如果倒数第二个也没有连接，就移除最后一个
-        # 防止无限增长，或者用户断开最后一个连接的情况
         if len(self.inputs) > 1 and not self.inputs[-1].is_linked and not self.inputs[-2].is_linked:
              self.inputs.remove(self.inputs[-1])
 
@@ -176,7 +211,6 @@ class SSMTNode_ToggleKey(SSMTNodeBase):
         self.color = (0.41, 0.42, 0.66)
 
     def draw_buttons(self, context, layout):
-        # layout.prop(self, "key_name", text="按键")
         row = layout.row(align=True)
         row.prop(self, "key_name", text="按键")
         row.operator("wm.url_open", text="", icon='HELP').url = "https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes"
@@ -184,16 +218,11 @@ class SSMTNode_ToggleKey(SSMTNodeBase):
         layout.prop(self, "default_on", text="默认开启")
 
     def update(self):
-        # 类似 Join Geometry 的逻辑：总保持最后一个为空，方便连接新的
         if self.inputs and self.inputs[-1].is_linked:
             self.inputs.new('SSMTSocketObject', f"Input {len(self.inputs) + 1}")
         
-        # 移除中间断开的连接，或者整理列表（可选）
-        # 这里实现一个简单的逻辑：如果倒数第二个也没有连接，就移除最后一个
-        # 防止无限增长，或者用户断开最后一个连接的情况
         if len(self.inputs) > 1 and not self.inputs[-1].is_linked and not self.inputs[-2].is_linked:
              self.inputs.remove(self.inputs[-1])
-
 
 
 class SSMT_OT_SwitchKey_AddSocket(bpy.types.Operator):
@@ -259,7 +288,6 @@ class SSMTNode_SwitchKey(SSMTNodeBase):
         op_rem.node_name = self.name
 
 
-# 结果输出节点
 class SSMTNode_Result_Output(SSMTNodeBase):
     '''Result Output Node'''
     bl_idname = 'SSMTNode_Result_Output'
@@ -272,16 +300,9 @@ class SSMTNode_Result_Output(SSMTNodeBase):
 
     def draw_buttons(self, context, layout):
         op = layout.operator("ssmt.generate_mod_blueprint", text="Generate Mod", icon='EXPORT')
-        # 如果当前上下文存在 node_tree (即该节点所在的树)，则传入该树的名称
-        # id_data 对于节点来说通常是 NodeTree
         if hasattr(self, "id_data") and self.id_data:
              op.node_tree_name = self.id_data.name
         
-                
-        # 根据当前游戏类型判断哪些应该显示哪些不显示。
-        # 因为UnrealVS显然无法支持这里所有的特性，每个游戏只能支持一部分特性。
-
-        # 任何游戏都能贴图标记
         if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
             layout.prop(context.scene.properties_wwmi, "ignore_muted_shape_keys")
             layout.prop(context.scene.properties_wwmi, "apply_all_modifiers")
@@ -298,45 +319,31 @@ class SSMTNode_Result_Output(SSMTNodeBase):
             layout.prop(context.scene.properties_generate_mod,
                         "recalculate_color",text="算术平均归一化法线存入COLOR(全局)")
 
-        # 绝区零特有的SlotFix技术
         if GlobalConfig.logic_name == LogicName.ZZMI:
             layout.prop(context.scene.properties_generate_mod, "zzz_use_slot_fix")
 
-        # 原神特有的ORFix与NNFix技术
         if GlobalConfig.logic_name == LogicName.GIMI:
             layout.prop(context.scene.properties_generate_mod, "gimi_use_orfix")
 
-        # 所有的游戏都要能支持生成分支架构面板Mod
         layout.prop(context.scene.properties_generate_mod, "generate_branch_mod_gui",text="生成分支架构Mod面板(测试中)")
 
-        # 默认习惯肯定是要显示这个的，但是由于不经常点击关闭，所以放在最后面
         layout.prop(context.scene.properties_generate_mod, "open_mod_folder_after_generate_mod",text="生成Mod后打开Mod所在文件夹")
 
-        # 生成Mod到指定的文件夹中吗？什么时候才会有这种需求呢？
-        # 一般生成到当前的3Dmigoto下面的Mods下面不就行了嘛
-        # emmmmm，不管怎么说，还是加上，万一有用呢。
         layout.prop(context.scene.properties_generate_mod, "use_specific_generate_mod_folder_path")
 
         if Properties_GenerateMod.use_specific_generate_mod_folder_path():
-            # 显示当前选择的文件夹或提示信息
             box = layout.box()
             box.label(text="当前生成Mod位置文件夹:")
             box.label(text=context.scene.properties_generate_mod.generate_mod_folder_path)
 
-            # 选择文件夹按钮
             layout.operator("ssmt.select_generate_mod_folder", icon='FILE_FOLDER')
 
     def update(self):
-        # 类似 Join Geometry 的逻辑：总保持最后一个为空，方便连接新的
         if self.inputs and self.inputs[-1].is_linked:
             self.inputs.new('SSMTSocketObject', f"Group {len(self.inputs) + 1}")
         
-        # 移除中间断开的连接
-        # 保留 inputs[0](至少一个Group)
         if len(self.inputs) > 1 and not self.inputs[-1].is_linked and not self.inputs[-2].is_linked:
              self.inputs.remove(self.inputs[-1])
-
-
 
 
 class SSMT_OT_View_Group_Objects(bpy.types.Operator):
@@ -380,40 +387,33 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
             self.report({'WARNING'}, "No objects found in this group")
             return {'CANCELLED'}
 
-        # Ensure Object Mode
         if context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
 
-        # Deselect all
         bpy.ops.object.select_all(action='DESELECT')
         for obj in objects_to_show:
             obj.select_set(True)
 
-        # Open new window
         bpy.ops.wm.window_new()
         new_window = context.window_manager.windows[-1]
 
-        # Use the first area of the new window and convert it to 3D View
         if new_window.screen and new_window.screen.areas:
             area = new_window.screen.areas[0]
             area.type = 'VIEW_3D'
             area.ui_type = 'VIEW_3D'
             
-            # Find the WINDOW region for proper context
             region = next((r for r in area.regions if r.type == 'WINDOW'), None)
             
             if region:
                 with context.temp_override(window=new_window, area=area, region=region):
-                    # Enter Local View to isolate selected objects
                     try:
                         if area.spaces.active.region_3d.is_perspective:
-                            bpy.ops.view3d.view_persportho() # Switch to Orthographic
+                            bpy.ops.view3d.view_persportho() 
                         
                         bpy.ops.view3d.localview() 
                         bpy.ops.view3d.view_axis(type='FRONT')
                         bpy.ops.view3d.view_selected()
                         
-                        # Optional: Set shading to Solid or Material
                         if area.spaces.active:
                             area.spaces.active.shading.type = 'SOLID'
                     except Exception as e:
@@ -422,10 +422,10 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
         return {'FINISHED'}
 
 
-
 classes = (
     SSMT_OT_SelectNodeObject,
-    SSMT_OT_AdsorbNodeObject,
+    SSMT_OT_StartPickObject,
+    SSMT_OT_PickObjectModal,
     SSMT_OT_View_Group_Objects,
     SSMTNode_Object_Info,
     SSMTNode_Object_Group,
@@ -439,11 +439,10 @@ classes = (
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+    bpy.types.VIEW3D_HT_header.append(draw_view3d_header)
+
 
 def unregister():
-
-    for cls in classes:
+    bpy.types.VIEW3D_HT_header.remove(draw_view3d_header)
+    for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-
-
-

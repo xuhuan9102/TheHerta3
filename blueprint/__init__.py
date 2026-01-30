@@ -3,6 +3,7 @@ from .blueprint_node_obj import *
 from .blueprint_node_shapekey import *
 from .blueprint_node_menu import *
 from .blueprint_node_datatype import *
+from .blueprint_drag_drop import *
 from .blueprint_export_helper import *
 from .blueprint_export import *
 from .blueprint_import import *
