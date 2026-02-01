@@ -559,6 +559,12 @@ class ObjUtils:
         # print("Normalize All Weights For: " + obj.name)
         # 选择你要操作的对象，这里假设场景中只有一个导入的OBJ对象
         if obj and obj.type == 'MESH':
+            # 检查是否全部被锁定
+            if cls.is_all_vertex_groups_locked(obj):
+                print(f"警告: 对象 {obj.name} 的所有顶点组均被锁定，正在尝试解锁以执行归一化...")
+                for vg in obj.vertex_groups:
+                    vg.lock_weight = False
+
             # 进入权重编辑模式（如果需要）
             bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
             
