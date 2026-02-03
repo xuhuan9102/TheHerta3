@@ -1,20 +1,12 @@
 import bpy
+from ..config.main_config import GlobalConfig
+from ..utils.collection_utils import CollectionUtils
 
 
-@bpy.app.handlers.persistent
-def object_post_delete_handler(scene):
-    """处理物体删除事件，自动删除对应的物体信息节点"""
-    for tree in bpy.data.node_groups:
-        if tree.bl_idname == 'SSMTBlueprintTreeType':
-            nodes_to_remove = []
-            for node in tree.nodes:
-                if node.bl_idname == 'SSMTNode_Object_Info':
-                    obj_name = getattr(node, 'object_name', '')
-                    if obj_name and obj_name not in bpy.data.objects:
-                        nodes_to_remove.append(node)
-            
-            for node in nodes_to_remove:
-                tree.nodes.remove(node)
+_workspace_objects_cache = set()
+_object_to_node_mapping = {}
+_node_to_object_id_mapping = {}
+_is_importing = False
 
 
 @bpy.app.handlers.persistent
@@ -31,13 +23,248 @@ def object_visibility_handler(scene):
                             node.mute = obj.hide_viewport
 
 
+@bpy.app.handlers.persistent
+def object_rename_handler(scene):
+    """处理物体重命名事件，更新对应节点的物体引用"""
+    global _object_to_node_mapping, _node_to_object_id_mapping
+    
+    for tree in bpy.data.node_groups:
+        if tree.bl_idname == 'SSMTBlueprintTreeType':
+            for node in tree.nodes:
+                if node.bl_idname == 'SSMTNode_Object_Info':
+                    obj_name = getattr(node, 'object_name', '')
+                    if not obj_name:
+                        continue
+                    
+                    obj = bpy.data.objects.get(obj_name)
+                    if obj:
+                        current_name = obj.name
+                        if current_name != obj_name:
+                            old_name = obj_name
+                            
+                            node.object_name = current_name
+                            
+                            if old_name in _object_to_node_mapping:
+                                del _object_to_node_mapping[old_name]
+                            _object_to_node_mapping[current_name] = node
+                            
+                            node_key = (tree.name, node.name)
+                            _node_to_object_id_mapping[node_key] = obj.as_pointer()
+                    else:
+                        _handle_missing_object(node, obj_name, tree)
+
+
+def _handle_missing_object(node, obj_name, tree):
+    """处理节点引用的物体不存在的情况，通过物体ID在工作合集中查找对应的物体"""
+    global _object_to_node_mapping, _node_to_object_id_mapping
+    
+    if not GlobalConfig.workspacename:
+        return
+    
+    workspace_collection = bpy.data.collections.get(GlobalConfig.workspacename)
+    if not workspace_collection:
+        return
+    
+    node_key = (tree.name, node.name)
+    object_id = _node_to_object_id_mapping.get(node_key)
+    
+    if object_id is None:
+        return
+    
+    workspace_objects = _get_objects_in_workspace(workspace_collection)
+    
+    for workspace_obj_name in workspace_objects:
+        obj = bpy.data.objects.get(workspace_obj_name)
+        if obj and obj.type == 'MESH':
+            if obj.as_pointer() == object_id:
+                node.object_name = obj.name
+                
+                if obj_name in _object_to_node_mapping:
+                    del _object_to_node_mapping[obj_name]
+                _object_to_node_mapping[obj.name] = node
+                break
+
+
+@bpy.app.handlers.persistent
+def workspace_object_added_handler(scene):
+    """处理工作合集中添加新物体的事件，确保工作合集中所有物体都有对应的物体信息节点"""
+    global _workspace_objects_cache, _object_to_node_mapping, _is_importing
+    
+    if _is_importing:
+        return
+    
+    if not GlobalConfig.workspacename:
+        return
+    
+    workspace_collection = bpy.data.collections.get(GlobalConfig.workspacename)
+    if not workspace_collection:
+        return
+    
+    current_objects = _get_objects_in_workspace(workspace_collection)
+    
+    new_objects = current_objects - _workspace_objects_cache
+    
+    if new_objects:
+        for tree in bpy.data.node_groups:
+            if tree.bl_idname == 'SSMTBlueprintTreeType':
+                _ensure_all_objects_have_nodes(tree, current_objects)
+    
+    _workspace_objects_cache = current_objects
+
+
+def _ensure_all_objects_have_nodes(tree, workspace_objects):
+    """确保工作合集中的所有物体都有对应的节点"""
+    global _object_to_node_mapping, _node_to_object_id_mapping
+    existing_object_names = set()
+    
+    for node in tree.nodes:
+        if node.bl_idname == 'SSMTNode_Object_Info':
+            obj_name = getattr(node, 'object_name', '')
+            if obj_name:
+                existing_object_names.add(obj_name)
+    
+    missing_objects = workspace_objects - existing_object_names
+    
+    for obj_name in missing_objects:
+        node = _create_object_info_node(tree, obj_name)
+        if node:
+            _object_to_node_mapping[obj_name] = node
+
+
+def _get_objects_in_workspace(workspace_collection):
+    """获取工作合集中所有物体"""
+    objects_in_workspace = set()
+    
+    def collect_objects(collection):
+        for obj in collection.objects:
+            if obj.type == 'MESH':
+                objects_in_workspace.add(obj.name)
+        for child in collection.children:
+            collect_objects(child)
+    
+    collect_objects(workspace_collection)
+    return objects_in_workspace
+
+
+def _create_object_info_node(tree, obj_name):
+    """创建物体信息节点并设置位置"""
+    node = tree.nodes.new('SSMTNode_Object_Info')
+    node.object_name = obj_name
+    
+    node.label = obj_name
+    
+    if "-" in obj_name:
+        obj_name_split = obj_name.split("-")
+        if len(obj_name_split) >= 3:
+            node.draw_ib = obj_name_split[0]
+            node.component = obj_name_split[1]
+            node.alias_name = obj_name_split[2]
+    
+    _position_new_node(tree, node, len([n for n in tree.nodes if n.bl_idname == 'SSMTNode_Object_Info']) - 1)
+    
+    global _node_to_object_id_mapping
+    node_key = (tree.name, node.name)
+    obj = bpy.data.objects.get(obj_name)
+    if obj:
+        _node_to_object_id_mapping[node_key] = obj.as_pointer()
+    
+    return node
+
+
+def _position_new_node(tree, new_node, index):
+    """为新节点设置位置，只对新节点进行位置设置"""
+    NODE_WIDTH = 300
+    NODE_HEIGHT = 150
+    NODES_PER_ROW = 3
+    
+    row = index // NODES_PER_ROW
+    col = index % NODES_PER_ROW
+    new_node.location = (col * NODE_WIDTH, -row * NODE_HEIGHT)
+
+
+def _initialize_workspace_cache():
+    """初始化工作合集中物体的缓存"""
+    global _workspace_objects_cache, _object_to_node_mapping, _node_to_object_id_mapping, _is_importing
+    
+    if not GlobalConfig.workspacename:
+        _workspace_objects_cache = set()
+        _object_to_node_mapping = {}
+        _node_to_object_id_mapping = {}
+        _is_importing = False
+        return
+    
+    workspace_collection = bpy.data.collections.get(GlobalConfig.workspacename)
+    if workspace_collection:
+        _workspace_objects_cache = _get_objects_in_workspace(workspace_collection)
+    else:
+        _workspace_objects_cache = set()
+    
+    _build_object_to_node_mapping()
+    _update_node_to_object_id_mapping()
+    _is_importing = False
+
+
+def _update_node_to_object_id_mapping():
+    """更新节点到物体ID的映射关系"""
+    global _node_to_object_id_mapping
+    _node_to_object_id_mapping = {}
+    
+    for tree in bpy.data.node_groups:
+        if tree.bl_idname == 'SSMTBlueprintTreeType':
+            for node in tree.nodes:
+                if node.bl_idname == 'SSMTNode_Object_Info':
+                    obj_name = getattr(node, 'object_name', '')
+                    if obj_name:
+                        obj = bpy.data.objects.get(obj_name)
+                        if obj:
+                            node_key = (tree.name, node.name)
+                            _node_to_object_id_mapping[node_key] = obj.as_pointer()
+
+
+def _build_object_to_node_mapping():
+    """构建物体到节点的映射关系"""
+    global _object_to_node_mapping
+    _object_to_node_mapping = {}
+    
+    for tree in bpy.data.node_groups:
+        if tree.bl_idname == 'SSMTBlueprintTreeType':
+            for node in tree.nodes:
+                if node.bl_idname == 'SSMTNode_Object_Info':
+                    obj_name = getattr(node, 'object_name', '')
+                    if obj_name:
+                        _object_to_node_mapping[obj_name] = node
+
+
+def set_importing_state(is_importing):
+    """设置导入状态，避免导入时触发自动节点创建"""
+    global _is_importing
+    _is_importing = is_importing
+
+
+def refresh_workspace_cache():
+    """刷新工作合集中物体的缓存，用于导入完成后调用"""
+    global _is_importing
+    set_importing_state(False)
+    _initialize_workspace_cache()
+
+
 def register():
-    bpy.app.handlers.depsgraph_update_post.append(object_post_delete_handler)
+    _initialize_workspace_cache()
     bpy.app.handlers.depsgraph_update_post.append(object_visibility_handler)
+    bpy.app.handlers.depsgraph_update_post.append(object_rename_handler)
+    bpy.app.handlers.depsgraph_update_post.append(workspace_object_added_handler)
 
 
 def unregister():
-    if object_post_delete_handler in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(object_post_delete_handler)
     if object_visibility_handler in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(object_visibility_handler)
+    if object_rename_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(object_rename_handler)
+    if workspace_object_added_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(workspace_object_added_handler)
+    
+    global _workspace_objects_cache, _object_to_node_mapping, _node_to_object_id_mapping, _is_importing
+    _workspace_objects_cache = set()
+    _object_to_node_mapping = {}
+    _node_to_object_id_mapping = {}
+    _is_importing = False
