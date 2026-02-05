@@ -8,6 +8,7 @@ from .blueprint_node_base import SSMTBlueprintTree, SSMTNodeBase
 
 _picking_node_name = None
 _picking_tree_name = None
+_is_viewing_group_objects = False
 
 
 class SSMT_OT_SelectNodeObject(bpy.types.Operator):
@@ -355,6 +356,8 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
     node_name: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
+        global _is_viewing_group_objects
+        
         tree = getattr(context.space_data, "edit_tree", None) or context.space_data.node_tree
         if not tree:
              return {'CANCELLED'}
@@ -395,30 +398,35 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
         for obj in objects_to_show:
             obj.select_set(True)
 
-        bpy.ops.wm.window_new()
-        new_window = context.window_manager.windows[-1]
+        _is_viewing_group_objects = True
+        
+        try:
+            bpy.ops.wm.window_new()
+            new_window = context.window_manager.windows[-1]
 
-        if new_window.screen and new_window.screen.areas:
-            area = new_window.screen.areas[0]
-            area.type = 'VIEW_3D'
-            area.ui_type = 'VIEW_3D'
-            
-            region = next((r for r in area.regions if r.type == 'WINDOW'), None)
-            
-            if region:
-                with context.temp_override(window=new_window, area=area, region=region):
-                    try:
-                        if area.spaces.active.region_3d.is_perspective:
-                            bpy.ops.view3d.view_persportho() 
-                        
-                        bpy.ops.view3d.localview() 
-                        bpy.ops.view3d.view_axis(type='FRONT')
-                        bpy.ops.view3d.view_selected()
-                        
-                        if area.spaces.active:
-                            area.spaces.active.shading.type = 'SOLID'
-                    except Exception as e:
-                        print(f"View setup warning: {e}")
+            if new_window.screen and new_window.screen.areas:
+                area = new_window.screen.areas[0]
+                area.type = 'VIEW_3D'
+                area.ui_type = 'VIEW_3D'
+                
+                region = next((r for r in area.regions if r.type == 'WINDOW'), None)
+                
+                if region:
+                    with context.temp_override(window=new_window, area=area, region=region):
+                        try:
+                            if area.spaces.active.region_3d.is_perspective:
+                                bpy.ops.view3d.view_persportho() 
+                            
+                            bpy.ops.view3d.localview() 
+                            bpy.ops.view3d.view_axis(type='FRONT')
+                            bpy.ops.view3d.view_selected()
+                            
+                            if area.spaces.active:
+                                area.spaces.active.shading.type = 'SOLID'
+                        except Exception as e:
+                            print(f"View setup warning: {e}")
+        finally:
+            _is_viewing_group_objects = False
 
         return {'FINISHED'}
 

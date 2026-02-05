@@ -1,6 +1,7 @@
 import bpy
 from ..config.main_config import GlobalConfig
 from ..utils.collection_utils import CollectionUtils
+from .blueprint_node_obj import _is_viewing_group_objects
 
 
 _workspace_objects_cache = set()
@@ -32,6 +33,9 @@ def object_selection_handler(scene):
     global _syncing_selection, _object_to_node_mapping
     
     if _syncing_selection:
+        return
+    
+    if _is_viewing_group_objects:
         return
     
     _syncing_selection = True
@@ -303,6 +307,9 @@ def check_node_selection_changes():
     global _last_node_selection_state, _syncing_selection
     
     if _syncing_selection:
+        return 0.1
+    
+    if _is_viewing_group_objects:
         return 0.1
     
     current_selection_state = {}
