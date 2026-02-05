@@ -338,14 +338,22 @@ class ShapeKeyUtils:
         return shapekey_cache
     
     @staticmethod
-    def reset_shapekey_values(obj):
+    def reset_shapekey_values(obj, configured_shapekey_names=None, current_shapekey_name=None):
         '''
-        把Obj所有不以Export.开头的形态键值归零，用于预处理
+        把在配置列表中的非当前形态键归零，未配置的形态键保留原值
+        configured_shapekey_names: 在蓝图节点中配置的所有形态键名称列表
+        current_shapekey_name: 当前正在处理的形态键名称
         '''
 
         if obj.data.shape_keys:
-            # 必须遍历 key_blocks 才能获取每个键的值
+            if configured_shapekey_names is None:
+                configured_shapekey_names = set()
+            else:
+                configured_shapekey_names = set(configured_shapekey_names)
+            
             for key_block in obj.data.shape_keys.key_blocks:
-                # 只有不以 Export. 开头的形态键才会被归零
-                if not key_block.name.startswith("Export."):
-                    key_block.value = 0.0
+                # 只处理在配置列表中的形态键
+                if key_block.name in configured_shapekey_names:
+                    # 如果不是当前正在处理的形态键，则归零
+                    if key_block.name != current_shapekey_name:
+                        key_block.value = 0.0

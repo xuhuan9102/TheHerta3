@@ -237,11 +237,9 @@ class M_IniHelper:
                 if drawib_model.shapekey_name_bytelist_dict.get(shapekey_name,None) is None:
                     continue
 
-                shapekey_name_less = shapekey_name.replace("Shape.","")
-
                 customshader_section.append("x88 = " + m_key.key_name)
                 customshader_section.append("cs-t50 = copy " + "Resource" + drawib + "Position.1")
-                customshader_section.append("cs-t51 = copy " + "Resource" + drawib + "Position." +shapekey_name_less)
+                customshader_section.append("cs-t51 = copy " + "Resource" + drawib + "Position." + shapekey_name)
                 customshader_section.append("Resource" + drawib + "Position = ref cs-u5")
                 customshader_section.append("Dispatch = " + str(drawib_model.draw_number) + " ,1 ,1")
                 customshader_section.new_line()
@@ -280,11 +278,10 @@ class M_IniHelper:
                 if drawib_model.shapekey_name_bytelist_dict.get(shapekey_name,None) is None:
                     continue
                 
-                shapekey_name_less = shapekey_name.replace("Shape.","")
-                resource_section.append("[Resource" + drawib + "Position." + shapekey_name_less + "]")
+                resource_section.append("[Resource" + drawib + "Position." + shapekey_name + "]")
                 resource_section.append("type = buffer")
                 resource_section.append("stride = " + str(drawib_model.d3d11GameType.CategoryStrideDict["Position"]))
-                resource_section.append("filename = Buffer/" + drawib + "-" + "Position." + shapekey_name_less + ".buf")
+                resource_section.append("filename = Buffer/" + drawib + "-" + "Position." + shapekey_name + ".buf")
                 resource_section.new_line()
 
             ib_number += 1
