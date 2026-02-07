@@ -8,6 +8,41 @@ from .blueprint_node_base import SSMTBlueprintTree, SSMTNodeBase
 
 _picking_node_name = None
 _picking_tree_name = None
+_is_viewing_group_objects = False
+
+
+class SSMT_OT_RefreshNodeObjectIDs(bpy.types.Operator):
+    '''刷新节点树中所有节点的物体ID关联'''
+    bl_idname = "ssmt.refresh_node_object_ids"
+    bl_label = "刷新物体ID关联"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
+        
+        if not tree:
+            self.report({'WARNING'}, "无法获取节点树上下文")
+            return {'CANCELLED'}
+        
+        updated_count = 0
+        
+        for node in tree.nodes:
+            if node.bl_idname == 'SSMTNode_Object_Info':
+                obj_name = getattr(node, 'object_name', '')
+                obj_id = getattr(node, 'object_id', '')
+                
+                if obj_name and not obj_id:
+                    obj = bpy.data.objects.get(obj_name)
+                    if obj:
+                        node.object_id = str(obj.as_pointer())
+                        updated_count += 1
+        
+        if updated_count > 0:
+            self.report({'INFO'}, f"已更新 {updated_count} 个节点的物体ID关联")
+        else:
+            self.report({'INFO'}, "所有节点都已建立物体ID关联")
+        
+        return {'FINISHED'}
 
 
 class SSMT_OT_SelectNodeObject(bpy.types.Operator):
@@ -142,9 +177,15 @@ class SSMTNode_Object_Info(SSMTNodeBase):
                 self.draw_ib = obj_name_split[0]
                 self.component = obj_name_split[1]
                 self.alias_name = obj_name_split[2]
+            
+            obj = bpy.data.objects.get(self.object_name)
+            if obj:
+                self.object_id = str(obj.as_pointer())
         else:
             self.label = "Object Info"
-    object_name: bpy.props.StringProperty(name="Object Name", default="", update=update_object_name) # type: ignore
+            self.object_id = ""
+    object_name: bpy.props.StringProperty(name="Object Name", default="", update=update_object_name)
+    object_id: bpy.props.StringProperty(name="Object ID", default="")
 
 
     draw_ib: bpy.props.StringProperty(name="DrawIB", default="") # type: ignore
@@ -355,6 +396,8 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
     node_name: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
+        global _is_viewing_group_objects
+        
         tree = getattr(context.space_data, "edit_tree", None) or context.space_data.node_tree
         if not tree:
              return {'CANCELLED'}
@@ -395,35 +438,41 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
         for obj in objects_to_show:
             obj.select_set(True)
 
-        bpy.ops.wm.window_new()
-        new_window = context.window_manager.windows[-1]
+        _is_viewing_group_objects = True
+        
+        try:
+            bpy.ops.wm.window_new()
+            new_window = context.window_manager.windows[-1]
 
-        if new_window.screen and new_window.screen.areas:
-            area = new_window.screen.areas[0]
-            area.type = 'VIEW_3D'
-            area.ui_type = 'VIEW_3D'
-            
-            region = next((r for r in area.regions if r.type == 'WINDOW'), None)
-            
-            if region:
-                with context.temp_override(window=new_window, area=area, region=region):
-                    try:
-                        if area.spaces.active.region_3d.is_perspective:
-                            bpy.ops.view3d.view_persportho() 
-                        
-                        bpy.ops.view3d.localview() 
-                        bpy.ops.view3d.view_axis(type='FRONT')
-                        bpy.ops.view3d.view_selected()
-                        
-                        if area.spaces.active:
-                            area.spaces.active.shading.type = 'SOLID'
-                    except Exception as e:
-                        print(f"View setup warning: {e}")
+            if new_window.screen and new_window.screen.areas:
+                area = new_window.screen.areas[0]
+                area.type = 'VIEW_3D'
+                area.ui_type = 'VIEW_3D'
+                
+                region = next((r for r in area.regions if r.type == 'WINDOW'), None)
+                
+                if region:
+                    with context.temp_override(window=new_window, area=area, region=region):
+                        try:
+                            if area.spaces.active.region_3d.is_perspective:
+                                bpy.ops.view3d.view_persportho() 
+                            
+                            bpy.ops.view3d.localview() 
+                            bpy.ops.view3d.view_axis(type='FRONT')
+                            bpy.ops.view3d.view_selected()
+                            
+                            if area.spaces.active:
+                                area.spaces.active.shading.type = 'SOLID'
+                        except Exception as e:
+                            print(f"View setup warning: {e}")
+        finally:
+            _is_viewing_group_objects = False
 
         return {'FINISHED'}
 
 
 classes = (
+    SSMT_OT_RefreshNodeObjectIDs,
     SSMT_OT_SelectNodeObject,
     SSMT_OT_StartPickObject,
     SSMT_OT_PickObjectModal,
