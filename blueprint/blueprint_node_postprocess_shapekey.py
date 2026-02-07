@@ -274,11 +274,8 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             with open(ini_file_path, 'r', encoding='utf-8') as f:
                 for line in f:
                     stripped_line = line.strip()
-                    if not stripped_line or stripped_line.startswith(';'):
-                        continue
-                    section_match = re.match(r'\[([^\]]+)\]', stripped_line)
-                    if section_match:
-                        current_section = section_match.group(0)
+                    if stripped_line.startswith('[') and stripped_line.endswith(']'):
+                        current_section = stripped_line
                         if current_section not in sections:
                             sections[current_section] = []
                         continue
