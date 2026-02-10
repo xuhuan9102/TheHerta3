@@ -113,10 +113,10 @@ class MeshImporter:
                 if GlobalConfig.logic_name == LogicName.YYSLS:
                     print("燕云十六声法线处理")
                     normals = [(x[0] * 2 - 1, x[1] * 2 - 1, x[2] * 2 - 1) for x in data]
-                elif mbf.fmt_file.logic_name == LogicName.AEMI and element.Format == "R32_UINT":
+                elif (mbf.fmt_file.logic_name == LogicName.AEMI or mbf.fmt_file.logic_name == LogicName.EFMI) and element.Format == "R32_UINT":
                     # 对终末地压缩类型法线做特殊解压处理
                     # 数据是以R32_UINT类型存储的，但是它实际上应该视为32位的内存块来解读
-                    print("终末地压缩法线处理(AEMI Packed Normals)")
+                    print("终末地压缩法线处理(Endfield Packed Normals)")
                     
                     # Ensure we work with uint32
                     raw = data
@@ -126,7 +126,7 @@ class MeshImporter:
                     if raw.ndim > 1:
                         raw = raw[:, 0]
                     
-                    # AEMI Octahedral Normal Encoding (10-10-Packed)
+                    # Endfiled Octahedral Normal Encoding (10-10-Packed)
                     # Based on HLSL logic
                     
                     mask_10bit = 0x3FF
@@ -250,7 +250,7 @@ class MeshImporter:
             obj.rotation_euler[2] = 0
         
         # 懒得调整了，躺倒就躺倒吧
-        if mbf.fmt_file.logic_name == LogicName.AEMI:
+        if mbf.fmt_file.logic_name == LogicName.AEMI or mbf.fmt_file.logic_name == LogicName.EFMI:
             obj.rotation_euler[0] = 0
             obj.rotation_euler[1] = 0
             obj.rotation_euler[2] = 0

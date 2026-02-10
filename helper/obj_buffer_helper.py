@@ -148,12 +148,12 @@ class ObjBufferHelper:
 
             return FormatUtils.convert_4x_float32_to_r8g8b8a8_unorm(result)
 
-        elif d3d11_element.Format == "R32_UINT" and GlobalConfig.logic_name == LogicName.AEMI:
-             # AEMI Octahedral Normal
+        elif d3d11_element.Format == "R32_UINT" and (GlobalConfig.logic_name == LogicName.AEMI or GlobalConfig.logic_name == LogicName.EFMI):
+             # 终末地 Octahedral Normal
              # We need just float3 normals
              raw_normals = normals.reshape(-1, 3)
              # Must reshape to (N, 1) to match structured array shape if expected
-             return FormatUtils.convert_normals_to_aemi_octahedral_r32_uint(raw_normals).reshape(-1, 1)
+             return FormatUtils.convert_normals_to_endfield_octahedral_r32_uint(raw_normals).reshape(-1, 1)
         
         else:
             # 将一维数组 reshape 成 (mesh_loops_length, 3) 形状的二维数组

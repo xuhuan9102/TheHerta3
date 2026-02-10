@@ -224,9 +224,9 @@ class FormatUtils:
         return numpy.round(input_array * 32767).astype(numpy.int16)
     
     @classmethod    
-    def convert_normals_to_aemi_octahedral_r32_uint(cls, input_normals):
+    def convert_normals_to_endfield_octahedral_r32_uint(cls, input_normals):
         """
-        Compress float3 normals to AEMI specific R32_UINT octahedral format.
+        Compress float3 normals to Endfield specific R32_UINT octahedral format.
         输入: (N, 3) float32 normals
         输出: (N,) uint32 packed data
         """

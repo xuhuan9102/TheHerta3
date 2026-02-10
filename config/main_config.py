@@ -21,7 +21,9 @@ class LogicName:
     SRMI = "SRMI"
     ZZMI = "ZZMI"
     WWMI = "WWMI"
-    EFMI = "EFMI"
+
+    EFMI = "EFMI" # 强兼支持
+    AEMI = "AEMI"
 
     WuWa = "WuWa"
 
@@ -32,7 +34,6 @@ class LogicName:
     AILIMIT = "AILIMIT"
     HOK = "HOK"
     SnowBreak = "SnowBreak"
-    AEMI = "AEMI"
 
 # 全局配置类，使用字段默认为全局可访问的唯一静态变量的特性，来实现全局变量
 # 可减少从Main.json中读取的IO消耗
