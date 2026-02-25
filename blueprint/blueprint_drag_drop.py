@@ -15,6 +15,7 @@ _object_name_check_timer = None
 _last_node_selection_state = {}
 _last_synced_object = None
 _cleanup_counter = 0
+_sync_from_nodes = False
 
 
 @bpy.app.handlers.persistent
@@ -36,12 +37,16 @@ def object_visibility_handler(scene):
 @bpy.app.handlers.persistent
 def object_selection_handler(scene):
     """处理物体选中状态变化事件，同步更新对应节点的选中状态"""
-    global _syncing_selection, _last_synced_object
+    global _syncing_selection, _last_synced_object, _sync_from_nodes
     
     if _syncing_selection:
         return
     
     if _is_viewing_group_objects:
+        return
+    
+    if _sync_from_nodes:
+        _sync_from_nodes = False
         return
     
     _syncing_selection = True
@@ -55,8 +60,6 @@ def object_selection_handler(scene):
                         if obj_name:
                             obj = bpy.data.objects.get(obj_name)
                             if obj:
-                                if obj == _last_synced_object:
-                                    continue
                                 current_select = obj.select_get()
                                 if node.select != current_select:
                                     node.select = current_select
@@ -285,11 +288,12 @@ def refresh_workspace_cache():
 
 def sync_node_selection_to_objects():
     """同步节点选中状态到物体，当节点选中状态变化时调用"""
-    global _syncing_selection
+    global _syncing_selection, _sync_from_nodes
     
     if _syncing_selection:
         return
     
+    _sync_from_nodes = True
     _syncing_selection = True
     
     try:
@@ -308,7 +312,7 @@ def sync_node_selection_to_objects():
 
 def check_node_selection_changes():
     """定时检查节点选中状态变化，并同步到物体"""
-    global _last_node_selection_state, _syncing_selection, _last_synced_object, _cleanup_counter
+    global _last_node_selection_state, _syncing_selection, _last_synced_object, _cleanup_counter, _sync_from_nodes
     
     if _syncing_selection:
         return 0.1
@@ -344,16 +348,24 @@ def check_node_selection_changes():
         del _last_node_selection_state[key]
     
     if changed_nodes:
+        _sync_from_nodes = True
         _syncing_selection = True
-        _last_synced_object = None
         try:
+            object_to_nodes_map = {}
             for node in changed_nodes:
                 obj_name = getattr(node, 'object_name', '')
                 if obj_name:
-                    obj = bpy.data.objects.get(obj_name)
-                    if obj:
-                        _last_synced_object = obj
-                        obj.select_set(node.select)
+                    if obj_name not in object_to_nodes_map:
+                        object_to_nodes_map[obj_name] = []
+                    object_to_nodes_map[obj_name].append(node)
+            
+            for obj_name, nodes in object_to_nodes_map.items():
+                obj = bpy.data.objects.get(obj_name)
+                if obj:
+                    select_state = any(node.select for node in nodes)
+                    obj.select_set(select_state)
+                    for node in nodes:
+                        node.select = select_state
         finally:
             _syncing_selection = False
     

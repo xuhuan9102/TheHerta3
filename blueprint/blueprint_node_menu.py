@@ -82,6 +82,88 @@ class SSMT_OT_CreateGroupFromSelection(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class SSMT_OT_CreateInternalSwitch(bpy.types.Operator):
+    '''Create Object Info nodes from selected objects and connect them to a Switch Key node'''
+    bl_idname = "ssmt.create_internal_switch"
+    bl_label = "创建内部切换"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        selected_objects = context.selected_objects
+        if not selected_objects:
+            self.report({'WARNING'}, "没有选择任何物体")
+            return {'CANCELLED'}
+        
+        import re
+        
+        objects_with_sequence = []
+        objects_without_sequence = []
+        
+        for obj in selected_objects:
+            pattern = r'_(\d+)$'
+            match = re.search(pattern, obj.name)
+            
+            if match:
+                sequence_num = int(match.group(1))
+                objects_with_sequence.append((sequence_num, obj))
+            else:
+                objects_without_sequence.append(obj)
+        
+        if objects_without_sequence:
+            self.report({'WARNING'}, f"以下物体没有序列号: {', '.join([obj.name for obj in objects_without_sequence])}")
+            return {'CANCELLED'}
+        
+        if not objects_with_sequence:
+            self.report({'WARNING'}, "没有找到带序列号的物体")
+            return {'CANCELLED'}
+        
+        objects_with_sequence.sort(key=lambda x: x[0])
+        
+        GlobalConfig.read_from_main_json()
+        workspace_name = f"Mod_{GlobalConfig.workspacename}" if GlobalConfig.workspacename else "SSMT_Mod_Logic"
+        node_tree = bpy.data.node_groups.get(workspace_name)
+        
+        if not node_tree or node_tree.bl_idname != 'SSMTBlueprintTreeType':
+            node_tree = bpy.data.node_groups.new(name=workspace_name, type='SSMTBlueprintTreeType')
+        
+        nodes = node_tree.nodes
+        links = node_tree.links
+        
+        base_x = 0
+        base_y = 0
+        if nodes:
+            max_x = max([node.location.x + node.width for node in nodes])
+            base_x = max_x + 200
+        
+        for node in nodes:
+            node.select = False
+        
+        switch_node = nodes.new(type='SSMTNode_SwitchKey')
+        switch_node.location = (base_x + 600, base_y)
+        
+        while len(switch_node.inputs) > 1:
+            switch_node.inputs.remove(switch_node.inputs[-1])
+        
+        while len(switch_node.inputs) < len(objects_with_sequence):
+            switch_node.inputs.new('SSMTSocketObject', f"Status {len(switch_node.inputs)}")
+        
+        obj_nodes = []
+        for i, (seq_num, obj) in enumerate(objects_with_sequence):
+            obj_node = nodes.new(type='SSMTNode_Object_Info')
+            obj_node.location = (base_x, base_y - i * 15)
+            obj_node.object_name = obj.name
+            obj_node.select = True
+            obj_nodes.append(obj_node)
+            
+            if i < len(switch_node.inputs):
+                links.new(obj_node.outputs[0], switch_node.inputs[i])
+        
+        switch_node.select = True
+        
+        self.report({'INFO'}, f"已创建 {len(obj_nodes)} 个物体节点并连接到切换节点")
+        return {'FINISHED'}
+
+
 def draw_objects_context_menu_add(self, context):
     layout = self.layout
     layout.separator()
@@ -93,6 +175,7 @@ class SSMT_MT_ObjectContextMenuSub(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         layout.operator("ssmt.create_group_from_selection", text="将所选物体新建到组节点", icon='GROUP')
+        layout.operator("ssmt.create_internal_switch", text="创建内部切换", icon='ARROW_LEFTRIGHT')
 
 
 class SSMT_MT_NodeMenu_Branch(bpy.types.Menu):
@@ -694,6 +777,7 @@ def draw_node_context_menu(self, context):
 
 def register():
     bpy.utils.register_class(SSMT_OT_CreateGroupFromSelection)
+    bpy.utils.register_class(SSMT_OT_CreateInternalSwitch)
     bpy.utils.register_class(SSMT_OT_AddCommonKeySwitches)
     bpy.utils.register_class(SSMT_OT_AlignNodes)
     bpy.utils.register_class(SSMT_OT_BatchConnectNodes)
@@ -724,4 +808,5 @@ def unregister():
     bpy.utils.unregister_class(SSMT_OT_BatchConnectNodes)
     bpy.utils.unregister_class(SSMT_OT_AlignNodes)
     bpy.utils.unregister_class(SSMT_OT_AddCommonKeySwitches)
+    bpy.utils.unregister_class(SSMT_OT_CreateInternalSwitch)
     bpy.utils.unregister_class(SSMT_OT_CreateGroupFromSelection)

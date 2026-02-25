@@ -276,8 +276,34 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         if not tree:
             return result
         
-        for node in tree.nodes:
+        output_nodes = [node for node in tree.nodes if node.bl_idname == 'SSMTNode_Result_Output']
+        
+        if not output_nodes:
+            return result
+        
+        valid_nodes = set()
+        
+        def collect_valid_nodes(node):
+            """递归收集所有有效连接的节点"""
+            if node in valid_nodes:
+                return
+            
             if node.mute:
+                return
+            
+            valid_nodes.add(node)
+            
+            for input_socket in node.inputs:
+                for link in input_socket.links:
+                    from_node = link.from_node
+                    if from_node:
+                        collect_valid_nodes(from_node)
+        
+        for output_node in output_nodes:
+            collect_valid_nodes(output_node)
+        
+        for node in tree.nodes:
+            if node not in valid_nodes:
                 continue
             if node.bl_idname == 'SSMTNode_Object_Info':
                 obj_name = getattr(node, 'object_name', '')
@@ -286,7 +312,6 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                     if obj and obj.type == 'MESH':
                         result.append((obj, node))
             elif node.bl_idname == 'SSMTNode_MultiFile_Export':
-                # 处理多文件导出节点中的所有物体
                 for item in node.object_list:
                     obj_name = getattr(item, 'object_name', '')
                     if obj_name:
