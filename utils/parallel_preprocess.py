@@ -507,7 +507,7 @@ def prepare_copy_for_mirror_workflow(copy_obj):
 
 
 def mesh_triangulate_beauty(obj):
-    """使用 FIXED 算法进行三角化（优化版：比BEAUTY快3-5倍）"""
+    """使用 BEAUTY 算法进行三角化（布线优化）"""
     if obj.type != 'MESH':
         return
     
@@ -517,7 +517,7 @@ def mesh_triangulate_beauty(obj):
     
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.quads_convert_to_tris(quad_method='FIXED', ngon_method='CLIP')
+    bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
     bpy.ops.object.mode_set(mode='OBJECT')
 
 

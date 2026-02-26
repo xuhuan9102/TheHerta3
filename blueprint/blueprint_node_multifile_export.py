@@ -5,6 +5,7 @@ from bpy.props import StringProperty, CollectionProperty, BoolProperty, IntPrope
 
 from ..config.main_config import GlobalConfig
 from .blueprint_node_base import SSMTNodeBase
+from ..utils.obj_utils import mesh_triangulate_beauty
 
 
 class SSMT_OT_MultiFileExport_SplitAnimation(bpy.types.Operator):
@@ -106,6 +107,9 @@ class SSMT_OT_MultiFileExport_SplitAnimation(bpy.types.Operator):
                 # 创建新物体
                 obj_name = f"{obj.name}_{frame:03d}"
                 new_obj = bpy.data.objects.new(obj_name, mesh_data)
+                
+                # 三角化网格（使用BEAUTY算法）
+                mesh_triangulate_beauty(new_obj)
                 
                 # 复制材质
                 for slot in obj.material_slots:
