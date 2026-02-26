@@ -4,6 +4,7 @@ from bpy.types import NodeTree, Node, NodeSocket
 from ..config.main_config import GlobalConfig, LogicName
 from ..config.properties_generate_mod import Properties_GenerateMod
 from .blueprint_node_base import SSMTBlueprintTree, SSMTNodeBase
+from .blueprint_nest_navigate import SSMT_OT_BlueprintNestNavigate, SSMT_OT_CreateBlueprintFromNest
 
 BLENDER_VERSION = bpy.app.version[:2]
 
@@ -405,12 +406,19 @@ class SSMTNode_Result_Output(SSMTNodeBase):
 
         layout.prop(context.scene.properties_generate_mod, "use_specific_generate_mod_folder_path")
 
+        layout.prop(context.scene.properties_generate_mod, "enable_performance_stats",text="启用性能统计")
+
         if Properties_GenerateMod.use_specific_generate_mod_folder_path():
             box = layout.box()
             box.label(text="当前生成Mod位置文件夹:")
             box.label(text=context.scene.properties_generate_mod.generate_mod_folder_path)
 
             layout.operator("ssmt.select_generate_mod_folder", icon='FILE_FOLDER')
+        
+        # 添加返回上一层级按钮
+        layout.separator()
+        row = layout.row(align=True)
+        row.operator("ssmt.blueprint_nest_navigate", text="返回上一层级", icon='BACK')
 
     def update(self):
         if self.inputs and self.inputs[-1].is_linked:
@@ -516,6 +524,8 @@ classes = (
     SSMTNode_SwitchKey,
     SSMT_OT_SwitchKey_AddSocket,
     SSMT_OT_SwitchKey_RemoveSocket,
+    SSMT_OT_BlueprintNestNavigate,
+    SSMT_OT_CreateBlueprintFromNest,
 )
 
 def register():
