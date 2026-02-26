@@ -54,11 +54,18 @@ class ObjElementModel:
         ShapeKeyUtils.reset_shapekey_values(self.obj)
 
         # 这里获取应用了形态键之后的mesh数据
-        # 注意：物体在导出前已经被 BEAUTY 三角化，所以这里不需要再次三角化
+        # 注意：evaluated_get() 创建的新 mesh 需要重新三角化
         mesh = ObjUtils.get_mesh_evaluate_from_obj(obj=self.obj)
 
-        # 前提是有UVMap，前面的步骤应该保证了模型至少有一个TEXCOORD.xy
-        mesh.calc_tangents()
+        # 确保 mesh 已三角化，因为 calc_tangents() 只能处理三角形和四边形
+        if len(mesh.polygons) > 0:
+            try:
+                mesh.calc_tangents()
+            except RuntimeError:
+                # 如果 calc_tangents() 失败，说明 mesh 包含非三角形/四边形的多边形
+                # 需要先三角化
+                ObjUtils.mesh_triangulate(mesh)
+                mesh.calc_tangents()
         
         self.mesh = mesh
         self.total_structured_dtype:numpy.dtype = self.d3d11_game_type.get_total_structured_dtype()

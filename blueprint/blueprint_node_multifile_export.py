@@ -120,6 +120,83 @@ class SSMT_OT_MultiFileExport_MoveDown(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class SSMT_OT_MultiFileExport_CheckVertexCount(bpy.types.Operator):
+    '''Check vertex count for all objects in list'''
+    bl_idname = "ssmt.multifile_export_check_vertex_count"
+    bl_label = "检查顶点数"
+    bl_description = "统计列表中每个物体的顶点数，确保所有物体顶点数相同"
+    
+    node_name: bpy.props.StringProperty() # type: ignore
+    
+    def execute(self, context):
+        tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
+        if not tree:
+            self.report({'WARNING'}, "无法获取节点树上下文")
+            return {'CANCELLED'}
+        
+        node = tree.nodes.get(self.node_name)
+        if not node:
+            self.report({'WARNING'}, f"无法找到节点: {self.node_name}")
+            return {'CANCELLED'}
+        
+        if len(node.object_list) == 0:
+            self.report({'WARNING'}, "列表为空，没有物体可检查")
+            return {'CANCELLED'}
+        
+        vertex_counts = []
+        object_info = []
+        missing_objects = []
+        
+        for i, item in enumerate(node.object_list):
+            obj_name = item.object_name
+            obj = bpy.data.objects.get(obj_name)
+            
+            if not obj:
+                missing_objects.append(obj_name)
+                continue
+            
+            if obj.type != 'MESH':
+                self.report({'WARNING'}, f"物体 '{obj_name}' 不是网格类型")
+                return {'CANCELLED'}
+            
+            vertex_count = len(obj.data.vertices)
+            vertex_counts.append(vertex_count)
+            object_info.append((i + 1, obj_name, vertex_count))
+        
+        if missing_objects:
+            self.report({'WARNING'}, f"以下物体不存在: {', '.join(missing_objects)}")
+            return {'CANCELLED'}
+        
+        print("\n" + "=" * 60)
+        print("多文件导出节点 - 顶点数统计")
+        print("=" * 60)
+        
+        for idx, name, count in object_info:
+            print(f"  {idx}. {name}: {count} 顶点")
+        
+        print("=" * 60)
+        
+        unique_counts = set(vertex_counts)
+        
+        if len(unique_counts) == 1:
+            vertex_count = vertex_counts[0]
+            print(f"✓ 所有物体顶点数一致: {vertex_count} 顶点")
+            self.report({'INFO'}, f"✓ 所有物体顶点数一致: {vertex_count} 顶点")
+        else:
+            print(f"✗ 顶点数不一致！发现 {len(unique_counts)} 种不同的顶点数:")
+            for count in sorted(unique_counts):
+                objects_with_count = [name for idx, name, c in object_info if c == count]
+                print(f"  - {count} 顶点: {len(objects_with_count)} 个物体")
+            
+            min_count = min(vertex_counts)
+            max_count = max(vertex_counts)
+            self.report({'ERROR'}, f"✗ 顶点数不一致！范围: {min_count} - {max_count}")
+        
+        print("=" * 60 + "\n")
+        
+        return {'FINISHED'}
+
+
 class MultiFileExportObjectItem(bpy.types.PropertyGroup):
     object_name: bpy.props.StringProperty(name="物体名称", default="") # type: ignore
     original_object_name: bpy.props.StringProperty(name="原始物体名称", default="") # type: ignore
@@ -191,6 +268,11 @@ class SSMTNode_MultiFile_Export(SSMTNodeBase):
         row = box.row(align=True)
         row.prop_search(self, "temp_collection_name", bpy.data, "collections", text="", icon='GROUP')
         row.operator("ssmt.multifile_export_parse_collection", text="解析合集", icon='FILE_REFRESH').node_name = self.name
+        
+        box.separator()
+        
+        row = box.row(align=True)
+        row.operator("ssmt.multifile_export_check_vertex_count", text="检查顶点数", icon='CHECKMARK').node_name = self.name
     
     def get_current_object_info(self, export_index):
         """获取当前导出次数对应的物体信息"""
@@ -303,6 +385,7 @@ classes = (
     SSMT_OT_MultiFileExport_ParseCollection,
     SSMT_OT_MultiFileExport_MoveUp,
     SSMT_OT_MultiFileExport_MoveDown,
+    SSMT_OT_MultiFileExport_CheckVertexCount,
 )
 
 def register():
