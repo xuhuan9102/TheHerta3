@@ -45,17 +45,38 @@ class SSMT_OT_RefreshNodeObjectIDs(bpy.types.Operator):
                         obj_name = getattr(node, 'object_name', '')
                         obj_id = getattr(node, 'object_id', '')
                         
-                        if obj_name and not obj_id:
+                        if obj_name:
                             obj = bpy.data.objects.get(obj_name)
                             if obj:
-                                node.object_id = str(obj.as_pointer())
+                                new_obj_id = str(obj.as_pointer())
+                                if node.object_id != new_obj_id:
+                                    node.object_id = new_obj_id
+                                    updated_count += 1
+                            elif obj_id:
+                                node.object_id = ""
                                 updated_count += 1
+                    
+                    elif node.bl_idname == 'SSMTNode_MultiFile_Export':
+                        for item in node.object_list:
+                            obj_name = getattr(item, 'object_name', '')
+                            if obj_name:
+                                obj = bpy.data.objects.get(obj_name)
+                                if obj:
+                                    new_name = obj.name
+                                    if item.object_name != new_name:
+                                        item.object_name = new_name
+                                        updated_count += 1
+                                elif getattr(item, 'original_object_name', ''):
+                                    orig_obj = bpy.data.objects.get(item.original_object_name)
+                                    if orig_obj:
+                                        item.object_name = item.original_object_name
+                                        updated_count += 1
         
         if updated_count > 0:
-            self.report({'INFO'}, f"已更新 {updated_count} 个节点的物体ID关联")
+            self.report({'INFO'}, f"已更新 {updated_count} 个节点的物体引用")
             _update_node_to_object_id_mapping()
         else:
-            self.report({'INFO'}, "所有节点都已建立物体ID关联")
+            self.report({'INFO'}, "所有节点都已建立物体引用关联")
         
         return {'FINISHED'}
 
