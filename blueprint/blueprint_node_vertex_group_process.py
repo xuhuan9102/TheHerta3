@@ -97,7 +97,7 @@ class SSMTNode_VertexGroupProcess(SSMTNodeBase):
             target_hash = node_info['target_hash']
             node_type = node_info.get('type', 'match')
             
-            if target_hash and not obj_name.startswith(target_hash + "-"):
+            if target_hash and not obj_name.startswith(target_hash):
                 continue
             
             if node_type == 'input':

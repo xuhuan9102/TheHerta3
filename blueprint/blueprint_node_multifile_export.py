@@ -108,9 +108,6 @@ class SSMT_OT_MultiFileExport_SplitAnimation(bpy.types.Operator):
                 obj_name = f"{obj.name}_{frame:03d}"
                 new_obj = bpy.data.objects.new(obj_name, mesh_data)
                 
-                # 三角化网格（使用BEAUTY算法）
-                mesh_triangulate_beauty(new_obj)
-                
                 # 复制材质
                 for slot in obj.material_slots:
                     if slot.material:
