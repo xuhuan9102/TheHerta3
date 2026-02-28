@@ -319,7 +319,7 @@ class SSMT_OT_SwitchKey_AddSocket(bpy.types.Operator):
     node_name: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
-        tree = getattr(context.space_data, "edit_tree", None) or context.space_data.node_tree
+        tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
         if not tree:
              return {'CANCELLED'}
         node = tree.nodes.get(self.node_name)
@@ -336,7 +336,7 @@ class SSMT_OT_SwitchKey_RemoveSocket(bpy.types.Operator):
     node_name: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
-        tree = getattr(context.space_data, "edit_tree", None) or context.space_data.node_tree
+        tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
         if not tree:
              return {'CANCELLED'}
         node = tree.nodes.get(self.node_name)
@@ -459,7 +459,7 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
     def execute(self, context):
         global _is_viewing_group_objects
         
-        tree = getattr(context.space_data, "edit_tree", None) or context.space_data.node_tree
+        tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
         if not tree:
              return {'CANCELLED'}
         node = tree.nodes.get(self.node_name)
