@@ -57,6 +57,12 @@ class SSMTNode_VertexGroupMatch(SSMTNodeBase):
         default=True
     )
 
+    target_hash: bpy.props.StringProperty(
+        name="目标哈希",
+        description="应用此映射表的物体哈希标识（物体名称以'哈希-'开头时匹配），留空则应用于所有物体",
+        default=""
+    )
+
     def init(self, context):
         self.outputs.new('SSMTSocketObject', "Output")
         self.width = 300
@@ -82,6 +88,9 @@ class SSMTNode_VertexGroupMatch(SSMTNodeBase):
         
         row = box.row()
         row.prop(self, "rename_format")
+        
+        row = box.row()
+        row.prop(self, "target_hash")
         
         layout.separator()
         row = layout.row(align=True)

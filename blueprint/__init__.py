@@ -21,3 +21,4 @@ from .blueprint_node_postprocess_health import *
 from .blueprint_node_postprocess_slider import *
 from .blueprint_node_vertex_group_match import *
 from .blueprint_node_vertex_group_process import *
+from .blueprint_node_vertex_group_mapping_input import *

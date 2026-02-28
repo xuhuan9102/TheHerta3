@@ -749,6 +749,7 @@ class SSMT_MT_NodeMenu_Advanced(bpy.types.Menu):
         layout.separator()
         layout.operator("node.add_node", text="顶点组匹配", icon='GROUP').type = "SSMTNode_VertexGroupMatch"
         layout.operator("node.add_node", text="顶点组处理", icon='GROUP').type = "SSMTNode_VertexGroupProcess"
+        layout.operator("node.add_node", text="映射表输入", icon='TEXT').type = "SSMTNode_VertexGroupMappingInput"
 
 
 class SSMT_MT_NodeMenu_Preset(bpy.types.Menu):

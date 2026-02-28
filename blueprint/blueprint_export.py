@@ -443,6 +443,10 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                     ObjUtils._apply_all_modifiers(copy_obj)
                     end_operation("ApplyArmature")
                 
+                node_or_item.original_object_name = original_name
+                copy_mapping[original_name] = (copy_obj, node_or_item)
+                node_or_item.object_name = copy_obj.name
+                
                 start_operation("VertexGroupProcess", obj_name)
                 self._apply_vg_process_nodes(copy_obj, vg_process_nodes)
                 end_operation("VertexGroupProcess")
@@ -458,9 +462,6 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                     ObjUtils.flip_face_normals(copy_obj)
                     end_operation("MirrorWorkflow_Post")
                 
-                node_or_item.original_object_name = original_name
-                copy_mapping[original_name] = (copy_obj, node_or_item)
-                node_or_item.object_name = copy_obj.name
                 print(f"创建副本: {original_name} -> {copy_obj.name}")
         
         return copy_mapping
@@ -552,6 +553,13 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             manager.cleanup()
             return None
         
+        vg_process_nodes = self._get_vg_process_nodes()
+        
+        if vg_process_nodes:
+            print(f"[ParallelPreprocess] 开始执行顶点组处理...")
+            for original_name, (copy_obj, node_or_item) in copy_mapping.items():
+                self._apply_vg_process_nodes(copy_obj, vg_process_nodes)
+        
         start_operation("ParallelCleanup")
         manager.cleanup()
         end_operation("ParallelCleanup")
@@ -579,34 +587,52 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         return objects
     
     def _get_vg_process_nodes(self):
-        """获取当前蓝图中所有顶点组处理节点"""
+        """获取当前蓝图中所有顶点组处理节点，按照连接顺序排序"""
         nodes = []
         tree = BlueprintExportHelper.get_current_blueprint_tree()
         if not tree:
             return nodes
         
         visited_blueprints = set()
+        visited_nodes = set()
         
-        def collect_vg_process_nodes(current_tree):
-            """递归收集顶点组处理节点，包括嵌套蓝图中的节点"""
-            if current_tree.name in visited_blueprints:
+        def collect_vg_process_nodes_in_order(current_node, current_tree):
+            """按照连接顺序递归收集顶点组处理节点"""
+            if current_node in visited_nodes:
                 return
-            visited_blueprints.add(current_tree.name)
+            visited_nodes.add(current_node)
             
-            for node in current_tree.nodes:
-                if node.mute:
-                    continue
-                
-                if node.bl_idname == 'SSMTNode_VertexGroupProcess':
-                    nodes.append(node)
-                elif node.bl_idname == 'SSMTNode_Blueprint_Nest':
-                    blueprint_name = getattr(node, 'blueprint_name', '')
-                    if blueprint_name and blueprint_name not in visited_blueprints:
-                        nested_tree = bpy.data.node_groups.get(blueprint_name)
-                        if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
-                            collect_vg_process_nodes(nested_tree)
+            if current_node.mute:
+                return
+            
+            if current_node.bl_idname == 'SSMTNode_VertexGroupProcess':
+                nodes.append(current_node)
+            elif current_node.bl_idname == 'SSMTNode_Blueprint_Nest':
+                blueprint_name = getattr(current_node, 'blueprint_name', '')
+                if blueprint_name and blueprint_name not in visited_blueprints:
+                    visited_blueprints.add(blueprint_name)
+                    nested_tree = bpy.data.node_groups.get(blueprint_name)
+                    if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
+                        nested_output = None
+                        for n in nested_tree.nodes:
+                            if n.bl_idname == 'SSMTNode_Result_Output':
+                                nested_output = n
+                                break
+                        if nested_output:
+                            collect_vg_process_nodes_in_order(nested_output, nested_tree)
+            
+            for input_socket in current_node.inputs:
+                for link in input_socket.links:
+                    collect_vg_process_nodes_in_order(link.from_node, current_tree)
         
-        collect_vg_process_nodes(tree)
+        for output_node in tree.nodes:
+            if output_node.bl_idname == 'SSMTNode_Result_Output':
+                collect_vg_process_nodes_in_order(output_node, tree)
+                break
+        
+        nodes.reverse()
+        
+        print(f"[VGProcess] 收集到 {len(nodes)} 个顶点组处理节点，顺序: {[n.name for n in nodes]}")
         return nodes
     
     def _collect_vg_mapping_texts(self):
@@ -626,7 +652,9 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         
         for node in vg_process_nodes:
             node_tree = node.id_data
-            if self._is_object_connected_to_vg_process(obj_name, node, node_tree):
+            is_connected = self._is_object_connected_to_vg_process(obj_name, node, node_tree)
+            print(f"[VGProcess] 检查节点 {node.name} 是否连接到物体 {obj_name}: {is_connected}")
+            if is_connected:
                 result.append(node)
         
         return result
@@ -647,8 +675,10 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                             obj_node = link.from_node
                             if obj_node.bl_idname == 'SSMTNode_Object_Info':
                                 return getattr(obj_node, 'object_name', '')
-                            elif obj_node.bl_idname in ('SSMTNode_Object_Group', 'SSMTNode_ToggleKey', 'SSMTNode_SwitchKey'):
-                                return find_source_object_from_group_node(obj_node, current_tree)
+                            elif obj_node.bl_idname in ('SSMTNode_Object_Group', 'SSMTNode_ToggleKey', 'SSMTNode_SwitchKey', 'SSMTNode_VertexGroupProcess'):
+                                result = find_source_object_from_group_node(obj_node, current_tree, visited)
+                                if result:
+                                    return result
                 return None
             
             for input_socket in current_node.inputs:
@@ -659,16 +689,21 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             
             return None
         
-        def find_source_object_from_group_node(group_node, current_tree):
+        def find_source_object_from_group_node(group_node, current_tree, visited):
             """从组节点中找到源物体名称"""
+            if group_node in visited:
+                return None
+            
+            visited.add(group_node)
+            
             for input_socket in group_node.inputs:
                 if input_socket.is_linked:
                     for link in input_socket.links:
                         from_node = link.from_node
                         if from_node.bl_idname == 'SSMTNode_Object_Info':
                             return getattr(from_node, 'object_name', '')
-                        elif from_node.bl_idname in ('SSMTNode_Object_Group', 'SSMTNode_ToggleKey', 'SSMTNode_SwitchKey'):
-                            result = find_source_object_from_group_node(from_node, current_tree)
+                        elif from_node.bl_idname in ('SSMTNode_Object_Group', 'SSMTNode_ToggleKey', 'SSMTNode_SwitchKey', 'SSMTNode_VertexGroupProcess'):
+                            result = find_source_object_from_group_node(from_node, current_tree, visited)
                             if result:
                                 return result
             return None
@@ -688,24 +723,109 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         
         applicable_nodes = self._get_vg_process_nodes_for_object(obj.name, vg_process_nodes)
         
-        for node in applicable_nodes:
+        print(f"[VGProcess] 物体 {obj.name} 找到 {len(applicable_nodes)} 个适用的顶点组处理节点")
+        
+        for i, node in enumerate(applicable_nodes):
             try:
+                print(f"[VGProcess] 开始执行第 {i+1} 个节点: {node.name}")
                 start_operation(f"VGProcess_{node.name}", obj.name)
                 stats = node.process_object(obj)
                 if any(v > 0 for v in stats.values()):
                     print(f"[VGProcess] {obj.name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
                 end_operation(f"VGProcess_{node.name}")
+                print(f"[VGProcess] 完成执行第 {i+1} 个节点: {node.name}")
             except Exception as e:
                 print(f"[Process] 处理物体 {obj.name} 时出错: {e}")
+                import traceback
+                traceback.print_exc()
                 end_operation(f"VGProcess_{node.name}")
     
+
+class SSMTQuickPartialExport(bpy.types.Operator):
+    bl_idname = "ssmt.quick_partial_export"
+    bl_label = TR.translate("快速局部导出")
+    bl_description = "对当前选中的物体进行快速导出，自动创建临时蓝图架构"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        selected_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        
+        if not selected_objects:
+            self.report({'WARNING'}, "请先选择要导出的网格物体")
+            return {'CANCELLED'}
+        
+        print(f"[QuickExport] 开始快速局部导出，选中物体数量: {len(selected_objects)}")
+        
+        GlobalConfig.read_from_main_json()
+        
+        temp_tree_name = f"_QuickExport_Temp_{GlobalConfig.workspacename}" if GlobalConfig.workspacename else "_QuickExport_Temp"
+        
+        temp_tree = bpy.data.node_groups.get(temp_tree_name)
+        if temp_tree:
+            bpy.data.node_groups.remove(temp_tree)
+        
+        temp_tree = bpy.data.node_groups.new(name=temp_tree_name, type='SSMTBlueprintTreeType')
+        temp_tree.use_fake_user = False
+        
+        try:
+            output_node = temp_tree.nodes.new('SSMTNode_Result_Output')
+            output_node.location = (600, 0)
+            
+            obj_nodes = []
+            y_offset = 0
+            
+            for obj in selected_objects:
+                obj_node = temp_tree.nodes.new('SSMTNode_Object_Info')
+                obj_node.object_name = obj.name
+                obj_node.location = (0, y_offset)
+                obj_nodes.append(obj_node)
+                y_offset -= 200
+            
+            if len(obj_nodes) == 1:
+                temp_tree.links.new(obj_nodes[0].outputs[0], output_node.inputs[0])
+            else:
+                group_node = temp_tree.nodes.new('SSMTNode_Object_Group')
+                group_node.location = (300, 0)
+                
+                for i, obj_node in enumerate(obj_nodes):
+                    while len(group_node.inputs) <= i:
+                        group_node.inputs.new('SSMTSocketObject', f"Input {len(group_node.inputs) + 1}")
+                    temp_tree.links.new(obj_node.outputs[0], group_node.inputs[i])
+                
+                temp_tree.links.new(group_node.outputs[0], output_node.inputs[0])
+            
+            print(f"[QuickExport] 临时蓝图树创建完成: {temp_tree_name}")
+            print(f"[QuickExport] 节点数量: {len(temp_tree.nodes)}, 连接数量: {len(temp_tree.links)}")
+            
+            bpy.ops.ssmt.generate_mod_blueprint(node_tree_name=temp_tree_name)
+            
+            self.report({'INFO'}, f"已导出 {len(selected_objects)} 个物体")
+            
+        except Exception as e:
+            print(f"[QuickExport] 导出失败: {e}")
+            import traceback
+            traceback.print_exc()
+            self.report({'ERROR'}, f"导出失败: {e}")
+            
+        finally:
+            if temp_tree:
+                try:
+                    bpy.data.node_groups.remove(temp_tree)
+                    print(f"[QuickExport] 已清理临时蓝图树: {temp_tree_name}")
+                except Exception as e:
+                    print(f"[QuickExport] 清理临时蓝图树失败: {e}")
+        
+        return {'FINISHED'}
+
 
 def register():
     bpy.utils.register_class(SSMTGenerateModBlueprint)
     bpy.utils.register_class(SSMTSelectGenerateModFolder)
+    bpy.utils.register_class(SSMTQuickPartialExport)
 
 
 def unregister():
     bpy.utils.unregister_class(SSMTGenerateModBlueprint)
     bpy.utils.unregister_class(SSMTSelectGenerateModFolder)
+    bpy.utils.unregister_class(SSMTQuickPartialExport)
 

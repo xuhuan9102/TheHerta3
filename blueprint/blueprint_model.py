@@ -81,6 +81,11 @@ class BluePrintModel:
             # 如果是单纯的分组节点，则不进行任何处理直接传递下去
             self.parse_current_node(unknown_node, chain_key_list)
 
+        elif unknown_node.bl_idname == "SSMTNode_VertexGroupProcess":
+            # 如果是顶点组处理节点，则不进行任何处理直接传递下去
+            # 顶点组处理在预处理阶段已经完成，这里只需要继续解析节点链
+            self.parse_current_node(unknown_node, chain_key_list)
+
         elif unknown_node.bl_idname == "SSMTNode_ToggleKey":
             # 如果是按键开关节点，则添加一个Key，更新全局Key字典，更新Key列表并传递解析下去
             m_key = M_Key()

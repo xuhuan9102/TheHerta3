@@ -699,16 +699,7 @@ for obj_name in object_names:
             print(f"[Worker {{task_id}}] 三角化失败: {{e}}")
             traceback.print_exc()
         
-        # 4. 顶点组处理
-        print(f"[Worker {{task_id}}] 执行顶点组处理...")
-        try:
-            vg_stats = process_vertex_groups(copy_obj, vg_mapping_texts)
-            print(f"[Worker {{task_id}}] 顶点组处理完成: 重命名=" + str(vg_stats['renamed']) + ", 合并=" + str(vg_stats['merged']) + ", 清理=" + str(vg_stats['cleaned']) + ", 填充=" + str(vg_stats['filled']))
-        except Exception as e:
-            print(f"[Worker {{task_id}}] 顶点组处理失败: {{e}}")
-            traceback.print_exc()
-        
-        # 5. 非镜像工作流后处理 - 与单进程模式完全一致
+        # 4. 非镜像工作流后处理 - 与单进程模式完全一致
         if mirror_workflow:
             print(f"[Worker {{task_id}}] 执行非镜像工作流后处理...")
             try:
