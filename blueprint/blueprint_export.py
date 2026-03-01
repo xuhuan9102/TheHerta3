@@ -680,6 +680,16 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                     print(f"[VGProcess]{indent} 找到物体节点: {found_name}")
                     return [found_name]
             
+            elif current_node.bl_idname == 'SSMTNode_MultiFile_Export':
+                object_list = getattr(current_node, 'object_list', [])
+                for item in object_list:
+                    item_name = getattr(item, 'object_name', '')
+                    if item_name:
+                        object_names.append(item_name)
+                if object_names:
+                    print(f"[VGProcess]{indent} 找到多文件导出节点，包含 {len(object_names)} 个物体")
+                    return object_names
+            
             elif current_node.bl_idname == 'SSMTNode_Blueprint_Nest':
                 blueprint_name = getattr(current_node, 'blueprint_name', '')
                 if blueprint_name:
