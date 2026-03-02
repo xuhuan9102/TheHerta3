@@ -36,54 +36,6 @@ class ModModelEFMI:
             self.drawib_drawibmodel_dict[draw_ib] = draw_ib_model
 
  
-    def add_unity_vs_texture_override_vb_sections(self,config_ini_builder:M_IniBuilder,commandlist_ini_builder:M_IniBuilder,draw_ib_model:DrawIBModel):
-        # 声明TextureOverrideVB部分，只有使用GPU-PreSkinning时是直接替换hash对应槽位
-        d3d11GameType = draw_ib_model.d3d11GameType
-        draw_ib = draw_ib_model.draw_ib
-
-        # 只有GPU-PreSkinning需要生成TextureOverrideVB部分，CPU类型不需要
-        if not d3d11GameType.GPU_PreSkinning:
-            return
-
-        texture_override_vb_section = M_IniSection(M_SectionType.TextureOverrideVB)
-        texture_override_vb_section.append("; " + draw_ib)
-        for category_name in d3d11GameType.OrderedCategoryNameList:
-            category_hash = draw_ib_model.import_config.category_hash_dict[category_name]
-            category_slot = d3d11GameType.CategoryExtractSlotDict[category_name]
-
-            texture_override_vb_name_suffix = "VB_" + draw_ib + "_" + draw_ib_model.draw_ib_alias + "_" + category_name
-            texture_override_vb_section.append("[TextureOverride_" + texture_override_vb_name_suffix + "]")
-            texture_override_vb_section.append("hash = " + category_hash)
-
-            
-            # (1) 先初始化CommandList
-            drawtype_indent_prefix = ""
-
-            
-            # 如果出现了VertexLimitRaise，Texcoord槽位需要检测filter_index才能替换
-            filterindex_indent_prefix = ""
-     
-
-            # 遍历获取所有在当前分类hash下进行替换的分类，并添加对应的资源替换
-            for original_category_name, draw_category_name in d3d11GameType.CategoryDrawCategoryDict.items():
-                if category_name == draw_category_name:
-                    category_original_slot = d3d11GameType.CategoryExtractSlotDict[original_category_name]
-                    texture_override_vb_section.append(filterindex_indent_prefix + drawtype_indent_prefix + category_original_slot + " = Resource" + draw_ib + original_category_name)
-
-
-
-            
-    
-            
-            # 分支架构，如果是Position则需提供激活变量
-            if category_name == d3d11GameType.CategoryDrawCategoryDict["Position"]:
-                if len(draw_ib_model.key_name_mkey_dict.keys()) != 0:
-                    texture_override_vb_section.append("$active" + str(M_GlobalKeyCounter.generated_mod_number) + " = 1")
-
-            texture_override_vb_section.new_line()
-
-
-        config_ini_builder.append_section(texture_override_vb_section)
 
     def add_unity_vs_texture_override_ib_sections(self,config_ini_builder:M_IniBuilder,commandlist_ini_builder:M_IniBuilder,draw_ib_model:DrawIBModel):
         texture_override_ib_section = M_IniSection(M_SectionType.TextureOverrideIB)
@@ -179,40 +131,6 @@ class ModModelEFMI:
             
         config_ini_builder.append_section(texture_override_ib_section)
 
-    def add_unity_vs_texture_override_vlr_section(self,config_ini_builder:M_IniBuilder,commandlist_ini_builder:M_IniBuilder,draw_ib_model:DrawIBModel):
-        '''
-        Add VertexLimitRaise section, UnityVS style.
-        Only Unity VertexShader GPU-PreSkinning use this.
-
-        格式问题：
-        override_byte_stride = 40
-        override_vertex_count = 14325
-        由于这个格式并未添加到CommandList的解析中，所以没法单独写在CommandList里，只能写在TextureOverride下面
-        所以我们这个VertexLimitRaise部分直接整体写入CommandList.ini中
-
-        这个部分由于有一个Hash值，所以如果需要加密Mod并且让Hash值修复脚本能够运作的话，
-        可以在最终制作完成Mod后，手动把这个VertexLimitRaise部分放到Config.ini中
-        '''
-        d3d11GameType = draw_ib_model.d3d11GameType
-        draw_ib = draw_ib_model.draw_ib
-        if d3d11GameType.GPU_PreSkinning:
-            vertexlimit_section = M_IniSection(M_SectionType.TextureOverrideVertexLimitRaise)
-            
-
-            vertexlimit_section_name_suffix =  draw_ib + "_" + draw_ib_model.draw_ib_alias + "_VertexLimitRaise"
-            vertexlimit_section.append("[TextureOverride_" + vertexlimit_section_name_suffix + "]")
-            vertexlimit_section.append("hash = " + draw_ib_model.import_config.vertex_limit_hash)
-            
-     
-
-            vertexlimit_section.append("override_byte_stride = " + str(d3d11GameType.CategoryStrideDict["Position"]))
-            vertexlimit_section.append("override_vertex_count = " + str(draw_ib_model.draw_number))
-            vertexlimit_section.append("uav_byte_stride = 4")
-
-            
-            vertexlimit_section.new_line()
-
-            commandlist_ini_builder.append_section(vertexlimit_section)
 
     def add_unity_vs_resource_vb_sections(self,ini_builder,draw_ib_model:DrawIBModel):
         '''
@@ -338,13 +256,7 @@ class ModModelEFMI:
 
     def generate_unity_vs_config_ini(self):
         '''
-        Supported Games:
-
-        - Honkai Impact 3rd
-        - Honkai StarRail
-        - Zenless Zone Zero
-        - Bloody Spell
-        - Unity-CPU-PreSkinning (All DX11 Unity games who allow 3Dmigoto inject, mostly used by GF2 now.)
+        EFMI
         '''
         config_ini_builder = M_IniBuilder()
 
@@ -354,10 +266,6 @@ class ModModelEFMI:
         for draw_ib, draw_ib_model in self.drawib_drawibmodel_dict.items():
             print("Generating Config INI for DrawIB: " + draw_ib)
 
-            if GlobalConfig.logic_name != LogicName.YYSLS:
-                self.add_unity_vs_texture_override_vlr_section(config_ini_builder=config_ini_builder,commandlist_ini_builder=config_ini_builder,draw_ib_model=draw_ib_model)
-            
-            # self.add_unity_vs_texture_override_vb_sections(config_ini_builder=config_ini_builder,commandlist_ini_builder=config_ini_builder,draw_ib_model=draw_ib_model)
             self.add_unity_vs_texture_override_ib_sections(config_ini_builder=config_ini_builder,commandlist_ini_builder=config_ini_builder,draw_ib_model=draw_ib_model)
             self.add_unity_vs_resource_vb_sections(ini_builder=config_ini_builder,draw_ib_model=draw_ib_model)
             self.add_resource_texture_sections(ini_builder=config_ini_builder,draw_ib_model=draw_ib_model)
