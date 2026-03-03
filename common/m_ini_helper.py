@@ -13,10 +13,12 @@ from ..base.obj_data_model import ObjDataModel
 from .workspace_helper import WorkSpaceHelper
 from ..utils.format_utils import Fatal
 from ..blueprint.blueprint_export_helper import BlueprintExportHelper
+from ..base.m_draw_indexed import M_DrawIndexed, M_DrawIndexedInstanced
 
 class M_IniHelper:
     @classmethod
     def get_drawindexed_str_list(cls,ordered_draw_obj_model_list) -> list[str]:
+        # 传统的使用DrawIndexed方式调用这个
         # 在输出之前，我们需要根据condition对obj_model进行分组
         condition_str_obj_model_list_dict:dict[str,list[ObjDataModel]] = {}
         for obj_model in ordered_draw_obj_model_list:
@@ -44,7 +46,46 @@ class M_IniHelper:
 
         return drawindexed_str_list
     
+    @classmethod
+    def get_drawindexed_instanced_str_list(cls,ordered_draw_obj_model_list) -> list[str]:
+        # 使用DrawIndexedInstanced方式调用这个
+        # 在输出之前，我们需要根据condition对obj_model进行分组
+        condition_str_obj_model_list_dict:dict[str,list[ObjDataModel]] = {}
+        for obj_model in ordered_draw_obj_model_list:
 
+            obj_model_list = condition_str_obj_model_list_dict.get(obj_model.condition.condition_str,[])
+            
+            obj_model_list.append(obj_model)
+            condition_str_obj_model_list_dict[obj_model.condition.condition_str] = obj_model_list
+        
+        drawindexed_str_list:list[str] = []
+        for condition_str, obj_model_list in condition_str_obj_model_list_dict.items():
+            if condition_str != "":
+                drawindexed_str_list.append("if " + condition_str)
+                for obj_model in obj_model_list:
+                    display_name = getattr(obj_model, 'display_name', obj_model.obj_name)
+                    drawindexed_str_list.append("  ; [mesh:" + display_name + "] [vertex_count:" + str(obj_model.drawindexed_obj.UniqueVertexCount) + "]" )
+                    
+                    drawindexed_instanced_obj = M_DrawIndexedInstanced()
+                    
+                    drawindexed_instanced_obj.IndexCountPerInstance = obj_model.drawindexed_obj.DrawNumber
+                    drawindexed_instanced_obj.StartIndexLocation = obj_model.drawindexed_obj.DrawStartIndex
+
+                    drawindexed_str_list.append("  " + drawindexed_instanced_obj.get_draw_str())
+                drawindexed_str_list.append("endif")
+            else:
+                for obj_model in obj_model_list:
+                    display_name = getattr(obj_model, 'display_name', obj_model.obj_name)
+                    drawindexed_str_list.append("; [mesh:" + display_name + "] [vertex_count:" + str(obj_model.drawindexed_obj.UniqueVertexCount) + "]" )
+                    
+                    drawindexed_instanced_obj = M_DrawIndexedInstanced()
+                    drawindexed_instanced_obj.IndexCountPerInstance = obj_model.drawindexed_obj.DrawNumber
+                    drawindexed_instanced_obj.StartIndexLocation = obj_model.drawindexed_obj.DrawStartIndex
+
+                    drawindexed_str_list.append("  " + drawindexed_instanced_obj.get_draw_str())
+            drawindexed_str_list.append("")
+
+        return drawindexed_str_list
 
     @classmethod
     def generate_hash_style_texture_ini(cls,ini_builder:M_IniBuilder,drawib_drawibmodel_dict:dict[str,DrawIBModel]):
