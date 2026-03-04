@@ -454,21 +454,44 @@ class SSMTNode_Result_Output(SSMTNodeBase):
 
 
 class SSMT_OT_View_Group_Objects(bpy.types.Operator):
-    '''递归解析当前组下面所有的物体并放到一个新的窗口中展示，注意组节点最好不要包含按键切换，否则会同时展示所有切换分支内容'''
+    '''递归解析当前组下面所有的物体并在当前3D视图中展示，点击切换局部视图，注意组节点最好不要包含按键切换，否则会同时展示所有切换分支内容'''
     bl_idname = "ssmt.view_group_objects"
     bl_label = "View Group Objects"
     
     node_name: bpy.props.StringProperty() # type: ignore
 
     def execute(self, context):
-        global _is_viewing_group_objects
-        
         tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
         if not tree:
              return {'CANCELLED'}
         node = tree.nodes.get(self.node_name)
         if not node:
              return {'CANCELLED'}
+
+        view_3d_area = None
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'VIEW_3D':
+                    view_3d_area = area
+                    break
+            if view_3d_area:
+                break
+        
+        if not view_3d_area:
+            self.report({'WARNING'}, "No 3D View found")
+            return {'CANCELLED'}
+
+        in_local_view = False
+        for space in view_3d_area.spaces:
+            if space.type == 'VIEW_3D' and space.local_view:
+                in_local_view = True
+                break
+        
+        if in_local_view:
+            with context.temp_override(area=view_3d_area):
+                bpy.ops.view3d.localview()
+            self.report({'INFO'}, "Exited local view")
+            return {'FINISHED'}
 
         objects_to_show = set()
         checked_nodes = set()
@@ -503,36 +526,19 @@ class SSMT_OT_View_Group_Objects(bpy.types.Operator):
         for obj in objects_to_show:
             obj.select_set(True)
 
-        _is_viewing_group_objects = True
-        
-        try:
-            bpy.ops.wm.window_new()
-            new_window = context.window_manager.windows[-1]
+        region = next((r for r in view_3d_area.regions if r.type == 'WINDOW'), None)
+        if region:
+            with context.temp_override(area=view_3d_area, region=region):
+                try:
+                    bpy.ops.view3d.localview()
+                    bpy.ops.view3d.view_axis(type='FRONT')
+                    bpy.ops.view3d.view_selected()
+                    if view_3d_area.spaces.active:
+                        view_3d_area.spaces.active.shading.type = 'SOLID'
+                except Exception as e:
+                    print(f"View setup warning: {e}")
 
-            if new_window.screen and new_window.screen.areas:
-                area = new_window.screen.areas[0]
-                area.type = 'VIEW_3D'
-                area.ui_type = 'VIEW_3D'
-                
-                region = next((r for r in area.regions if r.type == 'WINDOW'), None)
-                
-                if region:
-                    with context.temp_override(window=new_window, area=area, region=region):
-                        try:
-                            if area.spaces.active.region_3d.is_perspective:
-                                bpy.ops.view3d.view_persportho() 
-                            
-                            bpy.ops.view3d.localview() 
-                            bpy.ops.view3d.view_axis(type='FRONT')
-                            bpy.ops.view3d.view_selected()
-                            
-                            if area.spaces.active:
-                                area.spaces.active.shading.type = 'SOLID'
-                        except Exception as e:
-                            print(f"View setup warning: {e}")
-        finally:
-            _is_viewing_group_objects = False
-
+        self.report({'INFO'}, f"Showing {len(objects_to_show)} objects in local view")
         return {'FINISHED'}
 
 
