@@ -439,6 +439,60 @@ class BlueprintExportHelper:
         
         print("所有后处理节点执行完成")
 
+    @staticmethod
+    def get_cross_ib_nodes():
+        """获取当前蓝图及所有嵌套蓝图中的跨IB节点"""
+        tree = BlueprintExportHelper.get_current_blueprint_tree()
+        if not tree:
+            return []
+        
+        cross_ib_nodes = []
+        visited_blueprints = set()
+        
+        def collect_cross_ib_nodes(current_tree):
+            """递归收集跨IB节点"""
+            if current_tree.name in visited_blueprints:
+                return
+            visited_blueprints.add(current_tree.name)
+            
+            for node in current_tree.nodes:
+                if node.mute:
+                    continue
+                if node.bl_idname == 'SSMTNode_CrossIB':
+                    cross_ib_nodes.append(node)
+                elif node.bl_idname == 'SSMTNode_Blueprint_Nest':
+                    blueprint_name = getattr(node, 'blueprint_name', '')
+                    if blueprint_name and blueprint_name != 'NONE':
+                        nested_tree = bpy.data.node_groups.get(blueprint_name)
+                        if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
+                            collect_cross_ib_nodes(nested_tree)
+        
+        collect_cross_ib_nodes(tree)
+        return cross_ib_nodes
+    
+    @staticmethod
+    def has_cross_ib_nodes():
+        """检查当前蓝图中是否存在跨IB节点"""
+        cross_ib_nodes = BlueprintExportHelper.get_cross_ib_nodes()
+        return len(cross_ib_nodes) > 0
+    
+    @staticmethod
+    def get_cross_ib_info():
+        """获取当前蓝图中所有跨IB节点的映射信息"""
+        cross_ib_nodes = BlueprintExportHelper.get_cross_ib_nodes()
+        
+        cross_ib_info_dict = {}
+        for node in cross_ib_nodes:
+            ib_mapping = node.get_ib_mapping_dict()
+            for source_ib, target_ib_list in ib_mapping.items():
+                if source_ib not in cross_ib_info_dict:
+                    cross_ib_info_dict[source_ib] = []
+                for target_ib in target_ib_list:
+                    if target_ib not in cross_ib_info_dict[source_ib]:
+                        cross_ib_info_dict[source_ib].append(target_ib)
+        
+        return cross_ib_info_dict
+
 
 
             

@@ -39,6 +39,15 @@ class BluePrintModel:
         # 嵌套蓝图访问记录，防止循环引用
         self.visited_blueprints:set[str] = set()
 
+        # 跨IB信息字典: {源IB: [目标IB列表]}
+        self.cross_ib_info_dict:dict[str,list[str]] = {}
+        
+        # 跨IB节点列表
+        self.cross_ib_nodes:list = []
+        
+        # 连接到跨IB节点的物体名称集合
+        self.cross_ib_object_names:set[str] = set()
+
         # 从输出节点开始递归解析所有的节点
         tree = BlueprintExportHelper.get_current_blueprint_tree()
         output_node = BlueprintExportHelper.get_node_from_bl_idname(tree, 'SSMTNode_Result_Output')
@@ -250,6 +259,31 @@ class BluePrintModel:
             # 需要继续递归解析后面的节点
             self.parse_current_node(unknown_node, chain_key_list)
 
+        elif unknown_node.bl_idname == "SSMTNode_CrossIB":
+            # 跨IB节点：收集跨IB映射信息，继续传递解析
+            self.cross_ib_nodes.append(unknown_node)
+            
+            ib_mapping = unknown_node.get_ib_mapping_dict()
+            for source_ib, target_ib_list in ib_mapping.items():
+                if source_ib not in self.cross_ib_info_dict:
+                    self.cross_ib_info_dict[source_ib] = []
+                for target_ib in target_ib_list:
+                    if target_ib not in self.cross_ib_info_dict[source_ib]:
+                        self.cross_ib_info_dict[source_ib].append(target_ib)
+            
+            print(f"[CrossIB] 解析跨IB节点: {unknown_node.name}, 映射: {ib_mapping}")
+            
+            # 收集连接到跨IB节点的物体信息
+            connected_objects = self._collect_cross_ib_objects(unknown_node)
+            print(f"[CrossIB] 连接到节点的物体数量: {len(connected_objects)}")
+            
+            # 将连接到跨IB节点的物体名称添加到集合中
+            for obj_info in connected_objects:
+                self.cross_ib_object_names.add(obj_info['object_name'])
+            
+            # 继续递归解析后面的节点
+            self.parse_current_node(unknown_node, chain_key_list)
+
         elif unknown_node.bl_idname == "SSMTNode_Blueprint_Nest":
             # 蓝图嵌套节点：递归解析嵌套蓝图中的所有节点
             blueprint_name = getattr(unknown_node, 'blueprint_name', '')
@@ -277,6 +311,74 @@ class BluePrintModel:
                 self.parse_current_node(nested_output_node, chain_key_list)
             else:
                 print(f"[Blueprint Nest] 警告: 嵌套蓝图 {blueprint_name} 没有输出节点")
+
+    def _collect_cross_ib_objects(self, cross_ib_node):
+        '''
+        递归收集连接到跨IB节点的所有物体信息
+        支持中间有其他节点（如顶点组处理、改名节点等）的情况
+        '''
+        connected_objects = []
+        visited_nodes = set()
+        
+        PASS_THROUGH_NODES = {
+            "SSMTNode_Object_Group",
+            "SSMTNode_VertexGroupProcess",
+            "SSMTNode_Object_Name_Modify",
+            "SSMTNode_ToggleKey",
+            "SSMTNode_SwitchKey",
+            "SSMTNode_ShapeKey",
+            "SSMTNode_VertexGroupMatch",
+            "SSMTNode_VertexGroupMappingInput",
+            "SSMTNode_DataType",
+            "SSMTNode_CrossIB",
+        }
+        
+        def recursive_collect(node):
+            if node in visited_nodes:
+                return
+            visited_nodes.add(node)
+            
+            if node.bl_idname == "SSMTNode_Object_Info":
+                obj_name = getattr(node, 'object_name', '')
+                if obj_name:
+                    connected_objects.append({
+                        'node': node,
+                        'object_name': obj_name,
+                        'draw_ib': getattr(node, 'draw_ib', '')
+                    })
+                    print(f"[CrossIB] 收集到物体: {obj_name}")
+            
+            elif node.bl_idname == "SSMTNode_MultiFile_Export":
+                if hasattr(node, 'object_list'):
+                    for item in node.object_list:
+                        obj_name = getattr(item, 'object_name', '')
+                        if obj_name:
+                            connected_objects.append({
+                                'node': node,
+                                'object_name': obj_name,
+                                'draw_ib': getattr(item, 'draw_ib', '')
+                            })
+                            print(f"[CrossIB] 收集到多文件导出物体: {obj_name}")
+            
+            elif node.bl_idname in PASS_THROUGH_NODES:
+                for input_socket in node.inputs:
+                    if input_socket.is_linked:
+                        for link in input_socket.links:
+                            recursive_collect(link.from_node)
+            
+            else:
+                for input_socket in node.inputs:
+                    if input_socket.is_linked:
+                        for link in input_socket.links:
+                            recursive_collect(link.from_node)
+        
+        for input_socket in cross_ib_node.inputs:
+            if input_socket.is_linked:
+                for link in input_socket.links:
+                    recursive_collect(link.from_node)
+        
+        print(f"[CrossIB] 总共收集到 {len(connected_objects)} 个物体")
+        return connected_objects
 
 
 
