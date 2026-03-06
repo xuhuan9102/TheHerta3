@@ -28,6 +28,12 @@ class M_SectionType:
     CreditInfo = "CreditInfo"
     CommandList = "CommandList"
 
+    # 跨IB相关Section类型
+    CrossIBPresent = "CrossIBPresent"
+    ResourceID = "ResourceID"
+    CrossIBShaderOverride = "CrossIBShaderOverride"
+    CrossIBTextureOverride = "CrossIBTextureOverride"
+
 
 class M_IniSection:
     def __init__(self,section_type:M_SectionType) -> None:
@@ -135,6 +141,10 @@ class M_IniBuilder:
         pass
 
     def save_to_file(self,config_ini_path:str):
+        self.__append_section_line(M_SectionType.CrossIBPresent)
+        
+        self.__append_section_line(M_SectionType.ResourceID)
+
         self.__append_section_line(M_SectionType.NameSpace)
 
         self.__append_section_line(M_SectionType.Key)

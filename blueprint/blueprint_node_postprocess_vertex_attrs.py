@@ -32,7 +32,7 @@ class VertexAttributeItem(bpy.types.PropertyGroup):
         ],
         default='float3'
     )
-    attr_name: bpy.props.StringProperty(name="属性名称", description="顶点属性的名称", default="position", maxlen=256, update=lambda self, context: self.id_data.update_node_width([item.attr_name for item in self.id_data.vertex_attributes]))
+    attr_name: bpy.props.StringProperty(name="属性名称", description="顶点属性的名称", default="position", maxlen=256)
 
 
 class SSMTNode_PostProcess_VertexAttrs(SSMTNode_PostProcess_Base):
@@ -62,19 +62,6 @@ class SSMTNode_PostProcess_VertexAttrs(SSMTNode_PostProcess_Base):
 
     def get_vertex_struct_definition(self):
         """获取顶点属性结构体定义字符串"""
-        if not self.vertex_attributes or len(self.vertex_attributes) == 0:
-            return "struct VertexAttributes {\n    float3 position;\n    float3 normal;\n    float4 tangent;\n};"
-        
-        struct_lines = ["struct VertexAttributes {"]
-        for item in self.vertex_attributes:
-            if item.attr_type and item.attr_name:
-                struct_lines.append(f"    {item.attr_type} {item.attr_name};")
-        struct_lines.append("};")
-        
-        return "\n".join(struct_lines)
-
-    def get_shader_struct_definition(self):
-        """获取着色器结构体定义代码"""
         if not self.vertex_attributes or len(self.vertex_attributes) == 0:
             return "struct VertexAttributes {\n    float3 position;\n    float3 normal;\n    float4 tangent;\n};"
         

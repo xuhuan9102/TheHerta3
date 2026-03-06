@@ -83,13 +83,25 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                     stripped_line = line.strip()
                     mesh_match = re.search(r'\[mesh:([^\]]+)\]', stripped_line)
                     if mesh_match: current_mesh_name = mesh_match.group(1).strip(); continue
-                    if current_mesh_name and stripped_line.lower().startswith('drawindexed'):
-                        try:
-                            parts = [int(p.strip()) for p in stripped_line.split('=')[1].strip().split(',')]
-                            if len(parts) == 3:
-                                draw_info[current_mesh_name] = {'draw_params': tuple(parts), 'ib_path': ib_path}
-                            current_mesh_name = None
-                        except (ValueError, IndexError): current_mesh_name = None
+                    if current_mesh_name:
+                        lower_line = stripped_line.lower()
+                        if lower_line.startswith('drawindexed '):
+                            try:
+                                parts = [int(p.strip()) for p in stripped_line.split('=')[1].strip().split(',')]
+                                if len(parts) == 3:
+                                    draw_info[current_mesh_name] = {'draw_params': tuple(parts), 'ib_path': ib_path}
+                                current_mesh_name = None
+                            except (ValueError, IndexError): current_mesh_name = None
+                        elif lower_line.startswith('drawindexedinstanced '):
+                            try:
+                                parts = [p.strip() for p in stripped_line.split('=')[1].strip().split(',')]
+                                if len(parts) >= 5:
+                                    index_count = int(parts[0])
+                                    start_index_location = int(parts[2]) if parts[2].lstrip('-').isdigit() else 0
+                                    base_vertex_location = int(parts[3]) if parts[3].lstrip('-').isdigit() else 0
+                                    draw_info[current_mesh_name] = {'draw_params': (index_count, start_index_location, base_vertex_location), 'ib_path': ib_path}
+                                current_mesh_name = None
+                            except (ValueError, IndexError): current_mesh_name = None
         return draw_info
 
     def _calculate_vertex_range(self, ib_path, draw_params):

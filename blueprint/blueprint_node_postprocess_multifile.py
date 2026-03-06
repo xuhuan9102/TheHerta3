@@ -96,6 +96,58 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
             return vertex_attrs_node.get_vertex_struct_definition()
         return None
 
+    @staticmethod
+    def parse_vertex_struct(struct_definition):
+        """解析顶点属性结构体定义，计算总字节数和float数量"""
+        if not struct_definition or not struct_definition.strip():
+            return None
+        
+        TYPE_SIZES = {
+            'float': 4, 'float2': 8, 'float3': 12, 'float4': 16,
+            'int': 4, 'int2': 8, 'int3': 12, 'int4': 16,
+            'uint': 4, 'uint2': 8, 'uint3': 12, 'uint4': 16,
+            'half': 2, 'half2': 4, 'half3': 6, 'half4': 8,
+            'double': 8, 'double2': 16, 'double3': 24, 'double4': 32,
+        }
+        
+        total_bytes = 0
+        total_floats = 0
+        attributes = []
+        
+        lines = struct_definition.split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('//') or line.startswith('/*') or line.startswith('*'):
+                continue
+            
+            line = line.rstrip(';').strip()
+            
+            parts = line.split()
+            if len(parts) >= 2:
+                type_name = parts[0]
+                var_name = parts[1].rstrip(';')
+                
+                if type_name in TYPE_SIZES:
+                    byte_size = TYPE_SIZES[type_name]
+                    total_bytes += byte_size
+                    total_floats += byte_size // 4
+                    attributes.append({'type': type_name, 'name': var_name, 'size': byte_size})
+        
+        if total_bytes == 0:
+            return None
+        
+        return (total_bytes, total_floats, attributes)
+
+    def _get_vertex_size(self):
+        """获取顶点大小（以float数量计）"""
+        struct_definition = self._get_vertex_struct_definition()
+        if struct_definition:
+            parsed = self.parse_vertex_struct(struct_definition)
+            if parsed:
+                _, num_floats, _ = parsed
+                return num_floats
+        return 10
+
     def _update_shader_file(self, shader_path):
         """更新着色器文件"""
         try:
@@ -144,7 +196,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
             else:
                 deltas = target_buffer.copy()
 
-            vertex_size = 10
+            vertex_size = self._get_vertex_size()
             changed_indices = []
             changed_values = []
 
@@ -170,7 +222,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
 
             position_deltas_array = np.array(changed_values, dtype=np.float32)
 
-            print(f"创建紧凑缓冲区: {len(changed_indices)}个顶点变化，原始顶点数: {len(deltas) // vertex_size}")
+            print(f"创建紧凑缓冲区: {len(changed_indices)}个顶点变化，原始顶点数: {len(deltas) // vertex_size}，顶点大小: {vertex_size}个float")
 
             return map_array, position_deltas_array
         except Exception as e:
