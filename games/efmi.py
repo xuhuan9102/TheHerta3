@@ -139,7 +139,7 @@ class ModModelEFMI:
             ("ShaderOverridevs10", "ac358c21b925075b", "201"),
             ("ShaderOverridevs1", "b1ca4834786821dd", "202"),
             ("ShaderOverridevs33", "cdf11b288d812606", "203"),
-            ("ShaderOverridevs88", "8e1c0782db9e85d1", "303"),
+            ("ShaderOverridevs88", "8e1c0782db9e85d1", "203"),
             ("ShaderOverridevs22", "6d85d78157be3f4c", "200"),
         ]
         
@@ -175,8 +175,8 @@ class ModModelEFMI:
         for idx, ib in enumerate(sorted_ibs):
             resource_id_section.append(f"[ResourceID_{ib}]")
             resource_id_section.append("type = Buffer")
-            resource_id_section.append("format = R8_UINT")
-            resource_id_section.append(f"array = {idx * 1000 + 1}")
+            resource_id_section.append("format = R32_FLOAT")
+            resource_id_section.append(f"data = {idx * 1000}.0")
             resource_id_section.new_line()
         
         ini_builder.append_section(resource_id_section)
@@ -218,7 +218,7 @@ class ModModelEFMI:
         '''
         lines = []
         lines.append(";跨 iB 区域")
-        lines.append("if vs == 200")
+        lines.append("if vs == 200 || vs == 201")
         lines.append("    run = CustomShader_ExtractCB1")
         lines.append(f"    cs-t2 = ResourceID_{source_ib}")
         lines.append("    run = CustomShader_RecordBones")
@@ -375,7 +375,7 @@ class ModModelEFMI:
                 )
                 
                 texture_override_ib_section.append(self.vlr_filter_index_indent + ";跨 iB 区域(当前块身份绘制,所有需要跨 Ib 的物体引用)")
-                texture_override_ib_section.append(self.vlr_filter_index_indent + "if vs == 200")
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "if vs == 200 || vs == 201")
                 texture_override_ib_section.append(self.vlr_filter_index_indent + "    run = CustomShader_ExtractCB1")
                 texture_override_ib_section.append(self.vlr_filter_index_indent + f"    cs-t2 = ResourceID_{draw_ib}")
                 texture_override_ib_section.append(self.vlr_filter_index_indent + "    run = CustomShader_RecordBones")
@@ -422,7 +422,7 @@ class ModModelEFMI:
                         continue
                     
                     texture_override_ib_section.append(self.vlr_filter_index_indent + f";跨 IB 身份块,绘制 {source_ib} 需要跨 Ib 的物体引用")
-                    texture_override_ib_section.append(self.vlr_filter_index_indent + "if vs != 200")
+                    texture_override_ib_section.append(self.vlr_filter_index_indent + "if vs == 202 || vs == 203")
                     texture_override_ib_section.append(self.vlr_filter_index_indent + f"    cs-t2 = ResourceID_{source_ib}")
                     texture_override_ib_section.append(self.vlr_filter_index_indent + "    run = CustomShader_RedirectCB1")
                     texture_override_ib_section.append(self.vlr_filter_index_indent + "    ;跨 IB 块数据区域")

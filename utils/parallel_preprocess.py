@@ -404,6 +404,13 @@ def apply_modifiers_for_object_with_shape_keys(context, selected_modifiers, disa
         key_b.slider_min = list_properties[i]["slider_min"]
         key_b.value = list_properties[i]["value"]
         key_b.vertex_group = list_properties[i]["vertex_group"]
+        rel_key = list_properties[i]["relative_key"]
+        
+        for j in range(0, shapes_count):
+            key_brel = context.view_layer.objects.active.data.shape_keys.key_blocks[j]
+            if rel_key == key_brel.name:
+                key_b.relative_key = key_brel
+                break
     
     copy_mesh = copy_object.data
     bpy.data.objects.remove(copy_object, do_unlink=True)
@@ -434,29 +441,17 @@ def apply_all_modifiers(obj):
         )
     else:
         print(f"[Worker {{task_id}}] 物体 {{obj.name}} 无形态键，直接应用修改器")
-        # 优化：批量应用修改器，减少上下文切换
-        modifiers_to_apply = [mod for mod in obj.modifiers if mod.type != 'ARMATURE']
+        # 设置激活对象一次
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
         
-        if modifiers_to_apply:
-            # 设置激活对象一次
-            bpy.ops.object.select_all(action='DESELECT')
-            obj.select_set(True)
-            bpy.context.view_layer.objects.active = obj
-            
-            # 批量应用非ARMATURE修改器
-            for modifier in modifiers_to_apply:
-                try:
-                    bpy.ops.object.modifier_apply(modifier=modifier.name)
-                except Exception as e:
-                    print(f"[Worker {{task_id}}] Warning: Could not apply modifier {{modifier.name}}: {{e}}")
-            
-            # 单独处理ARMATURE修改器（最后应用）
-            armature_mods = [mod for mod in obj.modifiers if mod.type == 'ARMATURE']
-            for modifier in armature_mods:
-                try:
-                    bpy.ops.object.modifier_apply(modifier=modifier.name)
-                except Exception as e:
-                    print(f"[Worker {{task_id}}] Warning: Could not apply armature modifier {{modifier.name}}: {{e}}")
+        # 直接应用所有修改器（包括ARMATURE）
+        for modifier in obj.modifiers[:]:
+            try:
+                bpy.ops.object.modifier_apply(modifier=modifier.name)
+            except Exception as e:
+                print(f"[Worker {{task_id}}] Warning: Could not apply modifier {{modifier.name}}: {{e}}")
 
 
 def prepare_copy_for_mirror_workflow(copy_obj):
