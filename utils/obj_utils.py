@@ -841,44 +841,64 @@ class ObjUtils:
         为非镜像工作流准备副本
         在三角化之前执行
         
-        情况一：物体包含绑定但无形态键
+        优化：
+        1. 只检查启用的骨骼修改器
+        2. 禁用的修改器会在 _apply_all_modifiers 中删除
+        
+        情况一：物体包含启用的骨骼绑定但无形态键
           - 应用所有修改器
         
-        情况二：物体同时包含绑定和形态键
+        情况二：物体同时包含启用的骨骼绑定和形态键
           - 归零形态键获取基态
           - 应用修改器
           - 重新应用形态键（保留原始参数值）
+        
+        情况三：物体没有启用的骨骼绑定
+          - 直接跳过，后续会处理其他修改器
         '''
         if copy_obj.type != 'MESH':
             return
         
-        has_armature = any(mod.type == 'ARMATURE' for mod in copy_obj.modifiers)
+        has_enabled_armature = any(
+            mod.type == 'ARMATURE' and mod.show_viewport 
+            for mod in copy_obj.modifiers
+        )
         has_shape_keys = copy_obj.data.shape_keys is not None
         
-        if not has_armature:
-            print(f"物体 {copy_obj.name} 无骨骼绑定，无需前处理")
+        if not has_enabled_armature:
+            print(f"物体 {copy_obj.name} 无启用的骨骼绑定，无需前处理")
             return
         
         if has_shape_keys:
-            print(f"物体 {copy_obj.name} 有骨骼绑定和形态键，执行特殊前处理")
+            print(f"物体 {copy_obj.name} 有启用的骨骼绑定和形态键，执行特殊前处理")
             cls._prepare_with_shape_keys(copy_obj)
         else:
-            print(f"物体 {copy_obj.name} 有骨骼绑定无形态键，应用修改器")
+            print(f"物体 {copy_obj.name} 有启用的骨骼绑定无形态键，应用修改器")
             cls._apply_all_modifiers(copy_obj)
     
     @classmethod
     def _prepare_with_shape_keys(cls, obj):
         '''
         处理有形态键的绑定物体
-        1. 保存形态键参数
-        2. 归零形态键
-        3. 应用修改器
-        4. 重新应用形态键（保留原始参数值）
+        1. 删除禁用的修改器（优化：不应用不需要的修改器）
+        2. 保存形态键参数
+        3. 归零形态键
+        4. 应用修改器（使用优化算法）
+        5. 重新应用形态键（保留原始参数值）
         '''
         if obj.type != 'MESH':
             return
         
         if obj.data.shape_keys is None:
+            return
+        
+        disabled_modifiers = [mod for mod in obj.modifiers if not mod.show_viewport]
+        for mod in reversed(disabled_modifiers):
+            print(f"删除禁用的修改器: {mod.name} ({mod.type})")
+            obj.modifiers.remove(mod)
+        
+        if not obj.modifiers:
+            print(f"物体 {obj.name} 没有启用的修改器，跳过应用")
             return
         
         shape_key_values = {}
@@ -890,7 +910,7 @@ class ObjUtils:
         
         modifier_names = [mod.name for mod in obj.modifiers]
         if modifier_names:
-            ShapeKeyUtils.apply_modifiers_for_object_with_shape_keys(
+            ShapeKeyUtils.apply_modifiers_for_object_with_shape_keys_optimized(
                 bpy.context,
                 modifier_names,
                 disable_armatures=False
@@ -924,6 +944,10 @@ class ObjUtils:
         应用物体上的所有修改器
         将修改器效果烘焙到网格数据中
         如果物体有形态键，使用特殊方式处理
+        
+        优化：
+        1. 先删除禁用的修改器（不应用）
+        2. 只应用启用的修改器
         '''
         if obj.type != 'MESH':
             return
@@ -942,6 +966,15 @@ class ObjUtils:
             bpy.ops.object.select_all(action='DESELECT')
             obj.select_set(True)
             bpy.context.view_layer.objects.active = obj
+            
+            disabled_modifiers = [mod for mod in obj.modifiers if not mod.show_viewport]
+            for mod in reversed(disabled_modifiers):
+                print(f"删除禁用的修改器: {mod.name} ({mod.type})")
+                obj.modifiers.remove(mod)
+            
+            if not obj.modifiers:
+                print(f"物体 {obj.name} 没有启用的修改器")
+                return
             
             from .shapekey_utils import ShapeKeyUtils
             

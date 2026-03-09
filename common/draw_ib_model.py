@@ -31,7 +31,7 @@ class DrawIBModel:
 
 
     # 通过default_factory让每个类的实例的变量分割开来，不再共享类的静态变量
-    def __init__(self, draw_ib:str, branch_model:BluePrintModel):
+    def __init__(self, draw_ib:str, branch_model:BluePrintModel, skip_buffer_export:bool = False):
         # (1) 读取工作空间下的Config.json来设置当前DrawIB的别名
         draw_ib_alias_name_dict:dict[str,str] = ConfigUtils.get_draw_ib_alias_name_dict()
         self.draw_ib:str = draw_ib
@@ -74,8 +74,8 @@ class DrawIBModel:
         # 用于存储合并后的形态键数据
         self.shapekey_name_bytelist_dict:dict[str, numpy.ndarray] = {}
 
+        # 读取和解析 buffer 数据（预导出模式也需要这些数据来生成正确的 INI）
         self.__read_component_ib_buf_dict()
-            
         self.parse_categoryname_bytelist_dict()
 
         # (5) 导出Buffer文件，Export Index Buffer files, Category Buffer files. (And Export ShapeKey Buffer Files.(WWMI))
@@ -83,7 +83,12 @@ class DrawIBModel:
         self.PartName_IBResourceName_Dict = {}
         self.PartName_IBBufferFileName_Dict = {}
         self.combine_partname_ib_resource_and_filename_dict()
-        self.write_buffer_files()
+        
+        # 只在非预导出模式下写出 Buffer 文件
+        if not skip_buffer_export:
+            self.write_buffer_files()
+        else:
+            print(f"[PreviewExport] 跳过 Buffer 文件写入: {self.draw_ib}")
 
 
     def parse_categoryname_bytelist_dict(self):

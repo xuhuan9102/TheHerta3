@@ -399,6 +399,8 @@ class SSMTNode_Result_Output(SSMTNodeBase):
         if hasattr(self, "id_data") and self.id_data:
              op.node_tree_name = self.id_data.name
         
+        layout.prop(context.scene.properties_generate_mod, "preview_export_only", text="配置表预导出 (仅生成INI)")
+        
         if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
             layout.prop(context.scene.properties_wwmi, "ignore_muted_shape_keys")
             layout.prop(context.scene.properties_wwmi, "apply_all_modifiers")

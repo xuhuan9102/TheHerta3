@@ -129,6 +129,19 @@ class Properties_GenerateMod(bpy.types.PropertyGroup):
         '''
         return bpy.context.scene.properties_generate_mod.enable_performance_stats
 
+    preview_export_only: bpy.props.BoolProperty(
+        name="配置表预导出",
+        description="只生成 INI 配置文件，不处理文件、物体等。用于快速预览生成的配置内容",
+        default=False
+    ) # type: ignore
+
+    @classmethod
+    def preview_export_only(cls):
+        '''
+        bpy.context.scene.properties_generate_mod.preview_export_only
+        '''
+        return bpy.context.scene.properties_generate_mod.preview_export_only
+
 
 
     # use_specific_generate_mod_folder_path

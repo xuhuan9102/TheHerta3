@@ -281,11 +281,148 @@ def reset_shapekey_values(obj):
         kb.value = 0.0
 
 
+def apply_modifiers_for_object_with_shape_keys_optimized(context, selected_modifiers, disable_armatures=False):
+    """
+    优化版：使用 numpy 直接处理形态键数据
+    避免对每个形态键重复复制物体和应用修改器
+    """
+    import numpy
+    
+    if len(selected_modifiers) == 0:
+        return (True, None)
+    
+    obj = context.object
+    
+    modifiers_that_transform_vertices = {{'ARMATURE', 'CURVE', 'LATTICE', 'SHRINKWRAP', 'SIMPLE_DEFORM', 'BEND', 'HOOK'}}
+    has_transform_modifiers = False
+    for modifier in obj.modifiers:
+        if modifier.name in selected_modifiers and modifier.type in modifiers_that_transform_vertices and modifier.show_viewport:
+            has_transform_modifiers = True
+            break
+    
+    if has_transform_modifiers:
+        print(f"[Worker {{task_id}}] ShapeKeyOptimized: 检测到会变换顶点的修改器，回退到原始算法")
+        return apply_modifiers_for_object_with_shape_keys_legacy(context, selected_modifiers, disable_armatures)
+    
+    start_time = time.time()
+    
+    contains_mirror_with_merge = False
+    for modifier in obj.modifiers:
+        if modifier.name in selected_modifiers:
+            if modifier.type == 'MIRROR' and modifier.use_mirror_merge == True:
+                contains_mirror_with_merge = True
+    
+    disabled_armature_modifiers = []
+    if disable_armatures:
+        for modifier in obj.modifiers:
+            if modifier.name not in selected_modifiers and modifier.type == 'ARMATURE' and modifier.show_viewport == True:
+                disabled_armature_modifiers.append(modifier)
+                modifier.show_viewport = False
+    
+    if not obj.data.shape_keys:
+        for modifier_name in selected_modifiers:
+            mod = obj.modifiers.get(modifier_name)
+            if mod and mod.show_viewport:
+                bpy.ops.object.modifier_apply(modifier=modifier_name)
+        return (True, None)
+    
+    shapes_count = len(obj.data.shape_keys.key_blocks)
+    
+    if shapes_count == 0:
+        for modifier_name in selected_modifiers:
+            mod = obj.modifiers.get(modifier_name)
+            if mod and mod.show_viewport:
+                bpy.ops.object.modifier_apply(modifier=modifier_name)
+        return (True, None)
+    
+    print(f"[Worker {{task_id}}] ShapeKeyOptimized: 开始处理 {{shapes_count}} 个形态键")
+    
+    properties_list = []
+    properties = ["interpolation", "mute", "name", "relative_key", "slider_max", "slider_min", "value", "vertex_group"]
+    
+    for i in range(shapes_count):
+        key_b = obj.data.shape_keys.key_blocks[i]
+        props = {{p: None for p in properties}}
+        props["name"] = key_b.name
+        props["mute"] = key_b.mute
+        props["interpolation"] = key_b.interpolation
+        props["relative_key"] = key_b.relative_key.name
+        props["slider_max"] = key_b.slider_max
+        props["slider_min"] = key_b.slider_min
+        props["value"] = key_b.value
+        props["vertex_group"] = key_b.vertex_group
+        properties_list.append(props)
+    
+    original_vert_count = len(obj.data.vertices)
+    
+    shape_key_coords = []
+    for i in range(shapes_count):
+        key_b = obj.data.shape_keys.key_blocks[i]
+        coords = numpy.empty((original_vert_count, 3), dtype=numpy.float32)
+        key_b.data.foreach_get('co', coords.ravel())
+        shape_key_coords.append(coords)
+    
+    print(f"[Worker {{task_id}}] ShapeKeyOptimized: 已提取 {{shapes_count}} 个形态键坐标数据")
+    
+    bpy.ops.object.shape_key_remove(all=True)
+    
+    for modifier_name in selected_modifiers:
+        bpy.ops.object.modifier_apply(modifier=modifier_name)
+    
+    new_vert_count = len(obj.data.vertices)
+    
+    if original_vert_count != new_vert_count:
+        error_hint = ""
+        if contains_mirror_with_merge:
+            error_hint = "\\n提示: 镜像修改器启用了 'Merge' 选项可能导致问题。"
+        error_info = (f"顶点数量变化: {{original_vert_count}} -> {{new_vert_count}}！\\n"
+                     f"形态键要求修改器应用后顶点数量不变。{{error_hint}}")
+        
+        for modifier in disabled_armature_modifiers:
+            modifier.show_viewport = True
+        return (False, error_info)
+    
+    bpy.ops.object.shape_key_add(from_mix=False)
+    
+    for i in range(1, shapes_count):
+        key_b = obj.shape_key_add(name=properties_list[i]["name"], from_mix=False)
+        key_b.data.foreach_set('co', shape_key_coords[i].ravel())
+    
+    print(f"[Worker {{task_id}}] ShapeKeyOptimized: 已重新创建 {{shapes_count - 1}} 个形态键")
+    
+    for i in range(shapes_count):
+        key_b = obj.data.shape_keys.key_blocks[i]
+        key_b.name = properties_list[i]["name"]
+        key_b.interpolation = properties_list[i]["interpolation"]
+        key_b.mute = properties_list[i]["mute"]
+        key_b.slider_max = properties_list[i]["slider_max"]
+        key_b.slider_min = properties_list[i]["slider_min"]
+        key_b.value = properties_list[i]["value"]
+        key_b.vertex_group = properties_list[i]["vertex_group"]
+        
+        rel_key = properties_list[i]["relative_key"]
+        for j in range(shapes_count):
+            key_brel = obj.data.shape_keys.key_blocks[j]
+            if rel_key == key_brel.name:
+                key_b.relative_key = key_brel
+                break
+    
+    for modifier in disabled_armature_modifiers:
+        modifier.show_viewport = True
+    
+    elapsed = time.time() - start_time
+    print(f"[Worker {{task_id}}] ShapeKeyOptimized: 完成，耗时: {{elapsed:.2f}}秒")
+    
+    return (True, None)
+
+
 def apply_modifiers_for_object_with_shape_keys(context, selected_modifiers, disable_armatures=False):
-    """
-    为有形态键的物体应用修改器
-    完整实现，与单进程模式一致
-    """
+    """兼容接口：调用优化版"""
+    return apply_modifiers_for_object_with_shape_keys_optimized(context, selected_modifiers, disable_armatures)
+
+
+def apply_modifiers_for_object_with_shape_keys_legacy(context, selected_modifiers, disable_armatures=False):
+    """原始算法：用于处理会变换顶点的修改器"""
     if len(selected_modifiers) == 0:
         return (True, None)
     
@@ -340,7 +477,7 @@ def apply_modifiers_for_object_with_shape_keys(context, selected_modifiers, disa
         properties_object["vertex_group"] = key_b.vertex_group
         list_properties.append(properties_object)
     
-    print(f"[Worker {{task_id}}] applyModifiers: Applying base shape key")
+    print(f"[Worker {{task_id}}] Legacy: Applying base shape key")
     bpy.ops.object.shape_key_remove(all=True)
     for modifier_name in selected_modifiers:
         bpy.ops.object.modifier_apply(modifier=modifier_name)
@@ -351,7 +488,7 @@ def apply_modifiers_for_object_with_shape_keys(context, selected_modifiers, disa
     for i in range(1, shapes_count):
         curr_time = time.time()
         elapsed_time = curr_time - start_time_inner
-        print(f"[Worker {{task_id}}] applyModifiers: Applying shape key " + str(i+1) + "/" + str(shapes_count) + " ('" + str(list_properties[i]['name']) + "', " + str(round(elapsed_time, 2)) + "s)")
+        print(f"[Worker {{task_id}}] Legacy: Applying shape key " + str(i+1) + "/" + str(shapes_count) + " ('" + str(list_properties[i]['name']) + "', " + str(round(elapsed_time, 2)) + "s)")
         
         context.view_layer.objects.active = copy_object
         copy_object.select_set(True)
@@ -423,16 +560,27 @@ def apply_modifiers_for_object_with_shape_keys(context, selected_modifiers, disa
 
 
 def apply_all_modifiers(obj):
-    """应用物体上的所有修改器（优化版）"""
+    """应用物体上的所有修改器（优化版）
+    
+    优化：
+    1. 先删除禁用的修改器（不应用）
+    2. 只应用启用的修改器
+    """
     if obj.type != 'MESH':
         return
+    if not obj.modifiers:
+        return
+    
+    disabled_modifiers = [mod for mod in obj.modifiers if not mod.show_viewport]
+    for mod in reversed(disabled_modifiers):
+        obj.modifiers.remove(mod)
+    
     if not obj.modifiers:
         return
     
     has_shape_keys = obj.data.shape_keys is not None
     
     if has_shape_keys:
-        print(f"[Worker {{task_id}}] 物体 {{obj.name}} 有形态键，使用特殊方式应用修改器")
         modifier_names = [mod.name for mod in obj.modifiers]
         apply_modifiers_for_object_with_shape_keys(
             bpy.context, 
@@ -440,50 +588,54 @@ def apply_all_modifiers(obj):
             disable_armatures=False
         )
     else:
-        print(f"[Worker {{task_id}}] 物体 {{obj.name}} 无形态键，直接应用修改器")
-        # 设置激活对象一次
         bpy.ops.object.select_all(action='DESELECT')
         obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
         
-        # 直接应用所有修改器（包括ARMATURE）
         for modifier in obj.modifiers[:]:
             try:
                 bpy.ops.object.modifier_apply(modifier=modifier.name)
             except Exception as e:
-                print(f"[Worker {{task_id}}] Warning: Could not apply modifier {{modifier.name}}: {{e}}")
+                print(f"[Worker {{task_id}}] 应用修改器失败 {{modifier.name}}: {{e}}")
 
 
 def prepare_copy_for_mirror_workflow(copy_obj):
     """
     为非镜像工作流准备副本 - 与单进程模式完全一致
-    情况一：物体包含绑定但无形态键 -> 应用所有修改器
-    情况二：物体同时包含绑定和形态键 -> 使用 ShapeKeyUtils 方式处理
+    
+    优化：
+    1. 只检查启用的骨骼修改器
+    2. 禁用的修改器会在 apply_all_modifiers 中删除
+    
+    情况一：物体包含启用的骨骼绑定但无形态键 -> 应用所有修改器
+    情况二：物体同时包含启用的骨骼绑定和形态键 -> 使用特殊方式处理
+    情况三：物体没有启用的骨骼绑定 -> 跳过前处理
     """
     if copy_obj.type != 'MESH':
         return
     
-    has_armature = any(mod.type == 'ARMATURE' for mod in copy_obj.modifiers)
+    has_enabled_armature = any(
+        mod.type == 'ARMATURE' and mod.show_viewport 
+        for mod in copy_obj.modifiers
+    )
     has_shape_keys = copy_obj.data.shape_keys is not None
     
-    if not has_armature:
-        print(f"[Worker {{task_id}}] 物体 {{copy_obj.name}} 无骨骼绑定，无需前处理")
+    if not has_enabled_armature:
         return
     
     if has_shape_keys:
-        print(f"[Worker {{task_id}}] 物体 {{copy_obj.name}} 有骨骼绑定和形态键，执行特殊前处理")
-        # 保存形态键值
         shape_key_values = {{}}
         for kb in copy_obj.data.shape_keys.key_blocks:
             shape_key_values[kb.name] = kb.value
         
-        # 归零形态键
         reset_shapekey_values(copy_obj)
         
-        # 应用所有修改器（使用特殊方式处理形态键）
+        disabled_modifiers = [mod for mod in copy_obj.modifiers if not mod.show_viewport]
+        for mod in reversed(disabled_modifiers):
+            copy_obj.modifiers.remove(mod)
+        
         modifier_names = [mod.name for mod in copy_obj.modifiers]
         if modifier_names:
-            # 优化：只设置一次激活对象
             bpy.context.view_layer.objects.active = copy_obj
             apply_modifiers_for_object_with_shape_keys(
                 bpy.context,
@@ -491,14 +643,25 @@ def prepare_copy_for_mirror_workflow(copy_obj):
                 disable_armatures=False
             )
         
-        # 恢复形态键值
         if copy_obj.data.shape_keys:
             for kb in copy_obj.data.shape_keys.key_blocks:
                 if kb.name in shape_key_values:
                     kb.value = shape_key_values[kb.name]
     else:
-        print(f"[Worker {{task_id}}] 物体 {{copy_obj.name}} 有骨骼绑定无形态键，应用修改器")
         apply_all_modifiers(copy_obj)
+
+
+def clear_materials(obj):
+    """清除物体的所有材质槽，减少文件体积"""
+    if obj.type != 'MESH':
+        return
+    
+    if obj.data.materials:
+        obj.data.materials.clear()
+    
+    for slot in obj.material_slots[:]:
+        obj.active_material_index = slot.slot_index
+        bpy.ops.object.material_slot_remove()
 
 
 def mesh_triangulate_beauty(obj):
@@ -651,10 +814,7 @@ for obj_name in object_names:
             continue
         
         if obj.type != 'MESH':
-            print(f"[Worker {{task_id}}] 跳过非网格物体: {{obj_name}}")
             continue
-        
-        print(f"[Worker {{task_id}}] 开始预处理: {{obj_name}}")
         
         # 1. 创建副本，使用标准命名规范
         copy_obj = obj.copy()
@@ -664,68 +824,75 @@ for obj_name in object_names:
         else:
             copy_obj.name = obj_name + "_copy"
         bpy.context.scene.collection.objects.link(copy_obj)
-        print(f"[Worker {{task_id}}] 创建副本: {{copy_obj.name}}")
+        
+        # 优化：先删除禁用的修改器，减少后续处理开销
+        disabled_modifiers = [mod for mod in copy_obj.modifiers if not mod.show_viewport]
+        for mod in reversed(disabled_modifiers):
+            copy_obj.modifiers.remove(mod)
         
         # 2. 应用修改器 - 与单进程模式完全一致
-        has_armature = any(mod.type == 'ARMATURE' for mod in copy_obj.modifiers)
+        # 优化：只检查启用的骨骼修改器
+        has_enabled_armature = any(
+            mod.type == 'ARMATURE' and mod.show_viewport 
+            for mod in copy_obj.modifiers
+        )
         if mirror_workflow:
-            print(f"[Worker {{task_id}}] 执行非镜像工作流前处理...")
             try:
                 prepare_copy_for_mirror_workflow(copy_obj)
-                print(f"[Worker {{task_id}}] 前处理完成")
             except Exception as e:
-                print(f"[Worker {{task_id}}] 前处理失败: {{e}}")
+                print(f"[Worker {{task_id}}] 前处理失败 {{copy_obj.name}}: {{e}}")
                 traceback.print_exc()
-        elif has_armature:
-            print(f"[Worker {{task_id}}] 正常工作流：应用骨架修改器...")
+        elif has_enabled_armature:
             try:
                 apply_all_modifiers(copy_obj)
-                print(f"[Worker {{task_id}}] 骨架修改器应用完成")
             except Exception as e:
-                print(f"[Worker {{task_id}}] 应用骨架修改器失败: {{e}}")
+                print(f"[Worker {{task_id}}] 应用修改器失败 {{copy_obj.name}}: {{e}}")
                 traceback.print_exc()
         
         # 3. BEAUTY三角化
-        print(f"[Worker {{task_id}}] 执行三角化...")
         try:
             mesh_triangulate_beauty(copy_obj)
-            print(f"[Worker {{task_id}}] 三角化完成")
         except Exception as e:
-            print(f"[Worker {{task_id}}] 三角化失败: {{e}}")
+            print(f"[Worker {{task_id}}] 三角化失败 {{copy_obj.name}}: {{e}}")
             traceback.print_exc()
         
-        # 4. 非镜像工作流后处理 - 与单进程模式完全一致
+        # 4. 清除材质，减少文件体积
+        try:
+            clear_materials(copy_obj)
+        except Exception as e:
+            print(f"[Worker {{task_id}}] 清除材质失败 {{copy_obj.name}}: {{e}}")
+        
+        # 5. 非镜像工作流后处理 - 与单进程模式完全一致
         if mirror_workflow:
-            print(f"[Worker {{task_id}}] 执行非镜像工作流后处理...")
             try:
                 apply_mirror_transform(copy_obj)
                 flip_face_normals(copy_obj)
-                print(f"[Worker {{task_id}}] 后处理完成")
             except Exception as e:
-                print(f"[Worker {{task_id}}] 后处理失败: {{e}}")
+                print(f"[Worker {{task_id}}] 后处理失败 {{copy_obj.name}}: {{e}}")
                 traceback.print_exc()
         
         # 记录副本名称（用于加载时匹配）
         processed_objects.append(copy_obj.name)
-        print(f"[Worker {{task_id}}] 预处理完成: {{copy_obj.name}}")
         
     except Exception as e:
         print(f"[Worker {{task_id}}] 处理物体 {{obj_name}} 时出错: {{e}}")
         traceback.print_exc()
 
 # 删除所有非副本物体，只保留预处理后的副本
-print(f"[Worker {{task_id}}] 清理场景，只保留副本...")
 copy_names_set = set(processed_objects)
-for obj in bpy.data.objects[:]:
-    if obj.name not in copy_names_set:
-        print(f"[Worker {{task_id}}] 删除: {{obj.name}}")
-        bpy.data.objects.remove(obj, do_unlink=True)
+objects_to_remove = [obj for obj in bpy.data.objects if obj.name not in copy_names_set]
+for obj in objects_to_remove:
+    bpy.data.objects.remove(obj, do_unlink=True)
+
+# 清理未使用的材质和数据块，进一步减小体积
+try:
+    bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+except:
+    pass
 
 # 保存预处理结果
-print(f"[Worker {{task_id}}] 保存到: {{output_blend}}")
 try:
-    bpy.ops.wm.save_as_mainfile(filepath=output_blend)
-    print(f"[Worker {{task_id}}] 保存成功")
+    bpy.ops.wm.save_as_mainfile(filepath=output_blend, compress=True)
 except Exception as e:
     print(f"[Worker {{task_id}}] 保存失败: {{e}}")
     traceback.print_exc()
@@ -740,15 +907,11 @@ result_data = {{
 }}
 try:
     with open(result_file, 'w', encoding='utf-8') as f:
-        json.dump(result_data, f, ensure_ascii=False, indent=2)
-    print(f"[Worker {{task_id}}] 结果文件: {{result_file}}")
+        json.dump(result_data, f, ensure_ascii=False)
 except Exception as e:
     print(f"[Worker {{task_id}}] 写入结果失败: {{e}}")
 
-print("=" * 50)
-print(f"[Worker {{task_id}}] 预处理完成，处理了 {{len(processed_objects)}} 个物体")
-print(f"[Worker {{task_id}}] 副本列表: {{processed_objects}}")
-print("=" * 50)
+print(f"[Worker {{task_id}}] 完成: {{len(processed_objects)}} 个物体")
 '''
             
             script_file = os.path.join(

@@ -6,6 +6,7 @@ from ..utils.command_utils import CommandUtils
 from ..utils.collection_utils import CollectionUtils
 from ..utils.obj_utils import ObjUtils
 from ..utils.performance_stats import start_operation, end_operation, print_performance_report, save_performance_report_to_editor, reset_performance_stats, set_performance_stats_enabled, is_performance_stats_enabled
+from ..utils.preprocess_cache import get_cache_manager, FingerprintCalculator, reset_cache_manager
 
 from ..config.main_config import GlobalConfig, LogicName
 from ..base.m_global_key_counter import M_GlobalKeyCounter
@@ -51,6 +52,26 @@ class SSMTSelectGenerateModFolder(bpy.types.Operator):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
+
+class SSMTClearPreprocessCache(bpy.types.Operator):
+    """清理预处理缓存"""
+    bl_idname = "ssmt.clear_preprocess_cache"
+    bl_label = "清理预处理缓存"
+    bl_description = "清理所有预处理缓存，释放磁盘空间"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        from ..utils.preprocess_cache import get_cache_manager
+        
+        blend_file = bpy.data.filepath
+        cache_manager = get_cache_manager(blend_file)
+        stats = cache_manager.get_cache_stats()
+        
+        cache_manager.clear_cache()
+        reset_cache_manager()
+        
+        self.report({'INFO'}, f"已清理 {stats['total_entries']} 个缓存文件，释放 {stats['total_size_mb']:.2f} MB")
+        return {'FINISHED'}
 
 
 class SSMTGenerateModBlueprint(bpy.types.Operator):
@@ -111,38 +132,47 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         use_parallel = Properties_ImportModel.use_parallel_export()
         blend_file_saved = bpy.data.is_saved
         blend_file_dirty = bpy.data.is_dirty
+        blend_file = bpy.data.filepath
         mirror_workflow_enabled = Properties_ImportModel.use_mirror_workflow()
         
-        if use_parallel:
-            if not blend_file_saved:
-                self.report({'ERROR'}, "并行导出需要先保存项目文件")
-                end_operation("GenerateMod_Total")
-                return {'CANCELLED'}
-            if blend_file_dirty:
-                self.report({'ERROR'}, "项目有未保存的修改，请先保存后再进行并行导出")
-                end_operation("GenerateMod_Total")
-                return {'CANCELLED'}
+        preview_export_only = Properties_GenerateMod.preview_export_only()
         
-        wm.progress_begin(0, 100)
-        wm.progress_update(0)
-        print(f"开始处理 {total_objects} 个物体...")
-        
-        copy_mapping = {}
-        
-        if use_parallel and blend_file_saved and not blend_file_dirty and total_objects >= 4:
-            print(f"[ParallelPreprocess] 启用并行预处理，物体数量: {total_objects}")
-            start_operation("ParallelPreprocess")
-            copy_mapping = self._parallel_preprocess(context, obj_node_mapping, mirror_workflow_enabled)
-            end_operation("ParallelPreprocess")
-            if not copy_mapping:
-                print("[ParallelPreprocess] 并行预处理失败，回退到单进程模式")
-                start_operation("SequentialPreprocess")
-                copy_mapping = self._sequential_preprocess(obj_node_mapping, mirror_workflow_enabled, wm, total_objects)
-                end_operation("SequentialPreprocess")
+        if preview_export_only:
+            print("[PreviewExport] 配置表预导出模式：跳过物体处理，仅生成 INI")
+            wm.progress_begin(0, 100)
+            wm.progress_update(0)
+            copy_mapping = {}
         else:
-            start_operation("SequentialPreprocess")
-            copy_mapping = self._sequential_preprocess(obj_node_mapping, mirror_workflow_enabled, wm, total_objects)
-            end_operation("SequentialPreprocess")
+            if use_parallel:
+                if not blend_file_saved:
+                    self.report({'ERROR'}, "并行导出需要先保存项目文件")
+                    end_operation("GenerateMod_Total")
+                    return {'CANCELLED'}
+                if blend_file_dirty:
+                    self.report({'ERROR'}, "项目有未保存的修改，请先保存后再进行并行导出")
+                    end_operation("GenerateMod_Total")
+                    return {'CANCELLED'}
+            
+            wm.progress_begin(0, 100)
+            wm.progress_update(0)
+            print(f"开始处理 {total_objects} 个物体...")
+            
+            copy_mapping = {}
+            
+            if use_parallel and blend_file_saved and not blend_file_dirty and total_objects >= 4:
+                print(f"[ParallelPreprocess] 启用并行预处理，物体数量: {total_objects}")
+                start_operation("ParallelPreprocess")
+                copy_mapping = self._parallel_preprocess(context, obj_node_mapping, mirror_workflow_enabled)
+                end_operation("ParallelPreprocess")
+                if not copy_mapping:
+                    print("[ParallelPreprocess] 并行预处理失败，回退到单进程模式")
+                    start_operation("SequentialPreprocess")
+                    copy_mapping = self._sequential_preprocess(obj_node_mapping, mirror_workflow_enabled, wm, total_objects, blend_file)
+                    end_operation("SequentialPreprocess")
+            else:
+                start_operation("SequentialPreprocess")
+                copy_mapping = self._sequential_preprocess(obj_node_mapping, mirror_workflow_enabled, wm, total_objects, blend_file)
+                end_operation("SequentialPreprocess")
         
         try:
             # 计算最大导出次数
@@ -201,42 +231,42 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                     migoto_mod_model.generate_unity_cs_config_ini()
                 elif GlobalConfig.logic_name == LogicName.ZZMI:
                     from ..games.zzmi import ModModelZZMI
-                    migoto_mod_model = ModModelZZMI()
+                    migoto_mod_model = ModModelZZMI(skip_buffer_export=preview_export_only)
                     migoto_mod_model.generate_unity_vs_config_ini()
 
                 # 强兼支持
                 elif GlobalConfig.logic_name == LogicName.EFMI:
                     from ..games.efmi import ModModelEFMI
-                    migoto_mod_model = ModModelEFMI()
+                    migoto_mod_model = ModModelEFMI(skip_buffer_export=preview_export_only)
                     migoto_mod_model.generate_unity_vs_config_ini()
 
                 # 终末地测试AEMI，到时候老外的EFMI发布之后，再开一套新逻辑兼容他们的，咱们用这个先测试
                 elif GlobalConfig.logic_name == LogicName.AEMI:
                     from ..games.yysls import ModModelYYSLS
-                    migoto_mod_model = ModModelYYSLS()
+                    migoto_mod_model = ModModelYYSLS(skip_buffer_export=preview_export_only)
                     migoto_mod_model.generate_unity_vs_config_ini()
                 # UnityVS
                 elif GlobalConfig.logic_name == LogicName.UnityVS:
                     from ..games.unity import ModModelUnity
-                    migoto_mod_model = ModModelUnity()
+                    migoto_mod_model = ModModelUnity(skip_buffer_export=preview_export_only)
                     migoto_mod_model.generate_unity_vs_config_ini()
 
                 # AILIMIT
                 elif GlobalConfig.logic_name == LogicName.AILIMIT or GlobalConfig.logic_name == LogicName.UnityCS:
                     from ..games.unity import ModModelUnity
-                    migoto_mod_model = ModModelUnity()
+                    migoto_mod_model = ModModelUnity(skip_buffer_export=preview_export_only)
                     migoto_mod_model.generate_unity_cs_config_ini()
                 
                 # UnityCPU 例如少女前线2、虚空之眼等等，绝大部分手游都是UnityCPU
                 elif GlobalConfig.logic_name == LogicName.UnityCPU:
                     from ..games.unity import ModModelUnity
-                    migoto_mod_model = ModModelUnity()
+                    migoto_mod_model = ModModelUnity(skip_buffer_export=preview_export_only)
                     migoto_mod_model.generate_unity_vs_config_ini()
                 
                 # UnityCSM
                 elif GlobalConfig.logic_name == LogicName.UnityCSM:
                     from ..games.unity import ModModelUnity
-                    migoto_mod_model = ModModelUnity()
+                    migoto_mod_model = ModModelUnity(skip_buffer_export=preview_export_only)
                     migoto_mod_model.generate_unity_cs_config_ini()
 
                 # 尘白禁区、卡拉比丘
@@ -275,23 +305,26 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             # 恢复原始导出路径
             BlueprintExportHelper.restore_export_path()
             
-            # 恢复节点引用并删除副本
-            if copy_mapping:
-                print("恢复节点引用并删除三角化副本...")
-                start_operation("CleanupCopies")
-                for original_name, (copy_obj, node_or_item) in copy_mapping.items():
-                    # 恢复节点/项目引用到原始物体
-                    node_or_item.object_name = original_name
-                    
-                    # 删除副本
-                    if copy_obj:
-                        mesh_data = copy_obj.data
-                        bpy.data.objects.remove(copy_obj, do_unlink=True)
-                        if mesh_data:
-                            bpy.data.meshes.remove(mesh_data, do_unlink=True)
+            if preview_export_only:
+                print("[PreviewExport] 配置表预导出完成，跳过清理步骤")
+            else:
+                # 恢复节点引用并删除副本
+                if copy_mapping:
+                    print("恢复节点引用并删除三角化副本...")
+                    start_operation("CleanupCopies")
+                    for original_name, (copy_obj, node_or_item) in copy_mapping.items():
+                        # 恢复节点/项目引用到原始物体
+                        node_or_item.object_name = original_name
                         
-                print(f"已清理 {len(copy_mapping)} 个三角化副本")
-                end_operation("CleanupCopies")
+                        # 删除副本
+                        if copy_obj:
+                            mesh_data = copy_obj.data
+                            bpy.data.objects.remove(copy_obj, do_unlink=True)
+                            if mesh_data:
+                                bpy.data.meshes.remove(mesh_data, do_unlink=True)
+                            
+                    print(f"已清理 {len(copy_mapping)} 个三角化副本")
+                    end_operation("CleanupCopies")
             
             # 打印性能报告到控制台和文本编辑器
             end_operation("GenerateMod_Total")
@@ -388,15 +421,16 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         print(f"[Blueprint Nest] 共扫描 {len(visited_blueprints)} 个嵌套蓝图，找到 {len(result)} 个物体")
         return result
     
-    def _sequential_preprocess(self, obj_node_mapping, mirror_workflow_enabled, wm, total_objects):
+    def _sequential_preprocess(self, obj_node_mapping, mirror_workflow_enabled, wm, total_objects, blend_file=None):
         """
-        顺序预处理（单进程模式）
+        顺序预处理（单进程模式，支持缓存）
         
         Args:
             obj_node_mapping: 物体-节点映射列表
             mirror_workflow_enabled: 是否启用非镜像工作流
             wm: window_manager
             total_objects: 物体总数
+            blend_file: blend 文件路径（用于缓存目录）
         
         Returns:
             copy_mapping: {原始物体名: (副本物体, 节点/项目)}
@@ -404,11 +438,15 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         from ..utils.obj_utils import mesh_triangulate_beauty
         
         tree = BlueprintExportHelper.get_current_blueprint_tree()
-        vg_process_nodes = self._get_vg_process_nodes()
-        name_modify_nodes = self._get_name_modify_nodes()
+        
+        cache_manager = get_cache_manager(blend_file)
+        use_cache = Properties_ImportModel.use_preprocess_cache() if hasattr(Properties_ImportModel, 'use_preprocess_cache') else True
         
         copy_mapping = {}
-        print(f"开始创建三角化副本...")
+        cache_hits = 0
+        cache_misses = 0
+        
+        print(f"开始创建三角化副本（缓存: {'启用' if use_cache else '禁用'}）...")
         
         for i, (original_obj, node_or_item) in enumerate(obj_node_mapping):
             progress = int((i + 1) / total_objects * 50)
@@ -417,117 +455,171 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             if original_obj and original_obj.type == 'MESH':
                 obj_name = original_obj.name
                 
-                start_operation("CreateCopy", obj_name)
-                copy_obj = original_obj.copy()
-                copy_obj.data = original_obj.data.copy()
-                end_operation("CreateCopy")
+                fingerprint = FingerprintCalculator.calculate_fingerprint(original_obj, mirror_workflow_enabled)
+                print(f"[Cache] 物体 {obj_name} 指纹: v={fingerprint.vertex_count}, vh={fingerprint.vertex_hash[:8]}...")
                 
-                start_operation("LinkCopy", obj_name)
                 original_name = original_obj.name
                 if original_name.endswith("-Original"):
-                    copy_obj.name = original_name.replace("-Original", "-copy_Original")
+                    copy_name = original_name.replace("-Original", "-copy_Original")
                 else:
-                    copy_obj.name = f"{original_name}_copy"
+                    copy_name = f"{original_name}_copy"
                 
-                bpy.context.scene.collection.objects.link(copy_obj)
-                end_operation("LinkCopy")
+                copy_obj = None
+                cache_used = False
                 
-                has_armature = any(mod.type == 'ARMATURE' for mod in copy_obj.modifiers)
+                if use_cache:
+                    start_operation("CacheCheck", obj_name)
+                    cached_obj = cache_manager.load_cache(obj_name, fingerprint, bpy.context.scene)
+                    end_operation("CacheCheck")
+                    
+                    if cached_obj:
+                        cached_obj.name = copy_name
+                        copy_obj = cached_obj
+                        cache_used = True
+                        cache_hits += 1
+                        print(f"[Cache] 命中: {obj_name}")
                 
-                if mirror_workflow_enabled:
-                    start_operation("MirrorWorkflow_Pre", obj_name)
-                    print(f"非镜像工作流：对副本 {copy_obj.name} 进行前处理")
-                    ObjUtils.prepare_copy_for_mirror_workflow(copy_obj)
-                    end_operation("MirrorWorkflow_Pre")
-                elif has_armature:
-                    start_operation("ApplyArmature", obj_name)
-                    print(f"正常工作流：对副本 {copy_obj.name} 应用骨架修改器")
-                    ObjUtils._apply_all_modifiers(copy_obj)
-                    end_operation("ApplyArmature")
+                if not copy_obj:
+                    cache_misses += 1
+                    
+                    start_operation("CreateCopy", obj_name)
+                    copy_obj = original_obj.copy()
+                    copy_obj.data = original_obj.data.copy()
+                    end_operation("CreateCopy")
+                    
+                    start_operation("LinkCopy", obj_name)
+                    copy_obj.name = copy_name
+                    bpy.context.scene.collection.objects.link(copy_obj)
+                    end_operation("LinkCopy")
+                    
+                    has_armature = any(mod.type == 'ARMATURE' for mod in copy_obj.modifiers)
+                    
+                    if mirror_workflow_enabled:
+                        start_operation("MirrorWorkflow_Pre", obj_name)
+                        ObjUtils.prepare_copy_for_mirror_workflow(copy_obj)
+                        end_operation("MirrorWorkflow_Pre")
+                    elif has_armature:
+                        start_operation("ApplyArmature", obj_name)
+                        ObjUtils._apply_all_modifiers(copy_obj)
+                        end_operation("ApplyArmature")
+                    
+                    start_operation("Triangulate", obj_name)
+                    mesh_triangulate_beauty(copy_obj)
+                    end_operation("Triangulate")
+                    
+                    if mirror_workflow_enabled:
+                        start_operation("MirrorWorkflow_Post", obj_name)
+                        ObjUtils.apply_mirror_transform(copy_obj)
+                        ObjUtils.flip_face_normals(copy_obj)
+                        end_operation("MirrorWorkflow_Post")
+                    
+                    if use_cache:
+                        start_operation("CacheStore", obj_name)
+                        cache_manager.store_cache(obj_name, fingerprint, copy_obj)
+                        end_operation("CacheStore")
                 
                 node_or_item.original_object_name = original_name
                 copy_mapping[original_name] = (copy_obj, node_or_item)
                 
-                current_name = original_name
-                processing_chain = self._get_processing_chain_for_object(original_name, tree)
-                
-                if processing_chain:
-                    print(f"[ProcessingChain] 物体 {original_name} 开始按处理链执行，共 {len(processing_chain)} 个节点")
-                    
-                    for idx, (node, node_type) in enumerate(processing_chain):
-                        if node_type == 'name_modify':
-                            print(f"[ProcessingChain] 步骤 {idx + 1}: 名称修改节点 {node.name}")
-                            if hasattr(node, 'is_valid') and node.is_valid():
-                                new_name = node.get_modified_object_name(current_name)
-                                if new_name != current_name:
-                                    print(f"[ProcessingChain] 名称修改: {current_name} -> {new_name}")
-                                    old_copy_name = copy_obj.name
-                                    copy_obj.name = new_name
-                                    print(f"[ProcessingChain] 副本名称: {old_copy_name} -> {copy_obj.name}")
-                                    current_name = new_name
-                                    if hasattr(node_or_item, 'original_object_name'):
-                                        node_or_item.original_object_name = new_name
-                                else:
-                                    print(f"[ProcessingChain] 名称未变化")
-                        
-                        elif node_type == 'vg_process':
-                            print(f"[ProcessingChain] 步骤 {idx + 1}: 顶点组处理节点 {node.name}，当前名称: {current_name}")
-                            start_operation(f"VGProcess_{node.name}", obj_name)
-                            try:
-                                stats = node.process_object(copy_obj)
-                                if any(v > 0 for v in stats.values()):
-                                    print(f"[ProcessingChain] {copy_obj.name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
-                            except Exception as e:
-                                print(f"[ProcessingChain] 处理物体 {copy_obj.name} 时出错: {e}")
-                                import traceback
-                                traceback.print_exc()
-                            end_operation(f"VGProcess_{node.name}")
-                    
-                    node_or_item.object_name = copy_obj.name
-                else:
-                    if name_modify_nodes:
-                        print(f"[NameModify] 开始应用名称修改节点，共 {len(name_modify_nodes)} 个")
-                        for idx, name_modify_node in enumerate(name_modify_nodes):
-                            print(f"[NameModify] 应用第 {idx + 1} 个名称修改节点: {name_modify_node.name}")
-                            if hasattr(name_modify_node, 'is_valid') and name_modify_node.is_valid():
-                                new_name = name_modify_node.get_modified_object_name(current_name)
-                                if new_name != current_name:
-                                    print(f"[NameModify] 节点 {name_modify_node.name}: {current_name} -> {new_name}")
-                                    old_copy_name = copy_obj.name
-                                    copy_obj.name = new_name
-                                    print(f"[NameModify] 副本名称: {old_copy_name} -> {copy_obj.name}")
-                                    current_name = new_name
-                                    if hasattr(node_or_item, 'original_object_name'):
-                                        node_or_item.original_object_name = new_name
-                                else:
-                                    print(f"[NameModify] 节点 {name_modify_node.name}: 名称未变化")
-                            else:
-                                print(f"[NameModify] 节点 {name_modify_node.name}: 无效或为空，跳过")
-                    
-                    node_or_item.object_name = copy_obj.name
-                    
-                    start_operation("VertexGroupProcess", obj_name)
-                    self._apply_vg_process_nodes(copy_obj, vg_process_nodes)
-                    end_operation("VertexGroupProcess")
-                
-                start_operation("Triangulate", obj_name)
-                mesh_triangulate_beauty(copy_obj)
-                end_operation("Triangulate")
-                
-                if mirror_workflow_enabled:
-                    start_operation("MirrorWorkflow_Post", obj_name)
-                    print(f"非镜像工作流：对副本 {copy_obj.name} 应用镜像变换")
-                    ObjUtils.apply_mirror_transform(copy_obj)
-                    ObjUtils.flip_face_normals(copy_obj)
-                    end_operation("MirrorWorkflow_Post")
-                
-                print(f"创建副本: {original_name} -> {copy_obj.name}")
+                if not cache_used:
+                    print(f"创建副本: {original_name} -> {copy_obj.name}")
+        
+        print(f"[Cache] 统计: 命中={cache_hits}, 未命中={cache_misses}")
+        
+        if copy_mapping:
+            self._execute_processing_chain_for_objects(copy_mapping, tree)
         
         return copy_mapping
     
+    def _execute_processing_chain_for_objects(self, copy_mapping, tree):
+        """
+        按处理链顺序执行所有处理节点（支持多线程）
+        
+        逻辑：
+        1. 收集所有处理节点（顶点组处理节点和名称修改节点），按连接顺序排序
+        2. 对于每个处理节点，收集所有连接到它的物体
+        3. 按顺序执行每个处理节点
+        4. 对于顶点组处理节点，使用多线程处理多个物体
+        """
+        all_process_nodes = []
+        visited = set()
+        
+        def collect_all_process_nodes(node, current_tree):
+            """从输出节点开始，收集所有处理节点（顶点组处理节点和名称修改节点）"""
+            if node in visited:
+                return
+            visited.add(node)
+            
+            if node.bl_idname == 'SSMTNode_VertexGroupProcess':
+                all_process_nodes.append((node, 'vg_process'))
+            elif node.bl_idname == 'SSMTNode_Object_Name_Modify':
+                all_process_nodes.append((node, 'name_modify'))
+            
+            for input_socket in node.inputs:
+                for link in input_socket.links:
+                    collect_all_process_nodes(link.from_node, current_tree)
+        
+        output_nodes = [n for n in tree.nodes if n.bl_idname == 'SSMTNode_Result_Output']
+        for output_node in output_nodes:
+            collect_all_process_nodes(output_node, tree)
+        
+        all_process_nodes.reverse()
+        
+        print(f"[ProcessingChain] 收集到 {len(all_process_nodes)} 个处理节点")
+        
+        for node, node_type in all_process_nodes:
+            connected_objects = []
+            for original_name, (copy_obj, node_or_item) in copy_mapping.items():
+                if self._is_object_connected_to_node(original_name, node, tree):
+                    connected_objects.append((original_name, copy_obj, node_or_item))
+            
+            if not connected_objects:
+                continue
+            
+            if node_type == 'name_modify':
+                for original_name, copy_obj, node_or_item in connected_objects:
+                    if hasattr(node, 'is_valid') and node.is_valid():
+                        current_name = copy_obj.name
+                        new_name = node.get_modified_object_name(current_name)
+                        if new_name != current_name:
+                            copy_obj.name = new_name
+                            print(f"[NameModify] {original_name}: {current_name} -> {new_name}")
+            
+            elif node_type == 'vg_process':
+                start_operation(f"VGProcess_{node.name}", "batch")
+                
+                objects_to_process = [copy_obj for _, copy_obj, _ in connected_objects]
+                
+                if len(objects_to_process) > 1:
+                    print(f"[VGProcess] 节点 {node.name}: 多线程处理 {len(objects_to_process)} 个物体")
+                    try:
+                        all_stats = node.process_objects_batch(objects_to_process, max_workers=4)
+                        for obj_name, stats in all_stats.items():
+                            if any(v > 0 for v in stats.values()):
+                                print(f"[VGProcess] {obj_name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
+                    except Exception as e:
+                        print(f"[VGProcess] 批量处理节点 {node.name} 时出错: {e}")
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    for original_name, copy_obj, _ in connected_objects:
+                        try:
+                            stats = node.process_object(copy_obj)
+                            if any(v > 0 for v in stats.values()):
+                                print(f"[VGProcess] {original_name} 节点 {node.name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
+                        except Exception as e:
+                            print(f"[VGProcess] 处理物体 {original_name} 时出错: {e}")
+                            import traceback
+                            traceback.print_exc()
+                
+                end_operation(f"VGProcess_{node.name}")
+        
+        for original_name, (copy_obj, node_or_item) in copy_mapping.items():
+            node_or_item.object_name = copy_obj.name
+    
     def _parallel_preprocess(self, context, obj_node_mapping, mirror_workflow_enabled):
         """
-        并行预处理（多进程模式）
+        并行预处理（多进程模式，支持缓存）
         
         仅处理第3步：模型预处理
         预处理完成后将结果加载回当前场景继续后续流程
@@ -545,50 +637,102 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         wm = context.window_manager
         blend_file = bpy.data.filepath
         
+        cache_manager = get_cache_manager(blend_file)
+        use_cache = Properties_ImportModel.use_preprocess_cache() if hasattr(Properties_ImportModel, 'use_preprocess_cache') else True
+        
         object_names = [obj.name for obj, _ in obj_node_mapping if obj]
         node_mapping = {obj.name: (obj, node) for obj, node in obj_node_mapping if obj}
         
-        num_workers = Properties_ImportModel.get_parallel_worker_count()
-        manager = ParallelPreprocessManager(num_workers=num_workers)
+        cached_objects = {}
+        objects_to_process = []
+        fingerprints = {}
+        manager = None
+        loaded_objects = None
         
-        def progress_callback(progress):
-            wm.progress_update(int(progress * 0.5))
+        if use_cache:
+            print(f"[ParallelPreprocess] 检查缓存...")
+            for obj_name in object_names:
+                original_obj = node_mapping[obj_name][0]
+                fingerprint = FingerprintCalculator.calculate_fingerprint(original_obj, mirror_workflow_enabled)
+                fingerprints[obj_name] = fingerprint
+                
+                cached_obj = cache_manager.load_cache(obj_name, fingerprint, bpy.context.scene)
+                if cached_obj:
+                    cached_objects[obj_name] = cached_obj
+                    print(f"[Cache] 命中: {obj_name}")
+                else:
+                    objects_to_process.append(obj_name)
+            
+            print(f"[Cache] 统计: 命中={len(cached_objects)}, 未命中={len(objects_to_process)}")
+        else:
+            objects_to_process = object_names[:]
         
-        print(f"[ParallelPreprocess] 开始并行预处理...")
-        print(f"[ParallelPreprocess] 工作进程数: {num_workers}")
-        
-        start_operation("CollectVGMapping")
-        vg_mapping_texts = self._collect_vg_mapping_texts()
-        print(f"[ParallelPreprocess] 收集到 {len(vg_mapping_texts)} 个映射表")
-        end_operation("CollectVGMapping")
-        
-        object_blend_map = manager.preprocess_parallel(
-            blend_file=blend_file,
-            object_names=object_names,
-            mirror_workflow=mirror_workflow_enabled,
-            vg_mapping_texts=vg_mapping_texts,
-            progress_callback=progress_callback
-        )
-        
-        if not object_blend_map:
-            manager.cleanup()
-            return None
+        if objects_to_process:
+            num_workers = Properties_ImportModel.get_parallel_worker_count()
+            manager = ParallelPreprocessManager(num_workers=num_workers)
+            
+            def progress_callback(progress):
+                wm.progress_update(int(progress * 0.5 * len(objects_to_process) / len(object_names)))
+            
+            print(f"[ParallelPreprocess] 开始并行预处理 {len(objects_to_process)} 个物体...")
+            print(f"[ParallelPreprocess] 工作进程数: {num_workers}")
+            
+            start_operation("CollectVGMapping")
+            vg_mapping_texts = self._collect_vg_mapping_texts()
+            print(f"[ParallelPreprocess] 收集到 {len(vg_mapping_texts)} 个映射表")
+            end_operation("CollectVGMapping")
+            
+            object_blend_map = manager.preprocess_parallel(
+                blend_file=blend_file,
+                object_names=objects_to_process,
+                mirror_workflow=mirror_workflow_enabled,
+                vg_mapping_texts=vg_mapping_texts,
+                progress_callback=progress_callback
+            )
+            
+            if not object_blend_map:
+                manager.cleanup()
+                if cached_objects:
+                    pass
+                else:
+                    return None
+            
+            if object_blend_map:
+                wm.progress_update(45)
+                print(f"[ParallelPreprocess] 加载预处理结果...")
+                
+                try:
+                    start_operation("LoadPreprocessedObjects")
+                    loaded_objects = load_preprocessed_objects(object_blend_map)
+                    print(f"[ParallelPreprocess] loaded_objects: {list(loaded_objects.keys()) if loaded_objects else 'None'}")
+                    end_operation("LoadPreprocessedObjects")
+                except Exception as e:
+                    print(f"[ParallelPreprocess] 加载失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    manager.cleanup()
+                    if not cached_objects:
+                        return None
+                    loaded_objects = {}
+                
+                if use_cache and loaded_objects:
+                    print(f"[ParallelPreprocess] 存储缓存...")
+                    for obj_name in objects_to_process:
+                        if obj_name in fingerprints:
+                            original_name = obj_name
+                            if original_name.endswith("-Original"):
+                                copy_name = original_name.replace("-Original", "-copy_Original")
+                            else:
+                                copy_name = f"{original_name}_copy"
+                            
+                            if copy_name in loaded_objects:
+                                cache_manager.store_cache(obj_name, fingerprints[obj_name], loaded_objects[copy_name])
+                
+                manager.cleanup()
+        else:
+            print(f"[ParallelPreprocess] 所有物体都命中缓存，跳过并行预处理")
         
         wm.progress_update(50)
-        print(f"[ParallelPreprocess] 加载预处理结果...")
-        print(f"[ParallelPreprocess] object_blend_map: {object_blend_map}")
-        
-        try:
-            start_operation("LoadPreprocessedObjects")
-            loaded_objects = load_preprocessed_objects(object_blend_map)
-            print(f"[ParallelPreprocess] loaded_objects: {list(loaded_objects.keys()) if loaded_objects else 'None'}")
-            end_operation("LoadPreprocessedObjects")
-        except Exception as e:
-            print(f"[ParallelPreprocess] 加载失败: {e}")
-            import traceback
-            traceback.print_exc()
-            manager.cleanup()
-            return None
         
         copy_mapping = {}
         for original_name, (original_obj, node_or_item) in node_mapping.items():
@@ -597,8 +741,18 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             else:
                 copy_name = f"{original_name}_copy"
             
-            if copy_name in loaded_objects:
-                copy_obj = loaded_objects[copy_name]
+            copy_obj = None
+            
+            if original_name in cached_objects:
+                cached_obj = cached_objects[original_name]
+                cached_obj.name = copy_name
+                copy_obj = cached_obj
+            
+            if copy_obj is None and loaded_objects:
+                if copy_name in loaded_objects:
+                    copy_obj = loaded_objects[copy_name]
+            
+            if copy_obj:
                 
                 node_or_item.original_object_name = original_name
                 copy_mapping[original_name] = (copy_obj, node_or_item)
@@ -615,73 +769,14 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         tree = BlueprintExportHelper.get_current_blueprint_tree()
         
         print(f"[ParallelPreprocess] 开始按处理链执行...")
-        for original_name, (copy_obj, node_or_item) in copy_mapping.items():
-            current_name = original_name
-            processing_chain = self._get_processing_chain_for_object(original_name, tree)
-            
-            if processing_chain:
-                print(f"[ParallelPreprocess][ProcessingChain] 物体 {original_name} 开始按处理链执行，共 {len(processing_chain)} 个节点")
-                
-                for idx, (node, node_type) in enumerate(processing_chain):
-                    if node_type == 'name_modify':
-                        print(f"[ParallelPreprocess][ProcessingChain] 步骤 {idx + 1}: 名称修改节点 {node.name}")
-                        if hasattr(node, 'is_valid') and node.is_valid():
-                            new_name = node.get_modified_object_name(current_name)
-                            if new_name != current_name:
-                                print(f"[ParallelPreprocess][ProcessingChain] 名称修改: {current_name} -> {new_name}")
-                                old_copy_name = copy_obj.name
-                                copy_obj.name = new_name
-                                print(f"[ParallelPreprocess][ProcessingChain] 副本名称: {old_copy_name} -> {copy_obj.name}")
-                                current_name = new_name
-                                if hasattr(node_or_item, 'original_object_name'):
-                                    node_or_item.original_object_name = new_name
-                            else:
-                                print(f"[ParallelPreprocess][ProcessingChain] 名称未变化")
-                    
-                    elif node_type == 'vg_process':
-                        print(f"[ParallelPreprocess][ProcessingChain] 步骤 {idx + 1}: 顶点组处理节点 {node.name}，当前名称: {current_name}")
-                        start_operation(f"VGProcess_{node.name}", original_name)
-                        try:
-                            stats = node.process_object(copy_obj)
-                            if any(v > 0 for v in stats.values()):
-                                print(f"[ParallelPreprocess][ProcessingChain] {copy_obj.name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
-                        except Exception as e:
-                            print(f"[ParallelPreprocess][ProcessingChain] 处理物体 {copy_obj.name} 时出错: {e}")
-                            import traceback
-                            traceback.print_exc()
-                        end_operation(f"VGProcess_{node.name}")
-                
-                node_or_item.object_name = copy_obj.name
-            else:
-                name_modify_nodes = self._get_name_modify_nodes()
-                if name_modify_nodes:
-                    print(f"[ParallelPreprocess][NameModify] 开始应用名称修改节点，共 {len(name_modify_nodes)} 个")
-                    for idx, name_modify_node in enumerate(name_modify_nodes):
-                        print(f"[ParallelPreprocess][NameModify] 应用第 {idx + 1} 个名称修改节点: {name_modify_node.name}")
-                        if hasattr(name_modify_node, 'is_valid') and name_modify_node.is_valid():
-                            new_name = name_modify_node.get_modified_object_name(current_name)
-                            if new_name != current_name:
-                                print(f"[ParallelPreprocess][NameModify] 节点 {name_modify_node.name}: {current_name} -> {new_name}")
-                                old_copy_name = copy_obj.name
-                                copy_obj.name = new_name
-                                print(f"[ParallelPreprocess][NameModify] 副本名称: {old_copy_name} -> {copy_obj.name}")
-                                current_name = new_name
-                                if hasattr(node_or_item, 'original_object_name'):
-                                    node_or_item.original_object_name = new_name
-                            else:
-                                print(f"[ParallelPreprocess][NameModify] 节点 {name_modify_node.name}: 名称未变化")
-                        else:
-                            print(f"[ParallelPreprocess][NameModify] 节点 {name_modify_node.name}: 无效或为空，跳过")
-                
-                node_or_item.object_name = copy_obj.name
-                
-                vg_process_nodes = self._get_vg_process_nodes()
-                if vg_process_nodes:
-                    self._apply_vg_process_nodes(copy_obj, vg_process_nodes)
         
-        start_operation("ParallelCleanup")
-        manager.cleanup()
-        end_operation("ParallelCleanup")
+        if copy_mapping:
+            self._execute_processing_chain_for_objects(copy_mapping, tree)
+        
+        if manager:
+            start_operation("ParallelCleanup")
+            manager.cleanup()
+            end_operation("ParallelCleanup")
         wm.progress_update(50)
         
         return copy_mapping
@@ -919,91 +1014,86 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         """
         获取指定物体经过的处理链（按连接顺序）
         返回: [(节点, 节点类型), ...] 其中节点类型为 'name_modify' 或 'vg_process'
+        
+        新逻辑：从输出节点开始反向收集所有处理节点，然后过滤出连接到当前物体的节点
         """
         result = []
         visited = set()
+        all_process_nodes = []
         
-        def find_object_node(node, current_tree, depth=0):
-            """查找物体节点"""
+        def collect_all_process_nodes(node, current_tree):
+            """从输出节点开始，收集所有处理节点（顶点组处理节点和名称修改节点）"""
             if node in visited:
-                return None
+                return
             visited.add(node)
             
-            if node.bl_idname == 'SSMTNode_Object_Info':
-                found_name = getattr(node, 'object_name', '')
-                if found_name == obj_name:
-                    return node
-            elif node.bl_idname == 'SSMTNode_MultiFile_Export':
-                object_list = getattr(node, 'object_list', [])
+            if node.bl_idname == 'SSMTNode_VertexGroupProcess':
+                all_process_nodes.append((node, 'vg_process'))
+            elif node.bl_idname == 'SSMTNode_Object_Name_Modify':
+                all_process_nodes.append((node, 'name_modify'))
+            
+            for input_socket in node.inputs:
+                for link in input_socket.links:
+                    collect_all_process_nodes(link.from_node, current_tree)
+        
+        output_nodes = [n for n in tree.nodes if n.bl_idname == 'SSMTNode_Result_Output']
+        for output_node in output_nodes:
+            collect_all_process_nodes(output_node, tree)
+        
+        all_process_nodes.reverse()
+        
+        for node, node_type in all_process_nodes:
+            if self._is_object_connected_to_node(obj_name, node, tree):
+                result.append((node, node_type))
+        
+        print(f"[ProcessingChain] 物体 {obj_name} 的处理链: {[(n.name, t) for n, t in result]}")
+        return result
+    
+    def _is_object_connected_to_node(self, obj_name, target_node, node_tree):
+        """检查物体是否连接到指定的节点（支持嵌套蓝图）"""
+        visited = set()
+        
+        def find_all_object_names(current_node, current_tree, depth=0):
+            """从节点开始，找到所有连接的物体名称"""
+            if current_node in visited:
+                return []
+            visited.add(current_node)
+            
+            object_names = []
+            
+            if current_node.bl_idname == 'SSMTNode_Object_Info':
+                found_name = getattr(current_node, 'object_name', '')
+                if found_name:
+                    return [found_name]
+            
+            elif current_node.bl_idname == 'SSMTNode_MultiFile_Export':
+                object_list = getattr(current_node, 'object_list', [])
                 for item in object_list:
                     item_name = getattr(item, 'object_name', '')
-                    if item_name == obj_name:
-                        return node
-            elif node.bl_idname == 'SSMTNode_Blueprint_Nest':
-                blueprint_name = getattr(node, 'blueprint_name', '')
+                    if item_name:
+                        object_names.append(item_name)
+                if object_names:
+                    return object_names
+            
+            elif current_node.bl_idname == 'SSMTNode_Blueprint_Nest':
+                blueprint_name = getattr(current_node, 'blueprint_name', '')
                 if blueprint_name:
                     nested_tree = bpy.data.node_groups.get(blueprint_name)
                     if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
                         for nested_node in nested_tree.nodes:
                             if nested_node.bl_idname == 'SSMTNode_Result_Output':
-                                found = find_object_node(nested_node, nested_tree, depth+1)
-                                if found:
-                                    return found
+                                names = find_all_object_names(nested_node, nested_tree, depth+1)
+                                object_names.extend(names)
             
-            for input_socket in node.inputs:
+            for input_socket in current_node.inputs:
                 for link in input_socket.links:
-                    found = find_object_node(link.from_node, current_tree, depth+1)
-                    if found:
-                        return found
-            return None
-        
-        def collect_processing_chain(node, current_tree, chain, visited_nodes):
-            """从物体节点开始，收集处理链"""
-            if node in visited_nodes:
-                return
-            visited_nodes.add(node)
+                    names = find_all_object_names(link.from_node, current_tree, depth+1)
+                    object_names.extend(names)
             
-            for output_socket in node.outputs:
-                for link in output_socket.links:
-                    to_node = link.to_node
-                    if to_node.bl_idname == 'SSMTNode_Object_Name_Modify':
-                        chain.append((to_node, 'name_modify'))
-                        collect_processing_chain(to_node, current_tree, chain, visited_nodes)
-                    elif to_node.bl_idname == 'SSMTNode_VertexGroupProcess':
-                        chain.append((to_node, 'vg_process'))
-                        collect_processing_chain(to_node, current_tree, chain, visited_nodes)
-                    elif to_node.bl_idname == 'SSMTNode_Object_Group':
-                        collect_processing_chain(to_node, current_tree, chain, visited_nodes)
-                    elif to_node.bl_idname == 'SSMTNode_ToggleKey':
-                        collect_processing_chain(to_node, current_tree, chain, visited_nodes)
-                    elif to_node.bl_idname == 'SSMTNode_SwitchKey':
-                        collect_processing_chain(to_node, current_tree, chain, visited_nodes)
-                    elif to_node.bl_idname == 'SSMTNode_Result_Output':
-                        collect_processing_chain(to_node, current_tree, chain, visited_nodes)
-                    elif to_node.bl_idname == 'SSMTNode_Blueprint_Nest':
-                        blueprint_name = getattr(to_node, 'blueprint_name', '')
-                        if blueprint_name:
-                            nested_tree = bpy.data.node_groups.get(blueprint_name)
-                            if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
-                                for nested_node in nested_tree.nodes:
-                                    if nested_node.bl_idname == 'SSMTNode_Result_Output':
-                                        collect_processing_chain(nested_node, nested_tree, chain, visited_nodes)
-                    else:
-                        collect_processing_chain(to_node, current_tree, chain, visited_nodes)
+            return object_names
         
-        output_nodes = [n for n in tree.nodes if n.bl_idname == 'SSMTNode_Result_Output']
-        for output_node in output_nodes:
-            visited.clear()
-            object_node = find_object_node(output_node, tree)
-            if object_node:
-                chain = []
-                collect_processing_chain(object_node, tree, chain, set())
-                if chain:
-                    result = chain
-                    break
-        
-        print(f"[ProcessingChain] 物体 {obj_name} 的处理链: {[(n.name, t) for n, t in result]}")
-        return result
+        object_names = find_all_object_names(target_node, node_tree)
+        return obj_name in object_names
     
     def _apply_vg_process_nodes(self, obj, vg_process_nodes):
         """应用顶点组处理节点到物体"""
@@ -1012,21 +1102,102 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         
         applicable_nodes = self._get_vg_process_nodes_for_object(obj.name, vg_process_nodes)
         
-        print(f"[VGProcess] 物体 {obj.name} 找到 {len(applicable_nodes)} 个适用的顶点组处理节点")
-        
         for i, node in enumerate(applicable_nodes):
             try:
-                print(f"[VGProcess] 开始执行第 {i+1} 个节点: {node.name}")
                 start_operation(f"VGProcess_{node.name}", obj.name)
                 stats = node.process_object(obj)
                 if any(v > 0 for v in stats.values()):
                     print(f"[VGProcess] {obj.name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
                 end_operation(f"VGProcess_{node.name}")
-                print(f"[VGProcess] 完成执行第 {i+1} 个节点: {node.name}")
             except Exception as e:
                 print(f"[Process] 处理物体 {obj.name} 时出错: {e}")
                 import traceback
                 traceback.print_exc()
+                end_operation(f"VGProcess_{node.name}")
+    
+    def _apply_vg_process_batch(self, pending_tasks, max_workers=4):
+        """批量处理顶点组任务（多线程优化版）
+        
+        Args:
+            pending_tasks: [(obj, node), ...] 待处理的物体-节点对
+            max_workers: 最大线程数
+        """
+        if not pending_tasks:
+            return
+        
+        node_to_objects = {}
+        for obj, node in pending_tasks:
+            if node not in node_to_objects:
+                node_to_objects[node] = []
+            node_to_objects[node].append(obj)
+        
+        for node, objs in node_to_objects.items():
+            if len(objs) > 1:
+                print(f"[VGProcess] 节点 {node.name}: 多线程处理 {len(objs)} 个物体")
+                try:
+                    all_stats = node.process_objects_batch(objs, max_workers=max_workers)
+                    for obj_name, stats in all_stats.items():
+                        if any(v > 0 for v in stats.values()):
+                            print(f"[VGProcess] {obj_name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
+                except Exception as e:
+                    print(f"[VGProcess] 批量处理节点 {node.name} 时出错: {e}")
+                    import traceback
+                    traceback.print_exc()
+            elif len(objs) == 1:
+                obj = objs[0]
+                try:
+                    stats = node.process_object(obj)
+                    if any(v > 0 for v in stats.values()):
+                        print(f"[VGProcess] {obj.name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
+                except Exception as e:
+                    print(f"[Process] 处理物体 {obj.name} 时出错: {e}")
+                    import traceback
+                    traceback.print_exc()
+    
+    def _apply_vg_process_nodes_batch(self, objects, vg_process_nodes, max_workers=4):
+        """批量应用顶点组处理节点到多个物体（多线程优化版）"""
+        if not vg_process_nodes or not objects:
+            return
+        
+        mesh_objects = [obj for obj in objects if obj and obj.type == 'MESH']
+        if not mesh_objects:
+            return
+        
+        print(f"[VGProcess] 开始批量处理 {len(mesh_objects)} 个网格物体（多线程模式）")
+        
+        node_to_objects = {}
+        for obj in mesh_objects:
+            applicable_nodes = self._get_vg_process_nodes_for_object(obj.name, vg_process_nodes)
+            for node in applicable_nodes:
+                if node not in node_to_objects:
+                    node_to_objects[node] = []
+                node_to_objects[node].append(obj)
+        
+        for node, objs in node_to_objects.items():
+            if len(objs) > 1:
+                print(f"[VGProcess] 节点 {node.name}: 多线程处理 {len(objs)} 个物体")
+                start_operation(f"VGProcess_{node.name}", "batch")
+                try:
+                    all_stats = node.process_objects_batch(objs, max_workers=max_workers)
+                    for obj_name, stats in all_stats.items():
+                        if any(v > 0 for v in stats.values()):
+                            print(f"[VGProcess] {obj_name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
+                except Exception as e:
+                    print(f"[VGProcess] 批量处理节点 {node.name} 时出错: {e}")
+                    import traceback
+                    traceback.print_exc()
+                end_operation(f"VGProcess_{node.name}")
+            elif len(objs) == 1:
+                obj = objs[0]
+                start_operation(f"VGProcess_{node.name}", obj.name)
+                try:
+                    stats = node.process_object(obj)
+                    if any(v > 0 for v in stats.values()):
+                        print(f"[VGProcess] {obj.name}: 重命名={stats['renamed']}, 合并={stats['merged']}, 清理={stats['cleaned']}, 填充={stats['filled']}")
+                except Exception as e:
+                    print(f"[Process] 处理物体 {obj.name} 时出错: {e}")
+                    import traceback
+                    traceback.print_exc()
                 end_operation(f"VGProcess_{node.name}")
     
 
@@ -1111,10 +1282,12 @@ def register():
     bpy.utils.register_class(SSMTGenerateModBlueprint)
     bpy.utils.register_class(SSMTSelectGenerateModFolder)
     bpy.utils.register_class(SSMTQuickPartialExport)
+    bpy.utils.register_class(SSMTClearPreprocessCache)
 
 
 def unregister():
     bpy.utils.unregister_class(SSMTGenerateModBlueprint)
     bpy.utils.unregister_class(SSMTSelectGenerateModFolder)
     bpy.utils.unregister_class(SSMTQuickPartialExport)
+    bpy.utils.unregister_class(SSMTClearPreprocessCache)
 

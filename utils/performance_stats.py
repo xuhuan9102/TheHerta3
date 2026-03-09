@@ -130,8 +130,18 @@ class PerformanceStats:
         report.append("=" * 80)
         report.append("")
         
-        # 总体统计
-        total_time = sum(stats['total_time'] for stats in self.stats.values())
+        # 总体统计 - 只计算顶级操作的时间，避免重复计算
+        # GenerateMod_Total 是父操作，它的时间已经包含了子操作的时间
+        top_level_operations = ['GenerateMod_Total', 'SequentialPreprocess']
+        total_time = 0.0
+        for op_name in top_level_operations:
+            if op_name in self.stats:
+                total_time = max(total_time, self.stats[op_name]['total_time'])
+        
+        # 如果没有顶级操作，则使用所有操作的最大值
+        if total_time == 0.0:
+            total_time = max((stats['total_time'] for stats in self.stats.values()), default=0.0)
+        
         total_operations = sum(stats['count'] for stats in self.stats.values())
         
         report.append(f"总处理时间: {total_time:.2f} 秒 ({total_time / 60:.2f} 分钟)")

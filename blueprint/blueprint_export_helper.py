@@ -372,7 +372,15 @@ class BlueprintExportHelper:
 
     @staticmethod
     def get_postprocess_nodes():
-        """获取连接到Generate Mod输出节点的所有后处理节点，按连接顺序返回"""
+        """获取连接到Generate Mod输出节点的所有后处理节点，按连接顺序返回
+        
+        包括：
+        1. SSMTNode_Object_Name_Modify 节点（通过 Post Process 输出连接）- 优先收集
+        2. SSMTNode_PostProcess* 节点
+        
+        名称修改节点必须先于其他后处理节点执行，以便传递映射信息
+        其他后处理节点按照连接顺序执行（从链条起点到终点）
+        """
         tree = BlueprintExportHelper.get_current_blueprint_tree()
         if not tree:
             return []
@@ -381,10 +389,11 @@ class BlueprintExportHelper:
         if not output_node:
             return []
         
-        postprocess_nodes = []
+        name_modify_nodes = []
+        postprocess_chain = []
         
-        def collect_postprocess_nodes(node, visited=None):
-            """递归收集后处理节点"""
+        def collect_name_modify_nodes(node, visited=None):
+            """递归收集名称修改节点"""
             if visited is None:
                 visited = set()
             
@@ -401,11 +410,56 @@ class BlueprintExportHelper:
                         if target_node.mute:
                             continue
                         
-                        if target_node.bl_idname.startswith('SSMTNode_PostProcess'):
-                            postprocess_nodes.append(target_node)
-                            collect_postprocess_nodes(target_node, visited)
+                        if target_node.bl_idname == 'SSMTNode_Object_Name_Modify':
+                            if output.name == "Post Process" or output.bl_idname == 'SSMTSocketPostProcess':
+                                if target_node not in name_modify_nodes:
+                                    name_modify_nodes.append(target_node)
+                                collect_name_modify_nodes(target_node, visited)
         
-        collect_postprocess_nodes(output_node)
+        def collect_postprocess_chain(node, visited=None, chain=None):
+            """递归收集后处理节点链，按从起点到终点的顺序"""
+            if visited is None:
+                visited = set()
+            if chain is None:
+                chain = []
+            
+            if node.name in visited:
+                return
+            
+            visited.add(node.name)
+            
+            if node.bl_idname.startswith('SSMTNode_PostProcess'):
+                chain.append(node)
+            
+            for output in node.outputs:
+                if output.is_linked:
+                    for link in output.links:
+                        target_node = link.to_node
+                        
+                        if target_node.mute:
+                            continue
+                        
+                        if target_node.bl_idname.startswith('SSMTNode_PostProcess'):
+                            collect_postprocess_chain(target_node, visited, chain)
+            
+            return chain
+        
+        collect_name_modify_nodes(output_node)
+        
+        for output in output_node.outputs:
+            if output.is_linked:
+                for link in output.links:
+                    target_node = link.to_node
+                    if target_node.bl_idname.startswith('SSMTNode_PostProcess') and not target_node.mute:
+                        chain = collect_postprocess_chain(target_node, set(), [])
+                        for node in chain:
+                            if node not in postprocess_chain:
+                                postprocess_chain.append(node)
+        
+        postprocess_nodes = name_modify_nodes + postprocess_chain
+        
+        print(f"[PostProcess] 收集到 {len(name_modify_nodes)} 个名称修改节点，{len(postprocess_chain)} 个其他后处理节点")
+        print(f"[PostProcess] 执行顺序: {[n.name for n in postprocess_nodes]}")
         
         return postprocess_nodes
     

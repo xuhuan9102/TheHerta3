@@ -12,6 +12,150 @@ class ShapeKeyUtils:
     # Github: https://github.com/przemir/ApplyModifierForObjectWithShapeKeys
 
     @classmethod
+    def apply_modifiers_for_object_with_shape_keys_optimized(cls, context, selected_modifiers, disable_armatures=False):
+        """
+        优化版：使用 numpy 直接处理形态键数据
+        避免对每个形态键重复复制物体和应用修改器
+        
+        注意：此优化版仅适用于不改变顶点位置的修改器
+        如果修改器会改变顶点位置（如 Armature, Curve, Lattice 等），
+        则回退到原始算法
+        
+        算法：
+        1. 检查修改器类型，决定是否使用优化路径
+        2. 使用 numpy 提取所有形态键的顶点坐标
+        3. 删除所有形态键
+        4. 应用修改器到基础形状
+        5. 使用 numpy 直接重新创建形态键
+        """
+        if len(selected_modifiers) == 0:
+            return (True, None)
+        
+        obj = context.object
+        
+        modifiers_that_transform_vertices = {'ARMATURE', 'CURVE', 'LATTICE', 'SHRINKWRAP', 'SIMPLE_DEFORM', 'BEND', 'HOOK'}
+        has_transform_modifiers = False
+        for modifier in obj.modifiers:
+            if modifier.name in selected_modifiers and modifier.type in modifiers_that_transform_vertices and modifier.show_viewport:
+                has_transform_modifiers = True
+                break
+        
+        if has_transform_modifiers:
+            print(f"[ShapeKeyOptimized] 检测到会变换顶点的修改器，回退到原始算法")
+            return cls.apply_modifiers_for_object_with_shape_keys(context, selected_modifiers, disable_armatures)
+        
+        start_time = time.time()
+        
+        contains_mirror_with_merge = False
+        for modifier in obj.modifiers:
+            if modifier.name in selected_modifiers:
+                if modifier.type == 'MIRROR' and modifier.use_mirror_merge == True:
+                    contains_mirror_with_merge = True
+        
+        disabled_armature_modifiers = []
+        if disable_armatures:
+            for modifier in obj.modifiers:
+                if modifier.name not in selected_modifiers and modifier.type == 'ARMATURE' and modifier.show_viewport == True:
+                    disabled_armature_modifiers.append(modifier)
+                    modifier.show_viewport = False
+        
+        if not obj.data.shape_keys:
+            for modifier_name in selected_modifiers:
+                mod = obj.modifiers.get(modifier_name)
+                if mod and mod.show_viewport:
+                    bpy.ops.object.modifier_apply(modifier=modifier_name)
+            return (True, None)
+        
+        shapes_count = len(obj.data.shape_keys.key_blocks)
+        
+        if shapes_count == 0:
+            for modifier_name in selected_modifiers:
+                mod = obj.modifiers.get(modifier_name)
+                if mod and mod.show_viewport:
+                    bpy.ops.object.modifier_apply(modifier=modifier_name)
+            return (True, None)
+        
+        print(f"[ShapeKeyOptimized] 开始处理 {shapes_count} 个形态键")
+        
+        properties_list = []
+        properties = ["interpolation", "mute", "name", "relative_key", "slider_max", "slider_min", "value", "vertex_group"]
+        
+        for i in range(shapes_count):
+            key_b = obj.data.shape_keys.key_blocks[i]
+            props = {p: None for p in properties}
+            props["name"] = key_b.name
+            props["mute"] = key_b.mute
+            props["interpolation"] = key_b.interpolation
+            props["relative_key"] = key_b.relative_key.name
+            props["slider_max"] = key_b.slider_max
+            props["slider_min"] = key_b.slider_min
+            props["value"] = key_b.value
+            props["vertex_group"] = key_b.vertex_group
+            properties_list.append(props)
+        
+        original_vert_count = len(obj.data.vertices)
+        
+        shape_key_coords = []
+        for i in range(shapes_count):
+            key_b = obj.data.shape_keys.key_blocks[i]
+            coords = numpy.empty((original_vert_count, 3), dtype=numpy.float32)
+            key_b.data.foreach_get('co', coords.ravel())
+            shape_key_coords.append(coords)
+        
+        print(f"[ShapeKeyOptimized] 已提取 {shapes_count} 个形态键坐标数据")
+        
+        bpy.ops.object.shape_key_remove(all=True)
+        
+        for modifier_name in selected_modifiers:
+            bpy.ops.object.modifier_apply(modifier=modifier_name)
+        
+        new_vert_count = len(obj.data.vertices)
+        
+        if original_vert_count != new_vert_count:
+            error_hint = ""
+            if contains_mirror_with_merge:
+                error_hint = "\n提示: 镜像修改器启用了 'Merge' 选项可能导致问题。"
+            error_info = (f"顶点数量变化: {original_vert_count} -> {new_vert_count}！\n"
+                         f"形态键要求修改器应用后顶点数量不变。{error_hint}")
+            
+            for modifier in disabled_armature_modifiers:
+                modifier.show_viewport = True
+            return (False, error_info)
+        
+        bpy.ops.object.shape_key_add(from_mix=False)
+        
+        for i in range(1, shapes_count):
+            key_b = obj.shape_key_add(name=properties_list[i]["name"], from_mix=False)
+            key_b.data.foreach_set('co', shape_key_coords[i].ravel())
+        
+        print(f"[ShapeKeyOptimized] 已重新创建 {shapes_count - 1} 个形态键")
+        
+        for i in range(shapes_count):
+            key_b = obj.data.shape_keys.key_blocks[i]
+            key_b.name = properties_list[i]["name"]
+            key_b.interpolation = properties_list[i]["interpolation"]
+            key_b.mute = properties_list[i]["mute"]
+            key_b.slider_max = properties_list[i]["slider_max"]
+            key_b.slider_min = properties_list[i]["slider_min"]
+            key_b.value = properties_list[i]["value"]
+            key_b.vertex_group = properties_list[i]["vertex_group"]
+            
+            rel_key = properties_list[i]["relative_key"]
+            for j in range(shapes_count):
+                key_brel = obj.data.shape_keys.key_blocks[j]
+                if rel_key == key_brel.name:
+                    key_b.relative_key = key_brel
+                    break
+        
+        for modifier in disabled_armature_modifiers:
+            modifier.show_viewport = True
+        
+        elapsed = time.time() - start_time
+        print(f"[ShapeKeyOptimized] 完成，耗时: {elapsed:.2f}秒")
+        
+        return (True, None)
+
+    @classmethod
     def apply_modifiers_for_object_with_shape_keys(cls,context, selectedModifiers, disable_armatures):
         # The MIT License (MIT)
         #

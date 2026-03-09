@@ -32,7 +32,7 @@ class SSMT_UL_NameMapping(bpy.types.UIList):
 
 
 class SSMTNode_Object_Name_Modify(SSMTNodeBase):
-    '''物体名称修改节点 - 基于映射表修改物体名称，支持多个映射关系'''
+    '''物体名称修改节点 - 基于映射表修改物体名称，支持多个映射关系，支持反向映射和后处理'''
     bl_idname = 'SSMTNode_Object_Name_Modify'
     bl_label = 'Object Name Modify'
     bl_icon = 'SORTALPHA'
@@ -41,9 +41,16 @@ class SSMTNode_Object_Name_Modify(SSMTNodeBase):
     mapping_list: bpy.props.CollectionProperty(type=NameMappingItem)
     active_mapping_index: bpy.props.IntProperty(default=0)
     
+    reverse_mapping: bpy.props.BoolProperty(
+        name="反向映射",
+        description="启用后，映射关系将被反转（原始名称和新名称互换）",
+        default=False
+    )
+    
     def init(self, context):
         self.inputs.new('SSMTSocketObject', "Object Input")
         self.outputs.new('SSMTSocketObject', "Object Output")
+        self.outputs.new('SSMTSocketPostProcess', "Post Process")
         self.width = 400
     
     def draw_buttons(self, context, layout):
@@ -59,6 +66,11 @@ class SSMTNode_Object_Name_Modify(SSMTNodeBase):
         col.separator()
         col.operator("ssmt.name_mapping_move_up", icon='TRIA_UP', text="")
         col.operator("ssmt.name_mapping_move_down", icon='TRIA_DOWN', text="")
+        
+        row = box.row()
+        row.prop(self, "reverse_mapping", icon='ARROW_LEFTRIGHT')
+        if self.reverse_mapping:
+            row.label(text="映射已反转", icon='INFO')
     
     def get_preview_info(self):
         """获取预览信息，递归获取所有连接的物体"""
@@ -148,16 +160,46 @@ class SSMTNode_Object_Name_Modify(SSMTNodeBase):
         modified_name = original_name
         
         for item in self.mapping_list:
-            if item.original_name and item.original_name in modified_name:
+            original = item.original_name
+            new = item.new_name
+            
+            if self.reverse_mapping:
+                original, new = new, original
+            
+            if original and original in modified_name:
                 old_name = modified_name
-                modified_name = modified_name.replace(item.original_name, item.new_name)
-                print(f"[NameModify] 物体 {original_name}: '{item.original_name}' -> '{item.new_name}'")
+                modified_name = modified_name.replace(original, new)
+                print(f"[NameModify] 物体 {original_name}: '{original}' -> '{new}'")
                 print(f"[NameModify] 中间结果: {old_name} -> {modified_name}")
         
         return modified_name
     
+    def get_mapping_dict(self):
+        """获取映射字典（用于后处理阶段）
+        
+        返回格式：{配置表中的名称片段: 场景中的名称片段}
+        材质转资源节点会使用这个映射来查找物体
+        """
+        mapping = {}
+        for item in self.mapping_list:
+            original = item.original_name
+            new = item.new_name
+            
+            if original and new:
+                if self.reverse_mapping:
+                    mapping[original] = new
+                else:
+                    mapping[new] = original
+        return mapping
+    
     def is_valid(self):
-        return len(self.mapping_list) > 0 and any(item.original_name for item in self.mapping_list)
+        if len(self.mapping_list) == 0:
+            return False
+        
+        if self.reverse_mapping:
+            return any(item.new_name for item in self.mapping_list)
+        else:
+            return any(item.original_name for item in self.mapping_list)
     
     def get_connected_object_names(self):
         """获取所有连接的物体名称（用于导出流程）"""
@@ -203,6 +245,51 @@ class SSMTNode_Object_Name_Modify(SSMTNodeBase):
             collect_object_names(link.from_node)
         
         return result
+    
+    def execute_postprocess(self, mod_export_path):
+        """
+        后处理阶段执行：修改配置表中的物体名称（仅用于识别）
+        
+        这个方法会在导出完成后执行，用于修改后续后处理节点接收到的配置表信息。
+        主要用于跨IB节点等需要识别物体名称的场景。
+        """
+        print(f"[NameModify] 后处理阶段开始执行，Mod导出路径: {mod_export_path}")
+        
+        if not self.is_valid():
+            print(f"[NameModify] 映射表为空，跳过后处理")
+            return
+        
+        mapping = self.get_mapping_dict()
+        print(f"[NameModify] 映射字典: {mapping}")
+        
+        self._propagate_mapping_to_downstream_nodes(mapping)
+        
+        print(f"[NameModify] 后处理阶段执行完成")
+    
+    def _propagate_mapping_to_downstream_nodes(self, mapping):
+        """递归地将映射传递给所有下游后处理节点"""
+        visited = set()
+        
+        def propagate(node):
+            if node.name in visited:
+                return
+            visited.add(node.name)
+            
+            for output in node.outputs:
+                if output.is_linked:
+                    for link in output.links:
+                        target_node = link.to_node
+                        
+                        if target_node.bl_idname.startswith('SSMTNode_PostProcess') or \
+                           target_node.bl_idname == 'SSMTNode_Object_Name_Modify':
+                            
+                            if hasattr(target_node, 'apply_name_mapping'):
+                                target_node.apply_name_mapping(mapping)
+                                print(f"[NameModify] 已将映射传递给节点: {target_node.name}")
+                            
+                            propagate(target_node)
+        
+        propagate(self)
 
 
 class SSMT_OT_NameMappingAdd(bpy.types.Operator):
@@ -283,6 +370,25 @@ class SSMT_OT_NameMappingMoveDown(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class SSMT_OT_NameMappingReverse(bpy.types.Operator):
+    bl_idname = "ssmt.name_mapping_reverse"
+    bl_label = "反转映射"
+    bl_description = "交换所有映射项的原始名称和新名称"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        node = context.active_node
+        if not node or node.bl_idname != 'SSMTNode_Object_Name_Modify':
+            self.report({'ERROR'}, "请先选择物体名称修改节点")
+            return {'CANCELLED'}
+        
+        for item in node.mapping_list:
+            item.original_name, item.new_name = item.new_name, item.original_name
+        
+        self.report({'INFO'}, "已反转所有映射项")
+        return {'FINISHED'}
+
+
 classes = (
     NameMappingItem,
     SSMT_UL_NameMapping,
@@ -291,6 +397,7 @@ classes = (
     SSMT_OT_NameMappingRemove,
     SSMT_OT_NameMappingMoveUp,
     SSMT_OT_NameMappingMoveDown,
+    SSMT_OT_NameMappingReverse,
 )
 
 
