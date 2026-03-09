@@ -116,6 +116,19 @@ class Properties_ImportModel(bpy.types.PropertyGroup):
         '''
         return bpy.context.scene.properties_import_model.use_normal_map
 
+    use_preprocess_cache: bpy.props.BoolProperty(
+        name="启用预处理缓存",
+        description="启用后，预处理结果会被缓存。当物体未变更时，直接使用缓存，大幅提升重复导出速度",
+        default=True,
+    )  # type: ignore
+
+    @classmethod
+    def use_preprocess_cache(cls):
+        '''
+        bpy.context.scene.properties_import_model.use_preprocess_cache
+        '''
+        return bpy.context.scene.properties_import_model.use_preprocess_cache
+
 def register():
     bpy.utils.register_class(Properties_ImportModel)
     bpy.types.Scene.properties_import_model = bpy.props.PointerProperty(type=Properties_ImportModel)

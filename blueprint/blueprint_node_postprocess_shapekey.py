@@ -345,22 +345,33 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         """读取INI文件到有序字典"""
         sections = OrderedDict()
         current_section = None
+        slider_panel_content = ""
+        slider_marker = "; --- AUTO-APPENDED SLIDER CONTROL PANEL ---"
+        
         try:
             with open(ini_file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    stripped_line = line.strip()
-                    if stripped_line.startswith('[') and stripped_line.endswith(']'):
-                        current_section = stripped_line
-                        if current_section not in sections:
-                            sections[current_section] = []
-                        continue
-                    if current_section:
-                        sections[current_section].append(line.rstrip('\n'))
+                content = f.read()
+            
+            if slider_marker in content:
+                marker_pos = content.find(slider_marker)
+                slider_panel_content = content[marker_pos:]
+                content = content[:marker_pos]
+                print("[ShapeKey] 检测到滑块面板内容，将保留")
+            
+            for line in content.splitlines():
+                stripped_line = line.strip()
+                if stripped_line.startswith('[') and stripped_line.endswith(']'):
+                    current_section = stripped_line
+                    if current_section not in sections:
+                        sections[current_section] = []
+                    continue
+                if current_section:
+                    sections[current_section].append(line)
         except Exception as e:
             print(f"读取INI文件失败: {e}")
-        return sections
+        return sections, slider_panel_content
 
-    def _write_ordered_dict_to_ini(self, sections, ini_file_path):
+    def _write_ordered_dict_to_ini(self, sections, ini_file_path, slider_panel_content=""):
         """将有序字典写入INI文件"""
         try:
             with open(ini_file_path, 'w', encoding='utf-8') as f:
@@ -372,6 +383,10 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                     for line in lines:
                         f.write(line + '\n')
                     f.write('\n')
+                
+                if slider_panel_content:
+                    f.write('\n')
+                    f.write(slider_panel_content)
         except Exception as e:
             print(f"写入INI文件失败: {e}")
 
@@ -543,7 +558,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         self._create_cumulative_backup(target_ini_file, mod_export_path)
 
         try:
-            sections = self._read_ini_to_ordered_dict(target_ini_file)
+            sections, slider_panel_content = self._read_ini_to_ordered_dict(target_ini_file)
             slot_to_name_to_objects, unique_hashes, hash_to_objects, all_objects = self._parse_classification_text_final(classification_text_obj.as_string())
             
             if not slot_to_name_to_objects:
@@ -795,7 +810,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                         sections[f"[{res_name}]"].insert(0, f"[{res_name}_0]")
 
             sections.update(compute_blocks_to_add)
-            self._write_ordered_dict_to_ini(sections, target_ini_file)
+            self._write_ordered_dict_to_ini(sections, target_ini_file, slider_panel_content)
 
             mode_str = f"紧凑:{'是' if use_packed else '否'}, 增量(仅位置):{'是' if use_delta else '否'}"
             print(f"形态键配置({mode_str})已生成到 {os.path.basename(target_ini_file)}")

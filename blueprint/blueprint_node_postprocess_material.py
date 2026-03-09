@@ -7,6 +7,9 @@ import shutil
 
 from .blueprint_node_postprocess_base import SSMTNode_PostProcess_Base
 
+_name_mapping_cache = {}
+_reverse_name_mapping_cache = {}
+
 
 class SSMTNode_PostProcess_Material(SSMTNode_PostProcess_Base):
     '''材质转资源后处理节点：根据场景物体的材质和纹理创建资源引用'''
@@ -26,19 +29,91 @@ class SSMTNode_PostProcess_Material(SSMTNode_PostProcess_Base):
         update=lambda self, context: self.update_node_width([self.material_switch_var])
     )
 
+    def apply_name_mapping(self, mapping):
+        """
+        应用名称映射（由名称修改节点调用）
+        
+        Args:
+            mapping: 字典，格式为 {配置表中的名称片段: 场景中的名称片段}
+        """
+        global _name_mapping_cache, _reverse_name_mapping_cache
+        
+        node_key = self.name
+        _name_mapping_cache[node_key] = mapping.copy()
+        _reverse_name_mapping_cache[node_key] = {}
+        
+        for config_name, scene_name in mapping.items():
+            _reverse_name_mapping_cache[node_key][scene_name] = config_name
+        
+        print(f"[MaterialToResource] 已应用名称映射: {len(mapping)} 条规则")
+        for config_name, scene_name in mapping.items():
+            print(f"  配置表 '{config_name}' -> 场景 '{scene_name}'")
+
+    def _get_name_mapping(self):
+        """获取当前节点的名称映射"""
+        global _name_mapping_cache
+        return _name_mapping_cache.get(self.name, {})
+
+    def _get_reverse_name_mapping(self):
+        """获取当前节点的反向名称映射"""
+        global _reverse_name_mapping_cache
+        return _reverse_name_mapping_cache.get(self.name, {})
+
     def draw_buttons(self, context, layout):
         layout.prop(self, "material_to_resource_override")
         layout.prop(self, "material_switch_var")
+        
+        name_mapping = self._get_name_mapping()
+        if name_mapping:
+            box = layout.box()
+            box.label(text=f"已应用 {len(name_mapping)} 条名称映射", icon='INFO')
 
     def extract_mesh_name(self, line):
         match = re.search(r'\[mesh:([^\]]+)\]', line)
         return match.group(1) if match else None
 
     def find_object_by_mesh_name(self, mesh_name):
-        if mesh_name in bpy.data.objects:
-            return bpy.data.objects[mesh_name]
+        name_mapping = self._get_name_mapping()
+        
+        if name_mapping:
+            print(f"[MaterialToResource] 查找物体 '{mesh_name}'，名称映射: {name_mapping}")
+        
+        potential_names = [mesh_name]
+        
+        if name_mapping:
+            for config_name, scene_name in name_mapping.items():
+                if config_name in mesh_name:
+                    new_name = mesh_name.replace(config_name, scene_name)
+                    if new_name not in potential_names:
+                        potential_names.append(new_name)
+        
+        for name in potential_names:
+            obj = bpy.data.objects.get(name)
+            if obj:
+                if name != mesh_name:
+                    print(f"[MaterialToResource] 通过名称映射找到物体: '{mesh_name}' -> '{name}'")
+                else:
+                    print(f"[MaterialToResource] 直接找到物体: '{mesh_name}'")
+                return obj
+        
         clean_name = re.sub(r'^[a-f0-9]+-[\d]+-', '', mesh_name)
-        return bpy.data.objects.get(clean_name)
+        if clean_name != mesh_name:
+            obj = bpy.data.objects.get(clean_name)
+            if obj:
+                print(f"[MaterialToResource] 通过清理哈希前缀找到物体: '{mesh_name}' -> '{clean_name}'")
+                return obj
+            
+            if name_mapping:
+                for config_name, scene_name in name_mapping.items():
+                    if config_name in clean_name:
+                        new_name = clean_name.replace(config_name, scene_name)
+                        obj = bpy.data.objects.get(new_name)
+                        if obj:
+                            print(f"[MaterialToResource] 通过清理后名称的映射找到物体: '{clean_name}' -> '{new_name}'")
+                            return obj
+        
+        print(f"[MaterialToResource] 未找到物体: '{mesh_name}'，尝试过的名称: {potential_names}")
+        return None
 
     def extract_transparency_info_from_mesh_name(self, mesh_name):
         match = re.search(r'(.+)_透明(\d+(\.\d+)?)', mesh_name)
@@ -346,6 +421,14 @@ class SSMTNode_PostProcess_Material(SSMTNode_PostProcess_Base):
             with open(ini_file, 'r', encoding='utf-8') as f:
                 content = f.read()
 
+            slider_panel_content = ""
+            slider_marker = "; --- AUTO-APPENDED SLIDER CONTROL PANEL ---"
+            if slider_marker in content:
+                marker_pos = content.find(slider_marker)
+                slider_panel_content = content[marker_pos:]
+                content = content[:marker_pos]
+                print("[MaterialToResource] 检测到滑块面板内容，将保留")
+
             sections = OrderedDict()
             current_section = None
             for line in content.splitlines():
@@ -390,6 +473,10 @@ class SSMTNode_PostProcess_Material(SSMTNode_PostProcess_Base):
                     new_content.append(f"[{shader_name}]")
                     new_content.extend(lines)
                     new_content.append('')
+
+            if slider_panel_content:
+                new_content.append('')
+                new_content.append(slider_panel_content)
 
             with open(ini_file, 'w', encoding='utf-8') as f:
                 f.write("\n".join(new_content))

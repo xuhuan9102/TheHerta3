@@ -18,26 +18,26 @@ class ModModelYYSLS:
     - 燕云十六声 YYSLS
     - 死或生：沙滩排球 （待确定，由于多个BLENDWEIGHTS仍然无法正确处理）
     '''
-    def __init__(self):
+    def __init__(self, skip_buffer_export:bool = False):
         # (1) 统计全局分支模型
         self.branch_model = BluePrintModel()
 
         # (2) 抽象每个DrawIB为DrawIBModel
         self.drawib_drawibmodel_dict:dict[str,DrawIBModel] = {}
-        self.parse_draw_ib_draw_ib_model_dict()
+        self.parse_draw_ib_draw_ib_model_dict(skip_buffer_export)
 
         # (3) 这些属性用于ini生成
         self.vlr_filter_index_indent = ""
         self.texture_hash_filter_index_dict = {}
 
-    def parse_draw_ib_draw_ib_model_dict(self):
+    def parse_draw_ib_draw_ib_model_dict(self, skip_buffer_export:bool = False):
         '''
         根据obj的命名规则，推导出DrawIB并抽象为DrawIBModel
         如果用户用不到某个DrawIB的话，就可以隐藏掉对应的obj
         隐藏掉的obj就不会被统计生成DrawIBModel，做到只导入模型，不生成Mod的效果。
         '''
         for draw_ib in self.branch_model.draw_ib__component_count_list__dict.keys():
-            draw_ib_model = DrawIBModel(draw_ib=draw_ib,branch_model=self.branch_model)
+            draw_ib_model = DrawIBModel(draw_ib=draw_ib,branch_model=self.branch_model, skip_buffer_export=skip_buffer_export)
             self.drawib_drawibmodel_dict[draw_ib] = draw_ib_model
 
  

@@ -243,26 +243,41 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
     def _read_ini_to_ordered_dict(self, ini_file_path):
         sections = OrderedDict()
         current_section = None
+        slider_panel_content = ""
+        slider_marker = "; --- AUTO-APPENDED SLIDER CONTROL PANEL ---"
+        
         try:
             with open(ini_file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    stripped_line = line.strip()
-                    if stripped_line.startswith('[') and stripped_line.endswith(']'):
-                        current_section = stripped_line
-                        sections[current_section] = []
-                    elif current_section is not None:
-                        sections[current_section].append(line.rstrip())
+                content = f.read()
+            
+            if slider_marker in content:
+                marker_pos = content.find(slider_marker)
+                slider_panel_content = content[marker_pos:]
+                content = content[:marker_pos]
+                print("[MultiFile] 检测到滑块面板内容，将保留")
+            
+            for line in content.splitlines():
+                stripped_line = line.strip()
+                if stripped_line.startswith('[') and stripped_line.endswith(']'):
+                    current_section = stripped_line
+                    sections[current_section] = []
+                elif current_section is not None:
+                    sections[current_section].append(line)
         except FileNotFoundError:
-            return None
-        return sections
+            return None, ""
+        return sections, slider_panel_content
 
-    def _write_ordered_dict_to_ini(self, sections, ini_file_path):
+    def _write_ordered_dict_to_ini(self, sections, ini_file_path, slider_panel_content=""):
         with open(ini_file_path, 'w', encoding='utf-8') as f:
             for section_name, lines in sections.items():
                 f.write(f"{section_name}\n")
                 for line in lines:
                     f.write(f"{line}\n")
                 f.write("\n")
+            
+            if slider_panel_content:
+                f.write("\n")
+                f.write(slider_panel_content)
 
     def execute_postprocess(self, mod_export_path):
         print(f"多文件配置后处理节点开始执行，Mod导出路径: {mod_export_path}")
@@ -289,7 +304,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
             for ini_file in ini_files:
                 ini_file_path = os.path.join(mod_export_path, ini_file)
                 self._create_cumulative_backup(ini_file_path, mod_export_path)
-                sections = self._read_ini_to_ordered_dict(ini_file)
+                sections, slider_panel_content = self._read_ini_to_ordered_dict(ini_file_path)
                 if not sections:
                     continue
 
@@ -465,7 +480,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
 
                 sections[present_section] = present_lines
 
-                self._write_ordered_dict_to_ini(sections, ini_file)
+                self._write_ordered_dict_to_ini(sections, ini_file, slider_panel_content)
 
             os.chdir(original_cwd)
             print("多文件配置生成完成！")

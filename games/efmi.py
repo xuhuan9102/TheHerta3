@@ -16,13 +16,13 @@ from ..common.m_ini_helper import M_IniHelper,M_IniHelper
 from ..common.m_ini_helper_gui import M_IniHelperGUI
 
 class ModModelEFMI:
-    def __init__(self):
+    def __init__(self, skip_buffer_export:bool = False):
         # (1) 统计全局分支模型
         self.branch_model = BluePrintModel()
 
         # (2) 抽象每个DrawIB为DrawIBModel
         self.drawib_drawibmodel_dict:dict[str,DrawIBModel] = {}
-        self.parse_draw_ib_draw_ib_model_dict()
+        self.parse_draw_ib_draw_ib_model_dict(skip_buffer_export)
 
         # (3) 这些属性用于ini生成
         self.vlr_filter_index_indent = ""
@@ -33,14 +33,14 @@ class ModModelEFMI:
         self.cross_ib_method_dict = self.branch_model.cross_ib_method_dict
         self.has_cross_ib = len(self.cross_ib_info_dict) > 0
 
-    def parse_draw_ib_draw_ib_model_dict(self):
+    def parse_draw_ib_draw_ib_model_dict(self, skip_buffer_export:bool = False):
         '''
         根据obj的命名规则，推导出DrawIB并抽象为DrawIBModel
         如果用户用不到某个DrawIB的话，就可以隐藏掉对应的obj
         隐藏掉的obj就不会被统计生成DrawIBModel，做到只导入模型，不生成Mod的效果。
         '''
         for draw_ib in self.branch_model.draw_ib__component_count_list__dict.keys():
-            draw_ib_model = DrawIBModel(draw_ib=draw_ib,branch_model=self.branch_model)
+            draw_ib_model = DrawIBModel(draw_ib=draw_ib,branch_model=self.branch_model, skip_buffer_export=skip_buffer_export)
             self.drawib_drawibmodel_dict[draw_ib] = draw_ib_model
 
     def add_cross_ib_present_section(self, ini_builder:M_IniBuilder):

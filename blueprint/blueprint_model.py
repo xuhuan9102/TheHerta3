@@ -323,6 +323,7 @@ class BluePrintModel:
         '''
         递归收集连接到跨IB节点的所有物体信息
         支持中间有其他节点（如顶点组处理、改名节点等）的情况
+        支持嵌套蓝图
         '''
         connected_objects = []
         visited_nodes = set()
@@ -366,6 +367,16 @@ class BluePrintModel:
                                 'draw_ib': getattr(item, 'draw_ib', '')
                             })
                             print(f"[CrossIB] 收集到多文件导出物体: {obj_name}")
+            
+            elif node.bl_idname == "SSMTNode_Blueprint_Nest":
+                blueprint_name = getattr(node, 'blueprint_name', '')
+                if blueprint_name:
+                    nested_tree = bpy.data.node_groups.get(blueprint_name)
+                    if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
+                        print(f"[CrossIB] 进入嵌套蓝图: {blueprint_name}")
+                        nested_output_node = BlueprintExportHelper.get_node_from_bl_idname(nested_tree, 'SSMTNode_Result_Output')
+                        if nested_output_node:
+                            recursive_collect(nested_output_node)
             
             elif node.bl_idname in PASS_THROUGH_NODES:
                 for input_socket in node.inputs:

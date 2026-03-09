@@ -57,6 +57,15 @@ class PanelBasicInformation(bpy.types.Panel):
             elif bpy.data.is_dirty:
                 layout.label(text="项目有未保存的修改",icon='ERROR')
         
+        layout.prop(context.scene.properties_import_model,"use_preprocess_cache",text="启用预处理缓存")
+        if context.scene.properties_import_model.use_preprocess_cache:
+            from ..utils.preprocess_cache import get_cache_manager
+            cache_manager = get_cache_manager()
+            stats = cache_manager.get_cache_stats()
+            row = layout.row()
+            row.label(text=f"缓存: {stats['total_entries']}个文件, {stats['total_size_mb']:.1f}MB")
+            row.operator("ssmt.clear_preprocess_cache", text="清理缓存", icon='TRASH')
+        
         context = bpy.context  # 直接使用 bpy.context 获取完整上下文
         if len(context.selected_objects) != 0:
             obj = context.selected_objects[0]
