@@ -424,7 +424,7 @@ class BlueprintExportHelper:
                 chain = []
             
             if node.name in visited:
-                return
+                return chain
             
             visited.add(node.name)
             

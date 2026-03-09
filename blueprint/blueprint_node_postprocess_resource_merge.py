@@ -60,7 +60,17 @@ class SSMTNode_PostProcess_ResourceMerge(SSMTNode_PostProcess_Base):
         self._create_cumulative_backup(ini_file, mod_export_path)
 
         with open(ini_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
+            content = f.read()
+
+        slider_panel_content = ""
+        slider_marker = "; --- AUTO-APPENDED SLIDER CONTROL PANEL ---"
+        if slider_marker in content:
+            marker_pos = content.find(slider_marker)
+            slider_panel_content = content[marker_pos:]
+            content = content[:marker_pos]
+            print("[ResourceMerge] 检测到滑块面板内容，将保留")
+
+        lines = content.splitlines()
 
         sections = OrderedDict()
         current_section = None
@@ -71,7 +81,7 @@ class SSMTNode_PostProcess_ResourceMerge(SSMTNode_PostProcess_Base):
                 current_section = stripped
                 sections[current_section] = []
             elif current_section:
-                sections[current_section].append(line.rstrip())
+                sections[current_section].append(line)
 
         key_to_first_ref = {}
         files_to_delete = set()
@@ -122,6 +132,10 @@ class SSMTNode_PostProcess_ResourceMerge(SSMTNode_PostProcess_Base):
                 new_content.append(section_name)
                 new_content.extend(lines)
                 new_content.append('')
+
+            if slider_panel_content:
+                new_content.append('')
+                new_content.append(slider_panel_content)
 
             with open(ini_file, 'w', encoding='utf-8') as f:
                 f.write("\n".join(new_content))
