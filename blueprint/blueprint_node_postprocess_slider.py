@@ -54,7 +54,7 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
 
         try:
             addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            asset_subdir_name = "超级工具集"
+            asset_subdir_name = "Toolset"
             source_asset_dir = os.path.join(addon_dir, asset_subdir_name)
 
             dest_res_dir = os.path.join(mod_export_path, "res")

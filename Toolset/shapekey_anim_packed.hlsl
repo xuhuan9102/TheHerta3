@@ -1,4 +1,4 @@
-// --- START OF FILE 形态anim_packed.hlsl ---
+// --- START OF FILE shapekey_anim_packed.hlsl ---
 // **** ADDITIVE ANIMATION SHADER - PACKED BUFFERS WITH PER-OBJECT CONTROL ****
 // Contributors: Zlevir, Assistant
 // Version: 5.0 (Final - Packed Buffers + Range Control)
@@ -43,4 +43,4 @@ void main(uint3 threadID : SV_DispatchThreadID)
     
     rw_buffer[i] = output;
 }
-// --- END OF FILE 形态anim_packed.hlsl ---
+// --- END OF FILE shapekey_anim_packed.hlsl ---

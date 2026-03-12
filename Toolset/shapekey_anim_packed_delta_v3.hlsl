@@ -1,4 +1,4 @@
-// --- START OF FILE 形态anim_packed_delta_v3.hlsl ---
+// --- START OF FILE shapekey_anim_packed_delta_v3.hlsl ---
 
 // **** ADDITIVE ANIMATION SHADER - PACKED POSITION-ONLY DELTA (HYBRID BUFFERS) ****
 // Contributors: Zlevir, Assistant
@@ -40,4 +40,4 @@ void main(uint3 threadID : SV_DispatchThreadID)
     
     rw_buffer[i] = output;
 }
-// --- END OF FILE 形态anim_packed_delta_v3.hlsl ---
+// --- END OF FILE shapekey_anim_packed_delta_v3.hlsl ---

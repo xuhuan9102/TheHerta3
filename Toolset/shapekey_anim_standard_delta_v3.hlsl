@@ -1,4 +1,4 @@
-// --- START OF FILE 形态anim_standard_delta_v3.hlsl ---
+// --- START OF FILE shapekey_anim_standard_delta_v3.hlsl ---
 
 // **** ADDITIVE ANIMATION SHADER - POSITION-ONLY DELTA (HYBRID BUFFERS) ****
 // Contributors: Zlevir, Assistant
@@ -43,4 +43,4 @@ void main(uint3 threadID : SV_DispatchThreadID)
     
     rw_buffer[i] = output;
 }
-// --- END OF FILE 形态anim_standard_delta_v3.hlsl ---
+// --- END OF FILE shapekey_anim_standard_delta_v3.hlsl ---

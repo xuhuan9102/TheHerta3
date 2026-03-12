@@ -36,6 +36,41 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         default=True
     )
 
+    name_mapping: bpy.props.StringProperty(
+        name="名称映射",
+        description="从物体重命名节点传递的名称映射（JSON格式）",
+        default="",
+        options={'HIDDEN'}
+    )
+
+    def apply_name_mapping(self, mapping):
+        """接收从物体重命名节点传递的名称映射"""
+        import json
+        self.name_mapping = json.dumps(mapping)
+        print(f"[ShapeKey] 已接收名称映射: {mapping}")
+
+    def _get_name_mapping(self):
+        """获取名称映射字典"""
+        import json
+        if self.name_mapping:
+            try:
+                return json.loads(self.name_mapping)
+            except:
+                return {}
+        return {}
+
+    def _apply_name_mapping_to_object(self, obj_name):
+        """应用名称映射到物体名称"""
+        mapping = self._get_name_mapping()
+        if not mapping:
+            return obj_name
+        
+        for old_part, new_part in mapping.items():
+            if old_part in obj_name:
+                obj_name = obj_name.replace(old_part, new_part)
+        
+        return obj_name
+
     def draw_buttons(self, context, layout):
         layout.prop(self, "use_packed_buffers")
         layout.prop(self, "store_deltas")
@@ -135,6 +170,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             obj_match = re.search(r'物体:\s*(.+)', line)
             if obj_match and current_slot is not None and current_shapekey_name is not None:
                 obj_name = obj_match.group(1).strip()
+                obj_name = self._apply_name_mapping_to_object(obj_name)
                 if obj_name not in slot_to_name_to_objects[current_slot][current_shapekey_name]:
                     slot_to_name_to_objects[current_slot][current_shapekey_name].append(obj_name)
                 if obj_name not in all_objects: all_objects.append(obj_name)
@@ -424,19 +460,19 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         use_delta = self.store_deltas
         
         if use_delta and use_packed:
-            return "形态anim_packed_delta_v3.hlsl"
+            return "shapekey_anim_packed_delta_v3.hlsl"
         elif use_delta:
-            return "形态anim_standard_delta_v3.hlsl"
+            return "shapekey_anim_standard_delta_v3.hlsl"
         elif use_packed:
-            return "形态anim_packed.hlsl"
+            return "shapekey_anim_packed.hlsl"
         else:
-            return "形态anim_standard.hlsl"
+            return "shapekey_anim_standard.hlsl"
 
     def _get_shader_source_path(self):
         """获取着色器模板文件路径"""
         try:
             addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            asset_source_dir = os.path.join(addon_dir, "超级工具集")
+            asset_source_dir = os.path.join(addon_dir, "Toolset")
             shader_template_name = self._get_shader_template_name()
             shader_source_path = os.path.join(asset_source_dir, shader_template_name)
             return shader_source_path
@@ -598,10 +634,10 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
 
             hash_to_shader_paths = {}
             for hash_val in unique_hashes:
-                shader_dest_path = os.path.join(dest_res_dir, f"形态anim_{hash_val}.hlsl")
+                shader_dest_path = os.path.join(dest_res_dir, f"shapekey_anim_{hash_val}.hlsl")
                 shutil.copy2(shader_source_path, shader_dest_path)
                 hash_to_shader_paths[hash_val] = shader_dest_path
-                print(f"已创建独立着色器文件: 形态anim_{hash_val}.hlsl")
+                print(f"已创建独立着色器文件: shapekey_anim_{hash_val}.hlsl")
 
             for hash_val in unique_hashes:
                 hash_objects = hash_to_objects.get(hash_val, [])
@@ -743,7 +779,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                             block_lines.append(f"    cs-t{map_reg} = copy Resource{h}Position100{slot}_Map")
                             t_registers_to_null.append(f"cs-t{map_reg}")
 
-                    block_lines.append(f"    cs = ./res/形态anim_{h}.hlsl")
+                    block_lines.append(f"    cs = ./res/shapekey_anim_{h}.hlsl")
 
                     base_resources = hash_to_base_resources.get(h, [])
                     res_to_bind = base_resources if base_resources else [f"Resource{h}Position"]

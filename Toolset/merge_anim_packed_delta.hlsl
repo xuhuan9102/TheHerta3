@@ -1,4 +1,4 @@
-// --- START OF FILE res/apply_delta.hlsl ---
+// --- START OF FILE merge_anim_packed_delta.hlsl ---
 
 // **** SINGLE DELTA APPLICATION SHADER - PACKED POSITION-ONLY ****
 // Version: 1.0
@@ -42,4 +42,4 @@ void main(uint3 threadID : SV_DispatchThreadID)
         rw_buffer[i] = output;
     }
 }
-// --- END OF FILE res/apply_delta.hlsl ---
+// --- END OF FILE merge_anim_packed_delta.hlsl ---

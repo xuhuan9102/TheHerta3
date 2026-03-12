@@ -1,4 +1,4 @@
-// --- START OF FILE 形态anim.hlsl ---
+// --- START OF FILE shapekey_anim_standard.hlsl ---
 
 // **** ADDITIVE ANIMATION SHADER - PER-NAME INTENSITY (MULTI-SLOT BLENDING) ****
 // Contributors: Zlevir, Assistant
@@ -57,4 +57,4 @@ void main(uint3 threadID : SV_DispatchThreadID)
     rw_buffer[i] = output;
 }
 
-// --- END OF FILE 形态anim.hlsl ---
+// --- END OF FILE shapekey_anim_standard.hlsl ---

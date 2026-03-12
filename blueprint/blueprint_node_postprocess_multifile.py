@@ -82,8 +82,8 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
         """获取着色器模板文件路径"""
         try:
             addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            asset_source_dir = os.path.join(addon_dir, "超级工具集")
-            shader_source_path = os.path.join(asset_source_dir, "合并anim_packed_delta.hlsl")
+            asset_source_dir = os.path.join(addon_dir, "Toolset")
+            shader_source_path = os.path.join(asset_source_dir, "merge_anim_packed_delta.hlsl")
             return shader_source_path
         except Exception as e:
             print(f"获取着色器模板路径时出错: {e}")
@@ -400,7 +400,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                         shader_lines.append(f"endif")
 
                     shader_lines.append("")
-                    shader_lines.append("    cs = ./res/合并anim_packed_delta.hlsl")
+                    shader_lines.append("    cs = ./res/merge_anim_packed_delta.hlsl")
                     shader_lines.append(f"    cs-u5 = copy Resource{hash_value}Position_1")
                     shader_lines.append(f"    Resource{hash_value}Position = ref cs-u5")
 
@@ -408,10 +408,10 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                     if shader_source_path and os.path.exists(shader_source_path):
                         dest_res_dir = os.path.join(mod_export_path, "res")
                         os.makedirs(dest_res_dir, exist_ok=True)
-                        shader_dest_path = os.path.join(dest_res_dir, "合并anim_packed_delta.hlsl")
+                        shader_dest_path = os.path.join(dest_res_dir, "merge_anim_packed_delta.hlsl")
                         shutil.copy2(shader_source_path, shader_dest_path)
                         self._update_shader_file(shader_dest_path)
-                        print(f"已复制并更新着色器文件: 合并anim_packed_delta.hlsl")
+                        print(f"已复制并更新着色器文件: merge_anim_packed_delta.hlsl")
 
                     vertex_count = self._get_vertex_count(sections, hash_value)
                     if vertex_count:
