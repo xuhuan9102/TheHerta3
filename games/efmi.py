@@ -136,12 +136,12 @@ class ModModelEFMI:
         present_section.new_line()
         
         shader_overrides = [
+            ("ShaderOverridevs22", "617db42150841836", "200"),
             ("ShaderOverridevs2", "847947b4a1ad40cf", "200"),
-            ("ShaderOverridevs10", "ac358c21b925075b", "201"),
-            ("ShaderOverridevs1", "b1ca4834786821dd", "202"),
-            ("ShaderOverridevs33", "cdf11b288d812606", "203"),
-            ("ShaderOverridevs88", "8e1c0782db9e85d1", "203"),
-            ("ShaderOverridevs22", "6d85d78157be3f4c", "200"),
+            ("ShaderOverridevs10", "cada6d476255bdcf", "201"),
+            ("ShaderOverridevs1", "d9d6448a7b62687e", "202"),
+            ("ShaderOverridevs33", "e8d242aae0b3bacf", "203"),
+            ("ShaderOverridevs88", "f0e7d4b491273aae", "203"),
         ]
         
         for name, hash_val, filter_idx in shader_overrides:
