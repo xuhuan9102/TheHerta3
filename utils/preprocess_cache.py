@@ -3,13 +3,13 @@
 用于缓存预处理结果，避免重复计算
 """
 import bpy
-import json
 import hashlib
+import json
 import os
-import time
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field, asdict
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 @dataclass
@@ -323,21 +323,276 @@ class FingerprintCalculator:
     
     @classmethod
     def calculate_fingerprint(cls, obj: bpy.types.Object, mirror_workflow: bool = False) -> ObjectFingerprint:
-        """计算物体的完整指纹"""
-        vertex_count, vertex_hash = cls.calculate_vertex_hash(obj)
-        edge_hash = cls.calculate_edge_hash(obj)
-        face_hash = cls.calculate_face_hash(obj)
-        vertex_group_hash = cls.calculate_vertex_group_hash(obj)
-        modifier_hash = cls.calculate_modifier_hash(obj)
-        shape_key_hash = cls.calculate_shape_key_hash(obj)
-        transform_hash = cls.calculate_transform_hash(obj)
-        armature_pose_hash = cls.calculate_armature_pose_hash(obj)
+        """计算物体的完整指纹（先收集数据，再并行计算哈希）"""
+        import time
+        
+        start_total = time.time()
+        
+        if obj.type != 'MESH' or not obj.data:
+            return ObjectFingerprint(
+                vertex_count=0,
+                vertex_hash="",
+                edge_hash="",
+                face_hash="",
+                vertex_group_hash="",
+                modifier_hash="",
+                shape_key_hash="",
+                transform_hash="",
+                armature_pose_hash="",
+                mirror_workflow=mirror_workflow
+            )
+        
+        mesh = obj.data
+        
+        # 一次性收集所有数据（在主线程中）
+        start_collect = time.time()
+        vertex_count = len(mesh.vertices)
+        
+        # 收集顶点数据
+        if vertex_count > 0:
+            vertices = np.empty(vertex_count * 3, dtype=np.float32)
+            mesh.vertices.foreach_get('co', vertices)
+            vertex_data = vertices.tobytes()
+        else:
+            vertex_data = b''
+        
+        # 收集顶点组数据（优化：只遍历一次顶点）
+        vertex_group_data = []
+        if obj.vertex_groups:
+            # 预先初始化每个顶点组的权重列表
+            vg_weights = {vg.index: [] for vg in obj.vertex_groups}
+            
+            # 只遍历一次顶点，收集所有顶点组信息
+            for i, vert in enumerate(mesh.vertices):
+                for group in vert.groups:
+                    if group.group in vg_weights:
+                        vg_weights[group.group].append((i, group.weight))
+            
+            # 构建顶点组数据
+            for vg in obj.vertex_groups:
+                vg_info = {
+                    'name': vg.name,
+                    'lock_weight': vg.lock_weight,
+                    'weights': vg_weights[vg.index]
+                }
+                vertex_group_data.append(vg_info)
+        
+        # 收集修改器数据
+        modifier_data = []
+        for idx, mod in enumerate(obj.modifiers):
+            mod_info = {
+                'index': idx,
+                'name': mod.name,
+                'type': mod.type,
+                'show_viewport': mod.show_viewport,
+                'show_render': mod.show_render,
+            }
+            
+            if mod.type == 'ARMATURE':
+                mod_info['object'] = mod.object.name if mod.object else ""
+                mod_info['use_vertex_groups'] = mod.use_vertex_groups
+                mod_info['use_deform_preserve_volume'] = mod.use_deform_preserve_volume
+                mod_info['invert_vertex_group'] = mod.invert_vertex_group
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+                if hasattr(mod, 'use_multi_modifier'):
+                    mod_info['use_multi_modifier'] = mod.use_multi_modifier
+            elif mod.type == 'MIRROR':
+                mod_info['use_axis'] = list(mod.use_axis)
+                mod_info['use_bisect_axis'] = list(mod.use_bisect_axis)
+                mod_info['mirror_object'] = mod.mirror_object.name if mod.mirror_object else ""
+                mod_info['use_clip'] = mod.use_clip if hasattr(mod, 'use_clip') else False
+                mod_info['mirror_offset_u'] = mod.offset_u if hasattr(mod, 'offset_u') else 0.0
+                mod_info['mirror_offset_v'] = mod.offset_v if hasattr(mod, 'offset_v') else 0.0
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+            elif mod.type == 'SUBSURF':
+                mod_info['levels'] = mod.levels
+                mod_info['render_levels'] = mod.render_levels
+                mod_info['subdivision_type'] = mod.subdivision_type if hasattr(mod, 'subdivision_type') else 'CATMULL_CLARK'
+            elif mod.type == 'SOLIDIFY':
+                mod_info['thickness'] = mod.thickness
+                mod_info['offset'] = mod.offset
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+                mod_info['use_even_offset'] = mod.use_even_offset if hasattr(mod, 'use_even_offset') else False
+            elif mod.type == 'BEVEL':
+                mod_info['width'] = mod.width
+                mod_info['segments'] = mod.segments
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+                mod_info['limit_method'] = mod.limit_method if hasattr(mod, 'limit_method') else 'NONE'
+            elif mod.type == 'DECIMATE':
+                mod_info['ratio'] = mod.ratio
+                mod_info['decimate_type'] = mod.decimate_type
+            elif mod.type == 'TRIANGULATE':
+                mod_info['quad_method'] = mod.quad_method
+                mod_info['ngon_method'] = mod.ngon_method
+                mod_info['min_vertices'] = mod.min_vertices if hasattr(mod, 'min_vertices') else 4
+            elif mod.type == 'WELD':
+                mod_info['merge_threshold'] = mod.merge_threshold
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+            elif mod.type == 'BOOLEAN':
+                mod_info['operation'] = mod.operation if hasattr(mod, 'operation') else 'DIFFERENCE'
+                mod_info['object'] = mod.object.name if mod.object else ""
+                mod_info['solver'] = mod.solver if hasattr(mod, 'solver') else 'EXACT'
+            elif mod.type == 'LATTICE':
+                mod_info['object'] = mod.object.name if mod.object else ""
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+                mod_info['strength'] = mod.strength if hasattr(mod, 'strength') else 1.0
+            elif mod.type == 'HOOK':
+                mod_info['object'] = mod.object.name if mod.object else ""
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+                mod_info['strength'] = mod.strength if hasattr(mod, 'strength') else 1.0
+                mod_info['falloff_type'] = mod.falloff_type if hasattr(mod, 'falloff_type') else 'NONE'
+            elif mod.type == 'SHRINKWRAP':
+                mod_info['target'] = mod.target.name if mod.target else ""
+                mod_info['auxiliary_target'] = mod.auxiliary_target.name if hasattr(mod, 'auxiliary_target') and mod.auxiliary_target else ""
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+                mod_info['shrinkwrap_mode'] = mod.wrap_mode if hasattr(mod, 'wrap_mode') else 'ON_SURFACE'
+            elif mod.type == 'SIMPLE_DEFORM':
+                mod_info['deform_mode'] = mod.deform_method if hasattr(mod, 'deform_method') else 'TWIST'
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+                mod_info['factor'] = mod.factor if hasattr(mod, 'factor') else 0.0
+                mod_info['limits'] = [mod.limits[0], mod.limits[1]] if hasattr(mod, 'limits') else [0.0, 1.0]
+            elif mod.type == 'WAVE':
+                mod_info['vertex_group'] = mod.vertex_group if hasattr(mod, 'vertex_group') else ""
+                mod_info['time_offset'] = mod.time_offset if hasattr(mod, 'time_offset') else 0.0
+                mod_info['speed'] = mod.speed if hasattr(mod, 'speed') else 1.0
+            elif mod.type == 'ARMATURE':
+                pass
+            
+            modifier_data.append(mod_info)
+        
+        # 收集形态键数据
+        shape_key_data = []
+        if obj.data.shape_keys and obj.data.shape_keys.key_blocks:
+            for kb in obj.data.shape_keys.key_blocks:
+                kb_info = {
+                    'name': kb.name,
+                    'value': kb.value,
+                    'mute': kb.mute,
+                    'vertex_group': kb.vertex_group,
+                    'interpolation': kb.interpolation if hasattr(kb, 'interpolation') else 'KEY_LINEAR',
+                }
+                
+                if kb.relative_key:
+                    kb_info['relative_key'] = kb.relative_key.name
+                
+                if len(kb.data) > 0:
+                    coords = np.empty(len(kb.data) * 3, dtype=np.float32)
+                    kb.data.foreach_get('co', coords)
+                    kb_info['data_bytes'] = coords.tobytes()
+                
+                shape_key_data.append(kb_info)
+        
+        # 收集变换数据
+        transform_data = {
+            'location': list(obj.location),
+            'rotation_mode': obj.rotation_mode,
+            'rotation_euler': list(obj.rotation_euler) if obj.rotation_mode == 'EULER' else [],
+            'rotation_quaternion': list(obj.rotation_quaternion) if obj.rotation_mode == 'QUATERNION' else [],
+            'scale': list(obj.scale),
+            'delta_location': list(obj.delta_location) if hasattr(obj, 'delta_location') else [],
+            'delta_rotation_euler': list(obj.delta_rotation_euler) if hasattr(obj, 'delta_rotation_euler') else [],
+            'delta_scale': list(obj.delta_scale) if hasattr(obj, 'delta_scale') else [],
+        }
+        
+        # 收集骨骼姿势数据
+        pose_data = []
+        armature_modifiers = [mod for mod in obj.modifiers if mod.type == 'ARMATURE' and mod.object and mod.show_viewport]
+        for mod in armature_modifiers:
+            armature = mod.object
+            if armature and armature.pose:
+                armature_info = {
+                    'armature_name': armature.name,
+                    'bones': []
+                }
+                
+                for bone in armature.pose.bones:
+                    bone_info = {
+                        'name': bone.name,
+                        'location': list(bone.location),
+                        'rotation_mode': bone.rotation_mode,
+                        'rotation_euler': list(bone.rotation_euler) if bone.rotation_mode == 'EULER' else [],
+                        'rotation_quaternion': list(bone.rotation_quaternion) if bone.rotation_mode == 'QUATERNION' else [],
+                        'scale': list(bone.scale),
+                    }
+                    armature_info['bones'].append(bone_info)
+                
+                pose_data.append(armature_info)
+        
+        collect_time = time.time() - start_collect
+        print(f"[Fingerprint] 数据收集耗时: {collect_time:.3f}s")
+        
+        # 并行计算哈希值（不访问 Blender API）
+        start_hash = time.time()
+        
+        def calculate_vertex_hash():
+            return hashlib.md5(vertex_data).hexdigest()
+        
+        def calculate_vertex_group_hash():
+            if not vertex_group_data:
+                return ""
+            vg_json = json.dumps(vertex_group_data, sort_keys=True)
+            return hashlib.md5(vg_json.encode()).hexdigest()
+        
+        def calculate_modifier_hash():
+            if not modifier_data:
+                return ""
+            mod_json = json.dumps(modifier_data, sort_keys=True)
+            return hashlib.md5(mod_json.encode()).hexdigest()
+        
+        def calculate_shape_key_hash():
+            if not shape_key_data:
+                return ""
+            shape_key_json = json.dumps(shape_key_data, sort_keys=True)
+            return hashlib.md5(shape_key_json.encode()).hexdigest()
+        
+        def calculate_transform_hash():
+            transform_json = json.dumps(transform_data, sort_keys=True)
+            return hashlib.md5(transform_json.encode()).hexdigest()
+        
+        def calculate_armature_pose_hash():
+            if not pose_data:
+                return ""
+            pose_json = json.dumps(pose_data, sort_keys=True)
+            return hashlib.md5(pose_json.encode()).hexdigest()
+        
+        # 使用多线程并行计算哈希值
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(calculate_vertex_hash): 'vertex',
+                executor.submit(calculate_vertex_group_hash): 'vertex_group',
+                executor.submit(calculate_modifier_hash): 'modifier',
+                executor.submit(calculate_shape_key_hash): 'shape_key',
+                executor.submit(calculate_transform_hash): 'transform',
+                executor.submit(calculate_armature_pose_hash): 'armature_pose'
+            }
+            
+            results = {}
+            for future in as_completed(futures):
+                key = futures[future]
+                try:
+                    results[key] = future.result()
+                except Exception as e:
+                    print(f"[Fingerprint] 计算 {key} 哈希时出错: {e}")
+                    results[key] = ""
+        
+        hash_time = time.time() - start_hash
+        print(f"[Fingerprint] 哈希计算耗时: {hash_time:.3f}s")
+        
+        vertex_hash = results['vertex']
+        vertex_group_hash = results['vertex_group']
+        modifier_hash = results['modifier']
+        shape_key_hash = results['shape_key']
+        transform_hash = results['transform']
+        armature_pose_hash = results['armature_pose']
+        
+        total_time = time.time() - start_total
+        print(f"[Fingerprint] 总耗时: {total_time:.3f}s")
         
         return ObjectFingerprint(
             vertex_count=vertex_count,
             vertex_hash=vertex_hash,
-            edge_hash=edge_hash,
-            face_hash=face_hash,
+            edge_hash="",
+            face_hash="",
             vertex_group_hash=vertex_group_hash,
             modifier_hash=modifier_hash,
             shape_key_hash=shape_key_hash,
@@ -437,12 +692,10 @@ class PreprocessCacheManager:
         cache_key = self._get_cache_key(obj_name, fingerprint)
         
         if cache_key not in self.cache_index:
-            print(f"[PreprocessCache] 缓存未命中: {obj_name} (键不在索引中)")
             return False
         
         cache_file = self._get_cache_file_path(cache_key)
         if not os.path.exists(cache_file):
-            print(f"[PreprocessCache] 缓存未命中: {obj_name} (文件不存在)")
             return False
         
         print(f"[PreprocessCache] 缓存命中: {obj_name}")
@@ -452,10 +705,16 @@ class PreprocessCacheManager:
         """获取缓存文件路径"""
         cache_key = self._get_cache_key(obj_name, fingerprint)
         
-        if not self.has_valid_cache(obj_name, fingerprint):
+        if cache_key not in self.cache_index:
+            print(f"[PreprocessCache] 缓存未命中: {obj_name} (键不在索引中)")
             return None
         
-        return self._get_cache_file_path(cache_key)
+        cache_file = self._get_cache_file_path(cache_key)
+        if not os.path.exists(cache_file):
+            print(f"[PreprocessCache] 缓存未命中: {obj_name} (文件不存在)")
+            return None
+        
+        return cache_file
     
     def store_cache(self, obj_name: str, fingerprint: ObjectFingerprint, 
                     preprocessed_obj: bpy.types.Object) -> str:

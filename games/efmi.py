@@ -244,7 +244,7 @@ class ModModelEFMI:
         present_section.append("cs-t0 = ResourceDumpedCB1_SRV")
         present_section.append("ResourceFakeCB1_UAV = copy ResourceDumpedCB1_SRV")
         present_section.append("cs-u0 = ResourceFakeCB1_UAV")
-        present_section.append("dispatch = 1, 1, 1")
+        present_section.append("dispatch = 4, 1, 1")
         present_section.append("cs-u0 = null")
         present_section.append("cs-t0 = null")
         present_section.append("ResourceFakeCB1 = copy ResourceFakeCB1_UAV")

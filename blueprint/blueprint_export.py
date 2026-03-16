@@ -456,9 +456,6 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             if original_obj and original_obj.type == 'MESH':
                 obj_name = original_obj.name
                 
-                fingerprint = FingerprintCalculator.calculate_fingerprint(original_obj, mirror_workflow_enabled)
-                print(f"[Cache] 物体 {obj_name} 指纹: v={fingerprint.vertex_count}, vh={fingerprint.vertex_hash[:8]}...")
-                
                 original_name = original_obj.name
                 if original_name.endswith("-Original"):
                     copy_name = original_name.replace("-Original", "-copy_Original")
@@ -469,6 +466,9 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                 cache_used = False
                 
                 if use_cache:
+                    fingerprint = FingerprintCalculator.calculate_fingerprint(original_obj, mirror_workflow_enabled)
+                    print(f"[Cache] 物体 {obj_name} 指纹: v={fingerprint.vertex_count}, vh={fingerprint.vertex_hash[:8]}...")
+                    
                     start_operation("CacheCheck", obj_name)
                     cached_obj = cache_manager.load_cache(obj_name, fingerprint, bpy.context.scene)
                     end_operation("CacheCheck")

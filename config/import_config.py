@@ -262,8 +262,6 @@ class ImportConfig:
         
         if not gametypename:
             gametypename = draw_ib_gametypename_dict.get(self.draw_ib, "")
-            if gametypename:
-                print(f"使用第三代识别（SSMT3格式）: {self.draw_ib} -> {gametypename}")
 
         # 根据实际文件夹名构建路径
         extract_gametype_folder_path = os.path.join(GlobalConfig.path_workspace_folder(), actual_folder_name, "TYPE_" + gametypename)
@@ -359,15 +357,8 @@ class ImportConfig:
 
         # 自动贴图依赖于这个字典
         partname_texturemarkupinfolist_jsondict = tmp_json_dict.get("ComponentTextureMarkUpInfoListDict", {})
-        
-        print(f"调试: ComponentTextureMarkUpInfoListDict 存在 = {'ComponentTextureMarkUpInfoListDict' in tmp_json_dict}")
-        print(f"调试: ComponentTextureMarkUpInfoListDict 内容 = {partname_texturemarkupinfolist_jsondict}")
 
-        print("读取配置: " + tmp_json_path)
-        # print(partname_textureresourcereplace_dict)
         for partname, texture_markup_info_dict_list in partname_texturemarkupinfolist_jsondict.items():
-            print(f"调试: 处理 partname = {partname}, 贴图标记数量 = {len(texture_markup_info_dict_list)}")
-
             texture_markup_info_list = []
 
             for texture_markup_info_dict in texture_markup_info_dict_list:
@@ -381,8 +372,6 @@ class ImportConfig:
                 texture_markup_info_list.append(markup_info)
 
             self.partname_texturemarkinfolist_dict[partname] = texture_markup_info_list
-        
-        print(f"调试: 最终 partname_texturemarkinfolist_dict = {self.partname_texturemarkinfolist_dict}")
 
 
 
