@@ -192,14 +192,19 @@ class M_IniHelper:
         if Properties_GenerateMod.forbid_auto_texture_ini():
             return
         
+        # SSMT4 模式下使用 unique_str，SSMT3 模式下使用 draw_ib
+        draw_ib_key = getattr(draw_ib_model, 'unique_str', None)
+        if draw_ib_key is None:
+            draw_ib_key = draw_ib_model.draw_ib
+        
         for texture_markup_info_list in draw_ib_model.import_config.partname_texturemarkinfolist_dict.values():
             for texture_markup_info in texture_markup_info_list:
                 # 只有槽位风格会移动到目标位置
                 if texture_markup_info.mark_type != "Slot":
                     continue
 
-                target_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib_model.draw_ib) + texture_markup_info.mark_filename
-                source_path = draw_ib_model.import_config.extract_gametype_folder_path + texture_markup_info.mark_filename
+                target_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib_key) + texture_markup_info.mark_filename
+                source_path = os.path.join(draw_ib_model.import_config.extract_gametype_folder_path, texture_markup_info.mark_filename)
                 
                 # only overwrite when there is no texture file exists.
                 if not os.path.exists(target_path):

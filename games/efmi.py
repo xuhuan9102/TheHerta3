@@ -23,6 +23,7 @@ class DrawIBModelAdapter:
     '''
     def __init__(self, submesh_model, branch_model_v4):
         from ..base.m_draw_indexed import M_DrawIndexed
+        from ..config.import_config import ImportConfig
         
         self.draw_ib = submesh_model.match_draw_ib
         self.draw_ib_alias = submesh_model.match_draw_ib
@@ -46,7 +47,9 @@ class DrawIBModelAdapter:
         if submesh_model.d3d11_game_type:
             self.category_hash_dict = getattr(submesh_model.d3d11_game_type, 'CategoryHashDict', {})
         
-        self.import_config = None
+        # 初始化 import_config
+        # 传递 unique_str 以支持 SSMT4 命名格式
+        self.import_config = ImportConfig(draw_ib=self.draw_ib, unique_str=unique_str)
         
         drawcall_model_list = submesh_model.drawcall_model_list
         for drawcall_model in drawcall_model_list:
@@ -475,32 +478,37 @@ class ModModelEFMI:
 
         texture_override_ib_section.append(self.vlr_filter_index_indent + "run = CommandList\\EFMIv1\\OverrideTextures")
 
-        if not self.use_ssmt4:
-            if not Properties_GenerateMod.forbid_auto_texture_ini():
-                texture_markup_info_list = draw_ib_model.import_config.partname_texturemarkinfolist_dict.get(part_name, None)
-                if texture_markup_info_list is not None:
-                    if Properties_GenerateMod.use_rabbitfx_slot():
-                        for texture_markup_info in texture_markup_info_list:
-                            if texture_markup_info.mark_type == "Slot":
-                                if texture_markup_info.mark_name == "DiffuseMap":
-                                    texture_override_ib_section.append(self.vlr_filter_index_indent + "Resource\\RabbitFx\\Diffuse = ref " + texture_markup_info.get_resource_name())
-                                elif texture_markup_info.mark_name == "LightMap":
-                                    texture_override_ib_section.append(self.vlr_filter_index_indent + "Resource\\RabbitFx\\LightMap = ref " + texture_markup_info.get_resource_name())
-                                elif texture_markup_info.mark_name == "NormalMap":
-                                    texture_override_ib_section.append(self.vlr_filter_index_indent + "Resource\\RabbitFx\\NormalMap = ref " + texture_markup_info.get_resource_name())
-                        
-                        texture_override_ib_section.append(self.vlr_filter_index_indent + "run = CommandList\\RabbitFx\\SetTextures")
-                        
-                        for texture_markup_info in texture_markup_info_list:
-                            if texture_markup_info.mark_type == "Slot":
-                                if texture_markup_info.mark_name in ["DiffuseMap", "LightMap", "NormalMap"]:
-                                    pass
-                                else:
-                                    texture_override_ib_section.append(self.vlr_filter_index_indent + texture_markup_info.mark_slot + " = " + texture_markup_info.get_resource_name())
-                    else:
-                        for texture_markup_info in texture_markup_info_list:
-                            if texture_markup_info.mark_type == "Slot":
+        # 槽位贴图生成逻辑（SSMT3 和 SSMT4 模式都支持）
+        if not Properties_GenerateMod.forbid_auto_texture_ini():
+            # SSMT4 模式下使用 unique_str 作为 part_name，SSMT3 模式下使用 part_name
+            texture_part_name = draw_ib_model.unique_str if self.use_ssmt4 else part_name
+            print(f"调试: 查找贴图标记，texture_part_name = {texture_part_name}")
+            texture_markup_info_list = draw_ib_model.import_config.partname_texturemarkinfolist_dict.get(texture_part_name, None)
+            print(f"调试: 找到的贴图标记数量 = {len(texture_markup_info_list) if texture_markup_info_list else 0}")
+            
+            if texture_markup_info_list is not None:
+                if Properties_GenerateMod.use_rabbitfx_slot():
+                    for texture_markup_info in texture_markup_info_list:
+                        if texture_markup_info.mark_type == "Slot":
+                            if texture_markup_info.mark_name == "DiffuseMap":
+                                texture_override_ib_section.append(self.vlr_filter_index_indent + "Resource\\RabbitFx\\Diffuse = ref " + texture_markup_info.get_resource_name())
+                            elif texture_markup_info.mark_name == "LightMap":
+                                texture_override_ib_section.append(self.vlr_filter_index_indent + "Resource\\RabbitFx\\LightMap = ref " + texture_markup_info.get_resource_name())
+                            elif texture_markup_info.mark_name == "NormalMap":
+                                texture_override_ib_section.append(self.vlr_filter_index_indent + "Resource\\RabbitFx\\NormalMap = ref " + texture_markup_info.get_resource_name())
+                    
+                    texture_override_ib_section.append(self.vlr_filter_index_indent + "run = CommandList\\RabbitFx\\SetTextures")
+                    
+                    for texture_markup_info in texture_markup_info_list:
+                        if texture_markup_info.mark_type == "Slot":
+                            if texture_markup_info.mark_name in ["DiffuseMap", "LightMap", "NormalMap"]:
+                                pass
+                            else:
                                 texture_override_ib_section.append(self.vlr_filter_index_indent + texture_markup_info.mark_slot + " = " + texture_markup_info.get_resource_name())
+                else:
+                    for texture_markup_info in texture_markup_info_list:
+                        if texture_markup_info.mark_type == "Slot":
+                            texture_override_ib_section.append(self.vlr_filter_index_indent + texture_markup_info.mark_slot + " = " + texture_markup_info.get_resource_name())
 
         if d3d11GameType:
             if self.use_ssmt4:
@@ -736,9 +744,7 @@ class ModModelEFMI:
         if Properties_GenerateMod.forbid_auto_texture_ini():
             return 
         
-        if self.use_ssmt4:
-            return
-        
+        # SSMT4 模式下也支持槽位贴图生成
         resource_texture_section = M_IniSection(M_SectionType.ResourceTexture)
         for partname, texture_markup_info_list in draw_ib_model.import_config.partname_texturemarkinfolist_dict.items():
             for texture_markup_info in texture_markup_info_list:
@@ -882,6 +888,10 @@ class ModModelEFMI:
                     draw_ib_model=draw_ib_model,
                     unique_str=submesh_model.unique_str
                 )
+                
+                # SSMT4 模式下也需要生成资源纹理部分和移动槽位风格纹理
+                self.add_resource_texture_sections(ini_builder=config_ini_builder, draw_ib_model=draw_ib_model)
+                M_IniHelper.move_slot_style_textures(draw_ib_model=draw_ib_model)
                 
                 M_GlobalKeyCounter.generated_mod_number = M_GlobalKeyCounter.generated_mod_number + 1
         else:
