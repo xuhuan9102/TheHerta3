@@ -16,17 +16,48 @@ class ObjDataModel:
     ib:list = field(init=False,repr=False,default_factory=list)
     category_buffer_dict:dict = field(init=False,repr=False,default_factory=dict)
 
-    # 仅用于WWMI的索引顶点ID字典，key是顶点索引，value是顶点ID，默认可以为None
     index_vertex_id_dict:dict = field(init=False,repr=False,default_factory=dict) 
 
     condition:M_Condition = field(init=False,repr=False,default_factory=M_Condition)
     drawindexed_obj:M_DrawIndexed = field(init=False,repr=False,default_factory=M_DrawIndexed)
+
+    index_count:int = field(init=False,repr=False,default=0)
+    first_index:int = field(init=False,repr=False,default=0)
+    is_ssmt4:bool = field(init=False,repr=False,default=False)
 
     def __post_init__(self):
         self.display_name = self.obj_name
         if "-" in self.obj_name:
             obj_name_split = self.obj_name.split("-")
             self.draw_ib = obj_name_split[0]
-            self.component_count = int(obj_name_split[1])
-            self.obj_alias_name = obj_name_split[2]
+            
+            if len(obj_name_split) == 3:
+                last_part = obj_name_split[2]
+                if "." in last_part:
+                    first_index_str, alias = last_part.split(".", 1)
+                    try:
+                        self.index_count = int(obj_name_split[1])
+                        self.first_index = int(first_index_str)
+                        self.is_ssmt4 = True
+                        self.component_count = 1
+                        self.obj_alias_name = alias
+                        return
+                    except ValueError:
+                        pass
+                
+                self.component_count = int(obj_name_split[1])
+                self.obj_alias_name = obj_name_split[2]
+            elif len(obj_name_split) >= 4:
+                self.is_ssmt4 = True
+                self.index_count = int(obj_name_split[1])
+                self.first_index = int(obj_name_split[2])
+                self.component_count = 1
+                alias_part = obj_name_split[3]
+                if "." in alias_part:
+                    self.obj_alias_name = alias_part.split(".", 1)[1]
+                else:
+                    self.obj_alias_name = alias_part
+            else:
+                self.component_count = int(obj_name_split[1])
+                self.obj_alias_name = obj_name_split[2]
        

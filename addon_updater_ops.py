@@ -1333,16 +1333,9 @@ def register(bl_info):
     updater.private_token = None  # "tokenstring"
 
     # Choose your own username, must match website (not needed for GitLab).
-    updater.user = "StarBobis"
-
-    # Choose your own repository, must match git name for GitHUb and Bitbucket,
-    # for GitLab use project ID (numbers only).
+    updater.user = "xuhuan9102"
     updater.repo = "TheHerta3"
-
-    # updater.addon = # define at top of module, MUST be done first
-
-    # Website for manual addon download, optional but recommended to set.
-    updater.website = "https://github.com/StarBobis/TheHerta3/releases"
+    updater.website = "https://github.com/xuhuan9102/TheHerta3"
 
     # Addon subfolder path.
     # "sample/path/to/addon"
@@ -1424,23 +1417,9 @@ def register(bl_info):
     # update to the master branch or any other branches specified using
     # the "install {branch}/older version" operator.
     updater.include_branches = True
-
-    # (GitHub only) This options allows using "releases" instead of "tags",
-    # which enables pulling down release logs/notes, as well as installs update
-    # from release-attached zips (instead of the auto-packaged code generated
-    # with a release/tag). Setting has no impact on BitBucket or GitLab repos.
+    updater.include_branch_auto_check = True
     updater.use_releases = False
-    # Note: Releases always have a tag, but a tag may not always be a release.
-    # Therefore, setting True above will filter out any non-annotated tags.
-    # Note 2: Using this option will also display (and filter by) the release
-    # name instead of the tag name, bear this in mind given the
-    # skip_tag_function filtering above.
-
-    # Populate if using "include_branches" option above.
-    # Note: updater.include_branch_list defaults to ['master'] branch if set to
-    # none. Example targeting another multiple branches allowed to pull from:
-    # updater.include_branch_list = ['master', 'dev']
-    updater.include_branch_list = None  # None is the equivalent = ['master']
+    updater.include_branch_list = ['main']
 
     # Only allow manual install, thus prompting the user to open
     # the addon's web page to download, specifically: updater.website

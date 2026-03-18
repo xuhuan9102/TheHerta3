@@ -477,10 +477,6 @@ class ModModelEFMI:
 
         texture_override_ib_section.append("[TextureOverride_" + texture_override_name_suffix + "]")
         texture_override_ib_section.append("hash = " + draw_ib)
-        texture_override_ib_section.append("match_first_index = " + match_first_index)
-        
-        if self.use_ssmt4 and match_index_count > 0:
-            texture_override_ib_section.append("match_index_count = " + str(match_index_count))
 
         if self.vlr_filter_index_indent != "":
             texture_override_ib_section.append("if vb0 == " + str(3000 + M_GlobalKeyCounter.generated_mod_number))
@@ -532,44 +528,20 @@ class ModModelEFMI:
                         if texture_markup_info.mark_type == "Slot":
                             texture_override_ib_section.append(self.vlr_filter_index_indent + texture_markup_info.mark_slot + " = " + texture_markup_info.get_resource_name())
 
+        texture_override_ib_section.append(self.vlr_filter_index_indent + "ib = ref " + ib_resource_name)
+
         if d3d11GameType:
             if self.use_ssmt4:
                 unique_str = draw_ib_model.unique_str
-                for original_category_name, draw_category_name in d3d11GameType.CategoryDrawCategoryDict.items():
-                    category_original_slot = d3d11GameType.CategoryExtractSlotDict[original_category_name]
-                    resource_name = f"Resource_{unique_str.replace('-', '_')}_{original_category_name}"
-                    texture_override_ib_section.append(self.vlr_filter_index_indent + category_original_slot + " = " + resource_name)
-
-                if Properties_GenerateMod.add_rain_effect():
-                    resource_name = f"Resource_{unique_str.replace('-', '_')}_Position"
-                    texture_override_ib_section.append(self.vlr_filter_index_indent + "vb3 = " + resource_name)
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "vb0 = ref Resource_" + unique_str.replace('-', '_') + "_Position")
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "vb1 = ref Resource_" + unique_str.replace('-', '_') + "_Texcoord")
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "vb2 = ref Resource_" + unique_str.replace('-', '_') + "_Blend")
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "vb3 = ref Resource_" + unique_str.replace('-', '_') + "_Position")
             else:
-                for original_category_name, draw_category_name in d3d11GameType.CategoryDrawCategoryDict.items():
-                    category_original_slot = d3d11GameType.CategoryExtractSlotDict[original_category_name]
-                    texture_override_ib_section.append(self.vlr_filter_index_indent + category_original_slot + " = Resource" + draw_ib + original_category_name)
-
-                if Properties_GenerateMod.add_rain_effect():
-                    texture_override_ib_section.append(self.vlr_filter_index_indent + "vb3 = Resource" + draw_ib + "Position")
-
-        texture_override_ib_section.append(self.vlr_filter_index_indent + "ib = " + ib_resource_name)
-
-        if d3d11GameType and not d3d11GameType.GPU_PreSkinning:
-            if self.use_ssmt4:
-                unique_str = draw_ib_model.unique_str
-                for category_name in d3d11GameType.OrderedCategoryNameList:
-                    for original_category_name, draw_category_name in d3d11GameType.CategoryDrawCategoryDict.items():
-                        if original_category_name == draw_category_name:
-                            category_original_slot = d3d11GameType.CategoryExtractSlotDict[original_category_name]
-                            resource_name = f"Resource_{unique_str.replace('-', '_')}_{original_category_name}"
-                            texture_override_ib_section.append(self.vlr_filter_index_indent + category_original_slot + " = " + resource_name)
-            else:
-                for category_name in d3d11GameType.OrderedCategoryNameList:
-                    category_slot = d3d11GameType.CategoryExtractSlotDict[category_name]
-
-                    for original_category_name, draw_category_name in d3d11GameType.CategoryDrawCategoryDict.items():
-                        if original_category_name == draw_category_name:
-                            category_original_slot = d3d11GameType.CategoryExtractSlotDict[original_category_name]
-                            texture_override_ib_section.append(self.vlr_filter_index_indent + category_original_slot + " = Resource" + draw_ib + original_category_name)
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "vb0 = ref Resource" + draw_ib + "Position")
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "vb1 = ref Resource" + draw_ib + "Texcoord")
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "vb2 = ref Resource" + draw_ib + "Blend")
+                texture_override_ib_section.append(self.vlr_filter_index_indent + "vb3 = ref Resource" + draw_ib + "Position")
 
         component_model = draw_ib_model.component_name_component_model_dict.get(component_name)
         if component_model is None:

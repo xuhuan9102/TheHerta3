@@ -114,7 +114,12 @@ class M_IniHelper:
         for draw_ib,draw_ib_model in drawib_drawibmodel_dict.items():
             print("Generating Hash Style Texture INI for DrawIB: " + draw_ib)
 
-            hash_deduped_texture_info_dict = WorkSpaceHelper.get_hash_deduped_texture_info_dict(draw_ib=draw_ib)
+            # SSMT4 模式下使用 unique_str，SSMT3 模式下使用 draw_ib
+            draw_ib_folder_key = getattr(draw_ib_model, 'unique_str', None)
+            if draw_ib_folder_key is None or draw_ib_folder_key == "":
+                draw_ib_folder_key = draw_ib
+            
+            hash_deduped_texture_info_dict = WorkSpaceHelper.get_hash_deduped_texture_info_dict(draw_ib=draw_ib_folder_key)
 
 
             # 添加标记的Hash风格贴图
@@ -130,7 +135,7 @@ class M_IniHelper:
                     else:
                         repeat_hash_list.append(texture_markup_info.mark_hash)
 
-                    original_texture_file_path = GlobalConfig.path_extract_gametype_folder(draw_ib=draw_ib,gametype_name=draw_ib_model.d3d11GameType.GameTypeName) + texture_markup_info.mark_filename
+                    original_texture_file_path = GlobalConfig.path_extract_gametype_folder(draw_ib=draw_ib_folder_key,gametype_name=draw_ib_model.d3d11GameType.GameTypeName) + texture_markup_info.mark_filename
                     if not os.path.exists(original_texture_file_path):
                         print("Skipping missing texture file: " + original_texture_file_path)
                         continue
@@ -153,7 +158,7 @@ class M_IniHelper:
 
 
 
-                    target_texture_file_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib) + hash_style_texture_filename
+                    target_texture_file_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib_folder_key) + hash_style_texture_filename
                     
                     resource_and_textureoverride_texture_section = M_IniSection(M_SectionType.ResourceAndTextureOverride_Texture)
                     resource_and_textureoverride_texture_section.append("[Resource_Texture_" + texture_markup_info.mark_hash + "]")

@@ -31,15 +31,16 @@ class DrawIBModel:
 
 
     # 通过default_factory让每个类的实例的变量分割开来，不再共享类的静态变量
-    def __init__(self, draw_ib:str, branch_model:BluePrintModel, skip_buffer_export:bool = False):
+    def __init__(self, draw_ib:str, branch_model:BluePrintModel, skip_buffer_export:bool = False, unique_str:str = ""):
         # (1) 读取工作空间下的Config.json来设置当前DrawIB的别名
         draw_ib_alias_name_dict:dict[str,str] = ConfigUtils.get_draw_ib_alias_name_dict()
         self.draw_ib:str = draw_ib
         self.draw_ib_alias:str = draw_ib_alias_name_dict.get(draw_ib,draw_ib)
+        self.unique_str:str = unique_str
 
         print(self.draw_ib + " Alias Name: " + self.draw_ib_alias)
         # (2) 读取工作空间中配置文件的配置项
-        self.import_config:ImportConfig = ImportConfig(draw_ib=self.draw_ib)
+        self.import_config:ImportConfig = ImportConfig(draw_ib=self.draw_ib, unique_str=unique_str)
         self.d3d11GameType:D3D11GameType = self.import_config.d3d11GameType
 
         '''
@@ -49,18 +50,37 @@ class DrawIBModel:
         self.draw_ib_ordered_obj_data_model_list:list[ObjDataModel] = branch_model.get_buffered_obj_data_model_list_by_draw_ib_and_game_type(draw_ib=draw_ib,d3d11_game_type=self.import_config.d3d11GameType)
         self._component_model_list:list[ComponentModel] = []
         self.component_name_component_model_dict:dict[str,ComponentModel] = {}
-        for part_name in self.import_config.part_name_list:
-            print("part_name: " + part_name)
-            component_obj_data_model_list = []
+        
+        if self.unique_str:
+            print(f"SSMT4 格式: 根据 first_index 分块")
+            first_index_obj_list_dict:dict[int,list[ObjDataModel]] = {}
             for obj_data_model in self.draw_ib_ordered_obj_data_model_list:
-                if part_name == str(obj_data_model.component_count):
-                    component_obj_data_model_list.append(obj_data_model)
-                    # print(part_name + " 已赋值")
+                first_index = obj_data_model.first_index
+                if first_index not in first_index_obj_list_dict:
+                    first_index_obj_list_dict[first_index] = []
+                first_index_obj_list_dict[first_index].append(obj_data_model)
+            
+            sorted_first_indices = sorted(first_index_obj_list_dict.keys())
+            for component_index, first_index in enumerate(sorted_first_indices, 1):
+                component_obj_data_model_list = first_index_obj_list_dict[first_index]
+                component_model = ComponentModel(component_name=f"Component {component_index}", final_ordered_draw_obj_model_list=component_obj_data_model_list)
+                component_model.first_index = first_index
+                self._component_model_list.append(component_model)
+                self.component_name_component_model_dict[component_model.component_name] = component_model
+                print(f"Component {component_index}: first_index={first_index}, objects={len(component_obj_data_model_list)}")
+        else:
+            for part_name in self.import_config.part_name_list:
+                print("part_name: " + part_name)
+                component_obj_data_model_list = []
+                for obj_data_model in self.draw_ib_ordered_obj_data_model_list:
+                    if part_name == str(obj_data_model.component_count):
+                        component_obj_data_model_list.append(obj_data_model)
+                        # print(part_name + " 已赋值")
 
-            component_model = ComponentModel(component_name="Component " +part_name, final_ordered_draw_obj_model_list=component_obj_data_model_list)
-     
-            self._component_model_list.append(component_model)
-            self.component_name_component_model_dict[component_model.component_name] = component_model
+                component_model = ComponentModel(component_name="Component " +part_name, final_ordered_draw_obj_model_list=component_obj_data_model_list)
+         
+                self._component_model_list.append(component_model)
+                self.component_name_component_model_dict[component_model.component_name] = component_model
         
         LOG.newline()
 
@@ -302,12 +322,24 @@ class DrawIBModel:
         '''
         拼接每个PartName对应的IB文件的Resource和filename,这样生成ini的时候以及导出Mod的时候就可以直接使用了。
         '''
-        for partname in self.import_config.part_name_list:
-            style_part_name = "Component" + partname
-            ib_resource_name = "Resource_" + self.draw_ib + "_" + style_part_name
-            ib_buf_filename = self.draw_ib + "-" + style_part_name + ".buf"
-            self.PartName_IBResourceName_Dict[partname] = ib_resource_name
-            self.PartName_IBBufferFileName_Dict[partname] = ib_buf_filename
+        if self.unique_str:
+            for component_model in self._component_model_list:
+                component_name = component_model.component_name
+                component_index = component_name.replace("Component ", "")
+                
+                if component_model.final_ordered_draw_obj_model_list:
+                    first_obj = component_model.final_ordered_draw_obj_model_list[0]
+                    ib_resource_name = f"Resource_{self.draw_ib}_{first_obj.index_count}_{first_obj.first_index}_Index"
+                    ib_buf_filename = f"{self.draw_ib}-{first_obj.index_count}-{first_obj.first_index}-Index.buf"
+                    self.PartName_IBResourceName_Dict[component_index] = ib_resource_name
+                    self.PartName_IBBufferFileName_Dict[component_index] = ib_buf_filename
+        else:
+            for partname in self.import_config.part_name_list:
+                style_part_name = "Component" + partname
+                ib_resource_name = "Resource_" + self.draw_ib + "_" + style_part_name
+                ib_buf_filename = self.draw_ib + "-" + style_part_name + ".buf"
+                self.PartName_IBResourceName_Dict[partname] = ib_resource_name
+                self.PartName_IBBufferFileName_Dict[partname] = ib_buf_filename
 
     def write_buffer_files(self):
         '''
@@ -316,20 +348,23 @@ class DrawIBModel:
         buf_output_folder = GlobalConfig.path_generatemod_buffer_folder()
         # print("Write Buffer Files::")
         # Export Index Buffer files.
-        for partname in self.import_config.part_name_list:
-            component_name = "Component " + partname
-            ib_buf = self.componentname_ibbuf_dict.get(component_name,None)
-
-            if ib_buf is None:
+        for partname, ib_buf in self.componentname_ibbuf_dict.items():
+            if ib_buf is None or len(ib_buf) == 0:
                 print("Export Skip, Can't get ib buf for partname: " + partname)
             else:
-                buf_filename = self.PartName_IBBufferFileName_Dict[partname]
-                BufferExportHelper.write_buf_ib_r32_uint(ib_buf,buf_filename)
+                buf_filename = self.PartName_IBBufferFileName_Dict.get(partname.replace("Component ", ""), None)
+                if buf_filename is None:
+                    buf_filename = self.PartName_IBBufferFileName_Dict.get("1", None)
+                if buf_filename:
+                    BufferExportHelper.write_buf_ib_r32_uint(ib_buf, buf_filename)
                 
         # print("Export Category Buffers::")
         # Export category buffer files.
         for category_name, category_buf in self.__categoryname_bytelist_dict.items():
-            buf_path = buf_output_folder + self.draw_ib + "-" + category_name + ".buf"
+            if self.unique_str:
+                buf_path = buf_output_folder + self.unique_str + "-" + category_name + ".buf"
+            else:
+                buf_path = buf_output_folder + self.draw_ib + "-" + category_name + ".buf"
             # print("write: " + buf_path)
             # print(type(category_buf[0]))
              # 将 list 转换为 numpy 数组

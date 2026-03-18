@@ -218,7 +218,11 @@ class TextureMarkUpInfo:
     mark_filename:str = field(default="",init=False)
     
     def get_resource_name(self):
-        return "Resource-" + self.mark_filename.split(".")[0]
+        filename_without_ext = self.mark_filename.split(".")[0]
+        parts = filename_without_ext.split("-")
+        if len(parts) >= 4:
+            filename_without_ext = f"{parts[0]}-{parts[2]}-{'-'.join(parts[3:])}"
+        return "Resource-" + filename_without_ext
     
     def get_hash_style_filename(self):
         return self.mark_hash + "-" + self.mark_name + "." + self.mark_filename.split(".")[1]
