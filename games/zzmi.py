@@ -252,6 +252,18 @@ class ModModelZZMI:
                 first_index = getattr(component_model, 'first_index', 0)
                 component_index = component_name.replace("Component ", "")
                 
+                current_ib_key = f"{draw_ib}_{first_index}"
+                is_cross_ib_source = current_ib_key in self.cross_ib_info_dict
+                is_cross_ib_target = any(current_ib_key in targets for targets in self.cross_ib_info_dict.values())
+                source_ib_list_for_target = []
+                if is_cross_ib_target:
+                    for source_ib, target_ib_list in self.cross_ib_info_dict.items():
+                        if current_ib_key in target_ib_list:
+                            source_ib_list_for_target.append(source_ib)
+                
+                if is_cross_ib_source:
+                    texture_override_ib_section.append("[ResourceBodyVB_" + draw_ib + "_" + str(first_index) + "]")
+                
                 style_part_name = "Component" + component_index
                 texture_override_name_suffix = "IB_" + draw_ib + "_" + draw_ib_model.draw_ib_alias + "_" + style_part_name
                 
@@ -263,6 +275,9 @@ class ModModelZZMI:
                 
                 if self.vlr_filter_index_indent != "":
                     texture_override_ib_section.append("if vb0 == " + str(3000 + M_GlobalKeyCounter.generated_mod_number))
+                
+                if is_cross_ib_source:
+                    texture_override_ib_section.append("ResourceBodyVB_" + draw_ib + "_" + str(first_index) + " = copy vb0")
                 
                 ib_buf = draw_ib_model.componentname_ibbuf_dict.get(component_name, None)
                 if ib_buf is None or len(ib_buf) == 0:
@@ -334,9 +349,56 @@ class ModModelZZMI:
                                     if texture_markup_info.mark_type == "Slot":
                                         texture_override_ib_section.append(self.vlr_filter_index_indent + texture_markup_info.mark_slot + " = " + texture_markup_info.get_resource_name())
                     
-                    drawindexed_str_list = M_IniHelper.get_drawindexed_str_list(component_model.final_ordered_draw_obj_model_list)
-                    for drawindexed_str in drawindexed_str_list:
-                        texture_override_ib_section.append(drawindexed_str)
+                    if is_cross_ib_source:
+                        non_cross_ib_objects = []
+                        for obj_model in component_model.final_ordered_draw_obj_model_list:
+                            obj_name = obj_model.obj_name
+                            if obj_name not in self.branch_model.cross_ib_object_names:
+                                non_cross_ib_objects.append(obj_model)
+                        
+                        drawindexed_str_list = M_IniHelper.get_drawindexed_str_list(non_cross_ib_objects)
+                        for drawindexed_str in drawindexed_str_list:
+                            texture_override_ib_section.append(drawindexed_str)
+                    else:
+                        drawindexed_str_list = M_IniHelper.get_drawindexed_str_list(component_model.final_ordered_draw_obj_model_list)
+                        for drawindexed_str in drawindexed_str_list:
+                            texture_override_ib_section.append(drawindexed_str)
+                    
+                    if is_cross_ib_target and source_ib_list_for_target:
+                        for source_ib_key in source_ib_list_for_target:
+                            source_parts = source_ib_key.split("_")
+                            source_hash = source_parts[0]
+                            source_first_index = int(source_parts[1]) if len(source_parts) > 1 else 0
+                            source_ib_model = self.drawib_drawibmodel_dict.get(source_hash)
+                            source_component_model = None
+                            if source_ib_model:
+                                for comp_model in source_ib_model._component_model_list:
+                                    if getattr(comp_model, 'first_index', 0) == source_first_index:
+                                        source_component_model = comp_model
+                                        break
+                            
+                            if source_component_model:
+                                target_first_index = first_index
+                                target_ib_resource_name = None
+                                for part_idx, ib_res_name in draw_ib_model.PartName_IBResourceName_Dict.items():
+                                    texture_override_ib_section.append("ib = " + ib_resource_name)
+                                    break
+                                
+                                texture_override_ib_section.append("vb0 = ResourceBodyVB_" + source_hash + "_" + str(source_first_index))
+                                texture_override_ib_section.append("vb1 = Resource" + source_hash + "Texcoord")
+                                texture_override_ib_section.append("vb2 = Resource" + source_hash + "Blend")
+                                texture_override_ib_section.append("vb3 = ResourceBodyVB_" + source_hash + "_" + str(source_first_index))
+                                
+                                cross_ib_objects = []
+                                for obj_model in source_component_model.final_ordered_draw_obj_model_list:
+                                    obj_name = obj_model.obj_name
+                                    if obj_name in self.branch_model.cross_ib_object_names:
+                                        cross_ib_objects.append(obj_model)
+                                
+                                if cross_ib_objects:
+                                    drawindexed_str_list = M_IniHelper.get_drawindexed_str_list(cross_ib_objects)
+                                    for drawindexed_str in drawindexed_str_list:
+                                        texture_override_ib_section.append(drawindexed_str)
                     
                     if self.vlr_filter_index_indent:
                         texture_override_ib_section.append("endif")

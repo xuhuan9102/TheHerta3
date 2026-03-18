@@ -26,12 +26,12 @@ class CrossIBMatchModeEnum:
 class CrossIBItem(PropertyGroup):
     source_ib: StringProperty(
         name="源IB",
-        description="源IB前缀，例如: 9f387166 或 9f387166-2（表示第2个分块）",
+        description="源IB前缀，例如: 9f387166 或 9f387166-0（SSMT4格式，-后面是first_index）",
         default=""
     )
     target_ib: StringProperty(
         name="目标IB",
-        description="目标IB前缀，例如: a55afe59 或 a55afe59-2（表示第2个分块）",
+        description="目标IB前缀，例如: a55afe59 或 a55afe59-0（SSMT4格式，-后面是first_index）",
         default=""
     )
     source_index_count: StringProperty(
@@ -49,7 +49,7 @@ class CrossIBItem(PropertyGroup):
     def parse_ib_with_component(cls, ib_str):
         """
         解析 IB 字符串，返回 (ib_hash, component_index)
-        例如:
+        第三代格式 (SSMT3):
         - "27966f80" -> ("27966f80", 1)
         - "27966f80-2" -> ("27966f80", 2)
         """
@@ -65,6 +65,28 @@ class CrossIBItem(PropertyGroup):
             component_index = 1
         
         return ib_hash, component_index
+
+    @classmethod
+    def parse_ib_with_first_index(cls, ib_str):
+        """
+        解析 IB 字符串，返回 (ib_hash, first_index)
+        第四代格式 (SSMT4):
+        - "27966f80" -> ("27966f80", 0)
+        - "27966f80-0" -> ("27966f80", 0)
+        - "27966f80-12345" -> ("27966f80", 12345)
+        """
+        if not ib_str:
+            return "", 0
+        
+        parts = ib_str.split("-")
+        ib_hash = parts[0]
+        
+        if len(parts) > 1 and parts[1].isdigit():
+            first_index = int(parts[1])
+        else:
+            first_index = 0
+        
+        return ib_hash, first_index
 
 
 class CrossIBMethodEnum:
@@ -303,14 +325,14 @@ class SSMTNode_CrossIB(SSMTNodeBase):
         for item in self.cross_ib_list:
             if self.match_mode == CrossIBMatchModeEnum.IB_HASH:
                 if item.source_ib and item.target_ib:
-                    source_hash, source_component = CrossIBItem.parse_ib_with_component(item.source_ib)
-                    target_hash, target_component = CrossIBItem.parse_ib_with_component(item.target_ib)
+                    source_hash, source_first_index = CrossIBItem.parse_ib_with_first_index(item.source_ib)
+                    target_hash, target_first_index = CrossIBItem.parse_ib_with_first_index(item.target_ib)
                     
-                    mapping_key = f"{source_hash}_{source_component}"
+                    mapping_key = f"{source_hash}_{source_first_index}"
                     if mapping_key not in ib_mapping:
                         ib_mapping[mapping_key] = []
                     
-                    target_key = f"{target_hash}_{target_component}"
+                    target_key = f"{target_hash}_{target_first_index}"
                     if target_key not in ib_mapping[mapping_key]:
                         ib_mapping[mapping_key].append(target_key)
             else:

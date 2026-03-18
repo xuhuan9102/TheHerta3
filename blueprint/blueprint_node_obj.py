@@ -261,7 +261,9 @@ class SSMTNode_Object_Info(SSMTNodeBase):
             op.object_name = self.object_name
 
         from ..config.main_config import GlobalConfig, LogicName
-        if GlobalConfig.logic_name == LogicName.EFMI:
+        from ..config.properties_import_model import Properties_ImportModel
+        
+        if GlobalConfig.logic_name == LogicName.EFMI or Properties_ImportModel.use_ssmt4():
             layout.label(text=f"DrawIB: {self.draw_ib}")
             layout.label(text=f"IndexCount: {self.index_count}")
             layout.label(text=f"FirstIndex: {self.first_index}")
