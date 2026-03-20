@@ -48,23 +48,38 @@ class SSMTNodeBase(Node):
     def poll(cls, ntree):
         return ntree.bl_idname == 'SSMTBlueprintTreeType'
     
-    def calculate_text_width(self, text, padding=40):
+    def calculate_text_width(self, text, padding=60):
         """计算文本所需的宽度（估算值）"""
         if not text:
             return 200
         
-        # 中文字符宽度约为英文字符的2倍
         char_count = 0
         for char in text:
+            code = ord(char)
+            
             if '\u4e00' <= char <= '\u9fff':
-                char_count += 2
+                char_count += 2.0
+            elif '\u3400' <= char <= '\u4dbf':
+                char_count += 2.0
+            elif '\u3000' <= char <= '\u303f':
+                char_count += 2.0
+            elif '\uff00' <= char <= '\uffef':
+                char_count += 2.0
+            elif code >= 0x20000:
+                char_count += 2.0
+            elif char.isupper():
+                char_count += 1.3
+            elif char.isdigit():
+                char_count += 1.2
+            elif char in '@#$%^&*()[]{}|\\/<>~':
+                char_count += 1.4
+            elif char == ' ':
+                char_count += 0.5
             else:
-                char_count += 1
+                char_count += 1.0
         
-        # 每个字符约占用8像素宽度（估算值）
         width = char_count * 8 + padding
         
-        # 确保最小宽度为200
         return max(200, width)
     
     def update_node_width(self, texts):

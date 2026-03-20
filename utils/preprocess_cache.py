@@ -478,7 +478,7 @@ class FingerprintCalculator:
                 if len(kb.data) > 0:
                     coords = np.empty(len(kb.data) * 3, dtype=np.float32)
                     kb.data.foreach_get('co', coords)
-                    kb_info['data_bytes'] = coords.tobytes()
+                    kb_info['data_hash'] = hashlib.md5(coords.tobytes()).hexdigest()
                 
                 shape_key_data.append(kb_info)
         

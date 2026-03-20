@@ -49,6 +49,26 @@ class SubMeshModel:
         
         GlobalConfig = self._get_global_config()
         
+        folder_name = self.unique_str
+
+        import_json_path = os.path.join(GlobalConfig.path_workspace_folder(), "Import.json")
+        import_json = JsonUtils.LoadFromFile(import_json_path)
+        gametype_name = import_json.get(folder_name, "")
+        
+        if gametype_name:
+            gametype_foldername = "TYPE_" + gametype_name
+            import_folder_path = os.path.join(GlobalConfig.path_workspace_folder(), folder_name)
+            game_import_json_path = os.path.join(import_folder_path, gametype_foldername, "import.json")
+
+            if os.path.exists(game_import_json_path):
+                self.d3d11_game_type = D3D11GameType(FilePath=game_import_json_path)
+
+                for draw_call_model in self.drawcall_model_list:
+                    source_obj = ObjUtils.get_obj_by_name(draw_call_model.obj_name)
+                    if source_obj is None:
+                        continue
+                    ObjBufferHelper.check_and_verify_attributes(obj=source_obj, d3d11_game_type=self.d3d11_game_type)
+        
         index_offset = 0
         submesh_temp_obj_list = []
         temp_collection = None
@@ -97,20 +117,7 @@ class SubMeshModel:
         merged_obj_name = "TEMP_SUBMESH_MERGED_" + self.unique_str
         ObjUtils.rename_object(submesh_merged_obj, merged_obj_name)
 
-        folder_name = self.unique_str
-
-        import_json_path = os.path.join(GlobalConfig.path_workspace_folder(), "Import.json")
-        import_json = JsonUtils.LoadFromFile(import_json_path)
-        gametype_name = import_json.get(folder_name, "")
-        gametype_foldername = "TYPE_" + gametype_name
-        import_folder_path = os.path.join(GlobalConfig.path_workspace_folder(), folder_name)
-        game_import_json_path = os.path.join(import_folder_path, gametype_foldername, "import.json")
-
-        self.d3d11_game_type = D3D11GameType(FilePath=game_import_json_path)
-
         if self.d3d11_game_type:
-            ObjBufferHelper.check_and_verify_attributes(obj=submesh_merged_obj, d3d11_game_type=self.d3d11_game_type)
-
             obj_element_model = ObjElementModel(d3d11_game_type=self.d3d11_game_type, obj_name=submesh_merged_obj.name)
 
             obj_element_model.element_vertex_ndarray = ObjBufferHelper.convert_to_element_vertex_ndarray(

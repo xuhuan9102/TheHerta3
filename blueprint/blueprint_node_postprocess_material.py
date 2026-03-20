@@ -349,20 +349,22 @@ class SSMTNode_PostProcess_Material(SSMTNode_PostProcess_Base):
                             object_to_diffuse_swapkey, material_group_to_swapkey,
                             swap_key_prefix, next_swap_key_num, used_swap_keys)
                         new_lines_for_this_mesh.extend(generated_lines)
+            fxmap_lines = []
             for texture_type in ['Glowmap', 'FXMap']:
                 matching_materials = self.find_matching_materials(obj, texture_type)
                 if matching_materials:
                     param_name = f"Resource\\RabbitFX\\{texture_type}"
-                    generated_rabbitfx_style = True
                     if texture_type == 'Glowmap': generated_glowmap = True
                     if texture_type == 'FXMap': generated_fxmap = True
                     generated_lines, next_swap_key_num = self.generate_material_lines(
                         matching_materials, param_name, texture_type, obj, texture_folder, all_sections,
                         object_to_diffuse_swapkey, material_group_to_swapkey,
                         swap_key_prefix, next_swap_key_num, used_swap_keys)
-                    new_lines_for_this_mesh.extend(generated_lines)
+                    fxmap_lines.extend(generated_lines)
+                    fxmap_lines.append("run = CommandList\\RabbitFX\\Run")
             if generated_zzmi_style: new_lines_for_this_mesh.append("run = CommandList\\ZZMI\\SetTextures")
-            if generated_rabbitfx_style: new_lines_for_this_mesh.append("run = CommandList\\RabbitFX\\Run")
+            if generated_rabbitfx_style: new_lines_for_this_mesh.append("run = CommandList\\RabbitFX\\SetTextures")
+            new_lines_for_this_mesh.extend(fxmap_lines)
             lines[insert_index + 1:insert_index + 1] = new_lines_for_this_mesh
             reset_lines = []
             if generated_glowmap: reset_lines.extend(["Resource\\RabbitFX\\Glowmap = ref null", r"$\RabbitFX\brightness = 0"])
