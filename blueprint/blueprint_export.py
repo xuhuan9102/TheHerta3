@@ -437,7 +437,6 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             copy_mapping: {原始物体名: (副本物体, 节点/项目)}
         """
         from ..utils.obj_utils import mesh_triangulate_beauty
-        from ..utils.parallel_preprocess import clear_materials
         
         tree = BlueprintExportHelper.get_current_blueprint_tree()
         
@@ -516,7 +515,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                         end_operation("MirrorWorkflow_Post")
                     
                     start_operation("ClearMaterials", obj_name)
-                    clear_materials(copy_obj)
+                    ObjUtils.clear_materials(copy_obj)
                     end_operation("ClearMaterials")
                     
                     if use_cache:

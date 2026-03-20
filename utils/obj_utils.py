@@ -939,6 +939,22 @@ class ObjUtils:
         cls.flip_face_normals(obj)
     
     @classmethod
+    def clear_materials(cls, obj):
+        '''
+        清除物体的所有材质槽，减少文件体积
+        用于预处理缓存，确保缓存物体不包含材质
+        '''
+        if obj.type != 'MESH':
+            return
+        
+        if obj.data.materials:
+            obj.data.materials.clear()
+        
+        for slot in obj.material_slots[:]:
+            obj.active_material_index = slot.slot_index
+            bpy.ops.object.material_slot_remove()
+    
+    @classmethod
     def _apply_all_modifiers(cls, obj):
         '''
         应用物体上的所有修改器
