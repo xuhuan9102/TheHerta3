@@ -11,8 +11,43 @@ from ..config.main_config import GlobalConfig, LogicName
 from ..config.properties_import_model import Properties_ImportModel
 
 from ..importer.mesh_importer import MeshImporter,MigotoBinaryFile
+from ..importer.migoto_binary_file import ConfigTabsHelper, ConfigAliasHelper
 from ..base.drawib_pair import DrawIBPair
 from .blueprint_drag_drop import set_importing_state, refresh_workspace_cache
+
+
+def _organize_objects_by_tabs_ssmt4(workspace_collection, imported_objects_info: list):
+    tabs_config = ConfigTabsHelper.get_drawib_tabs_config()
+    
+    print(f"[_organize_objects_by_tabs_ssmt4] 导入物体数量: {len(imported_objects_info)}")
+    for obj_info in imported_objects_info:
+        print(f"[_organize_objects_by_tabs_ssmt4] 物体: {obj_info['mesh_name']}, draw_ib: {obj_info['draw_ib']}")
+    
+    if not tabs_config:
+        print("[_organize_objects_by_tabs_ssmt4] 未找到有效的分组配置，跳过分组")
+        return
+
+    for tab_config in tabs_config:
+        tab_name = tab_config["tab_name"]
+        draw_ib_to_alias = tab_config["draw_ib_to_alias"]
+        print(f"[_organize_objects_by_tabs_ssmt4] 处理分组配置: {tab_name}, IB列表: {list(draw_ib_to_alias.keys())}")
+
+        tab_collection = bpy.data.collections.new(tab_name)
+        workspace_collection.children.link(tab_collection)
+        tab_collection.color_tag = CollectionColor.Green
+
+        matched_count = 0
+        for obj_info in imported_objects_info:
+            obj = obj_info["obj"]
+            draw_ib = obj_info["draw_ib"]
+            
+            if draw_ib in draw_ib_to_alias:
+                workspace_collection.objects.unlink(obj)
+                tab_collection.objects.link(obj)
+                matched_count += 1
+                print(f"[_organize_objects_by_tabs_ssmt4] 物体 {obj.name} 移动到分组 {tab_name}")
+
+        print(f"[_organize_objects_by_tabs_ssmt4] 分组 '{tab_name}' 包含 {matched_count} 个物体")
 
 
 def ImportFromWorkSpaceSSMT4(self, context):
@@ -29,10 +64,16 @@ def ImportFromWorkSpaceSSMT4(self, context):
 
     current_workspace_folder = GlobalConfig.path_workspace_folder()
 
+    ConfigTabsHelper.reset()
+    ConfigTabsHelper.load_tabs_config(current_workspace_folder)
+    ConfigAliasHelper._config_loaded = False
+    ConfigAliasHelper.load_config_alias(current_workspace_folder)
+
     workspace_subfolders = [f.path for f in os.scandir(current_workspace_folder) if f.is_dir() and '-' in f.name]
 
     foldername_gametypename_dict = {}
     imported_count = 0
+    imported_objects_info = []
 
     for import_folder_path in workspace_subfolders:
         import_folder_name = os.path.basename(import_folder_path)
@@ -80,9 +121,15 @@ def ImportFromWorkSpaceSSMT4(self, context):
                 print(f"找不到 fmt 文件: {fmt_file_path}")
                 continue
                 
-            mbf = MigotoBinaryFile(fmt_path=fmt_file_path,mesh_name= import_folder_name + ".自定义名称")
-            MeshImporter.create_mesh_obj_from_mbf(mbf=mbf,import_collection=workspace_collection)
-
+            mbf = MigotoBinaryFile(fmt_path=fmt_file_path, mesh_name=import_folder_name + ".自定义名称")
+            obj = MeshImporter.create_mesh_obj_from_mbf(mbf=mbf, import_collection=workspace_collection)
+            
+            if obj:
+                imported_objects_info.append({
+                    "obj": obj,
+                    "draw_ib": draw_ib,
+                    "mesh_name": mbf.mesh_name
+                })
 
             import_json_path = os.path.join(import_folder_path, "import.json")
             if os.path.exists(import_json_path):
@@ -100,6 +147,8 @@ def ImportFromWorkSpaceSSMT4(self, context):
             imported_count += 1
             self.report({'INFO'}, "成功导入" + import_folder_name + " 的数据类型: " + gametype_name)
             break
+
+    _organize_objects_by_tabs_ssmt4(workspace_collection, imported_objects_info)
 
     save_import_json_path = os.path.join(GlobalConfig.path_workspace_folder(),"Import.json")
     JsonUtils.SaveToFile(json_dict=foldername_gametypename_dict,filepath=save_import_json_path)

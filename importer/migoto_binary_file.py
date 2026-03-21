@@ -6,6 +6,121 @@ from ..utils.log_utils import LOG
 
 import os
 import numpy
+import json
+
+
+class ConfigTabsHelper:
+    _tabs_config_loaded: bool = False
+    _drawib_tabs_config: list = []
+
+    @classmethod
+    def load_tabs_config(cls, workspace_path: str):
+        if cls._tabs_config_loaded:
+            return
+        cls._tabs_config_loaded = True
+        try:
+            tabs_folder = os.path.join(workspace_path, "Config", "Tabs")
+            print(f"[ConfigTabsHelper] 工作空间路径: {workspace_path}")
+            print(f"[ConfigTabsHelper] Tabs 文件夹路径: {tabs_folder}")
+            
+            if not os.path.exists(tabs_folder):
+                print(f"[ConfigTabsHelper] Tabs 文件夹不存在: {tabs_folder}")
+                return
+            
+            json_files = [f for f in os.listdir(tabs_folder) if f.endswith('.json')]
+            print(f"[ConfigTabsHelper] 发现 {len(json_files)} 个配置文件: {json_files}")
+            
+            for json_file in json_files:
+                json_path = os.path.join(tabs_folder, json_file)
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                    
+                    extract_panel_tab = config.get("extractPanelTab", "")
+                    print(f"[ConfigTabsHelper] 文件 {json_file}, extractPanelTab={extract_panel_tab}")
+                    
+                    if extract_panel_tab and extract_panel_tab.lower() == "drawib":
+                        tab_name = os.path.splitext(json_file)[0]
+                        model_rows = config.get("modelRows", [])
+                        
+                        draw_ib_to_alias = {}
+                        for row in model_rows:
+                            if isinstance(row, dict):
+                                draw_ib = row.get("drawIB", "")
+                                alias_name = row.get("aliasName", "")
+                                if draw_ib:
+                                    draw_ib_to_alias[draw_ib] = alias_name if alias_name else draw_ib
+                        
+                        if draw_ib_to_alias:
+                            cls._drawib_tabs_config.append({
+                                "tab_name": tab_name,
+                                "draw_ib_to_alias": draw_ib_to_alias,
+                                "config_file": json_file
+                            })
+                            print(f"[ConfigTabsHelper] 加载分组配置: {tab_name}, 包含 {len(draw_ib_to_alias)} 个 IB: {list(draw_ib_to_alias.keys())}")
+                    
+                except Exception as e:
+                    print(f"[ConfigTabsHelper] 读取配置文件失败 {json_file}: {e}")
+            
+            print(f"[ConfigTabsHelper] 共加载 {len(cls._drawib_tabs_config)} 个有效分组配置")
+        except Exception as e:
+            print(f"[ConfigTabsHelper] 加载 Tabs 配置失败: {e}")
+
+    @classmethod
+    def get_drawib_tabs_config(cls) -> list:
+        return cls._drawib_tabs_config
+
+    @classmethod
+    def reset(cls):
+        cls._tabs_config_loaded = False
+        cls._drawib_tabs_config = []
+
+
+class ConfigAliasHelper:
+    _drawib_alias_cache: dict = {}
+    _config_loaded: bool = False
+
+    @classmethod
+    def load_config_alias(cls, workspace_path: str):
+        if cls._config_loaded:
+            return
+        cls._config_loaded = True
+        try:
+            config_path = os.path.join(workspace_path, "Config.json")
+            if os.path.exists(config_path):
+                import json
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_list = json.load(f)
+                if isinstance(config_list, list):
+                    for item in config_list:
+                        if isinstance(item, dict):
+                            draw_ib = item.get("DrawIB", "")
+                            alias = item.get("Alias", "")
+                            if draw_ib and alias:
+                                cls._drawib_alias_cache[draw_ib] = alias
+                print(f"[ConfigAliasHelper] 加载 Config.json 完成，共 {len(cls._drawib_alias_cache)} 个别名映射")
+        except Exception as e:
+            print(f"[ConfigAliasHelper] 读取 Config.json 失败: {e}")
+
+    @classmethod
+    def get_alias(cls, draw_ib: str) -> str:
+        return cls._drawib_alias_cache.get(draw_ib, "")
+
+    @classmethod
+    def apply_alias_to_mesh_name(cls, mesh_name: str) -> str:
+        if not mesh_name or "." not in mesh_name:
+            return mesh_name
+        parts = mesh_name.split(".", 1)
+        prefix_part = parts[0]
+        prefix_split = prefix_part.split("-")
+        if len(prefix_split) < 1:
+            return mesh_name
+        draw_ib = prefix_split[0]
+        alias = cls.get_alias(draw_ib)
+        if alias:
+            return f"{prefix_part}.{alias}"
+        return mesh_name
+
 
 class MigotoBinaryFile:
 
@@ -32,9 +147,19 @@ class MigotoBinaryFile:
         else:
             self.mesh_name = mesh_name
         
+        self._apply_config_alias()
 
         print("prefix: " + self.fmt_file.prefix)
         self.init_from_prefix(self.fmt_file.prefix, location_folder_path)
+
+    def _apply_config_alias(self):
+        try:
+            from ..config.main_config import GlobalConfig
+            workspace_path = GlobalConfig.path_workspace_folder()
+            ConfigAliasHelper.load_config_alias(workspace_path)
+            self.mesh_name = ConfigAliasHelper.apply_alias_to_mesh_name(self.mesh_name)
+        except Exception as e:
+            print(f"[MigotoBinaryFile] 应用 Config.json 别名失败: {e}")
 
     def init_from_prefix(self,prefix:str, location_folder_path:str):
 

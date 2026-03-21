@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import os
 
 
 class M_DrawIndexed:
@@ -47,6 +48,32 @@ class M_Condition:
         self.condition_str = condition_str
 
 class ObjRuleName:
+    _drawib_alias_cache: dict = {}
+    _config_loaded: bool = False
+
+    @classmethod
+    def _load_config_alias(cls):
+        if cls._config_loaded:
+            return
+        cls._config_loaded = True
+        try:
+            from ...config.main_config import GlobalConfig
+            workspace_path = GlobalConfig.path_workspace_folder()
+            config_path = os.path.join(workspace_path, "Config.json")
+            if os.path.exists(config_path):
+                import json
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_list = json.load(f)
+                if isinstance(config_list, list):
+                    for item in config_list:
+                        if isinstance(item, dict):
+                            draw_ib = item.get("DrawIB", "")
+                            alias = item.get("Alias", "")
+                            if draw_ib and alias:
+                                cls._drawib_alias_cache[draw_ib] = alias
+        except Exception as e:
+            print(f"[ObjRuleName] 读取 Config.json 失败: {e}")
+
     def __init__(self, obj_name: str):
         self.obj_name = obj_name
         self.draw_ib = ""
@@ -70,6 +97,16 @@ class ObjRuleName:
                 self.first_index = obj_name_split[2]
         else:
             raise Exception("Obj名称解析错误: " + self.obj_name + "  不包含'.'分隔符\n" + self.objname_parse_error_tips)
+
+        self._try_apply_config_alias()
+
+    def _try_apply_config_alias(self):
+        if not self.draw_ib:
+            return
+        ObjRuleName._load_config_alias()
+        config_alias = ObjRuleName._drawib_alias_cache.get(self.draw_ib)
+        if config_alias:
+            self.obj_alias_name = config_alias
 
 @dataclass
 class DrawCallModel:

@@ -40,7 +40,7 @@ class MeshImporter:
         print("导入模型: " + mbf.mesh_name)
         
         if not mbf.file_size_check():
-            return
+            return None
 
         # 创建mesh和obj
         mesh = bpy.data.meshes.new(mbf.mesh_name)
@@ -246,6 +246,7 @@ class MeshImporter:
         bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
         TimerUtils.End("Import 3Dmigoto Raw")
+        return obj
     
     @classmethod
     def set_import_attributes(cls, obj, mbf:MigotoBinaryFile):
