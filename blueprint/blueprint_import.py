@@ -42,7 +42,8 @@ def _organize_objects_by_tabs_ssmt4(workspace_collection, imported_objects_info:
             draw_ib = obj_info["draw_ib"]
             
             if draw_ib in draw_ib_to_alias:
-                workspace_collection.objects.unlink(obj)
+                if obj.name in workspace_collection.objects:
+                    workspace_collection.objects.unlink(obj)
                 tab_collection.objects.link(obj)
                 matched_count += 1
                 print(f"[_organize_objects_by_tabs_ssmt4] 物体 {obj.name} 移动到分组 {tab_name}")

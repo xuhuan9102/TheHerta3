@@ -11,6 +11,14 @@ _name_mapping_cache = {}
 _reverse_name_mapping_cache = {}
 
 
+def clear_name_mapping_cache():
+    """清除名称映射缓存（在每次导出开始时调用）"""
+    global _name_mapping_cache, _reverse_name_mapping_cache
+    _name_mapping_cache.clear()
+    _reverse_name_mapping_cache.clear()
+    print("[MaterialToResource] 已清除名称映射缓存")
+
+
 class SSMTNode_PostProcess_Material(SSMTNode_PostProcess_Base):
     '''材质转资源后处理节点：根据场景物体的材质和纹理创建资源引用'''
     bl_idname = 'SSMTNode_PostProcess_Material'

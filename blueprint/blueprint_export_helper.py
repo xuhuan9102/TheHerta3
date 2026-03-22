@@ -539,6 +539,39 @@ class BlueprintExportHelper:
         return postprocess_nodes
     
     @staticmethod
+    def clear_postprocess_caches():
+        """清除所有后处理节点的缓存（在每次导出开始时调用）"""
+        from .blueprint_node_postprocess_material import clear_name_mapping_cache
+        clear_name_mapping_cache()
+        
+        tree = BlueprintExportHelper.get_current_blueprint_tree()
+        if not tree:
+            return
+        
+        visited_blueprints = set()
+        
+        def clear_shapekey_mapping(current_tree):
+            """递归清除形态键节点的名称映射"""
+            if current_tree.name in visited_blueprints:
+                return
+            visited_blueprints.add(current_tree.name)
+            
+            for node in current_tree.nodes:
+                if node.bl_idname == 'SSMTNode_PostProcess_ShapeKey':
+                    if hasattr(node, 'name_mapping'):
+                        node.name_mapping = ""
+                        print(f"[ShapeKey] 已清除节点 {node.name} 的名称映射")
+                elif node.bl_idname == 'SSMTNode_Blueprint_Nest':
+                    blueprint_name = getattr(node, 'blueprint_name', '')
+                    if blueprint_name and blueprint_name != 'NONE':
+                        nested_tree = bpy.data.node_groups.get(blueprint_name)
+                        if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
+                            clear_shapekey_mapping(nested_tree)
+        
+        clear_shapekey_mapping(tree)
+        print("[PostProcess] 已清除所有后处理节点的缓存")
+    
+    @staticmethod
     def execute_postprocess_nodes(mod_export_path):
         """执行所有后处理节点，按连接顺序逐个运行"""
         postprocess_nodes = BlueprintExportHelper.get_postprocess_nodes()
