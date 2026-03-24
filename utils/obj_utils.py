@@ -242,6 +242,7 @@ def mesh_triangulate_beauty(obj):
     '''
     使用 Blender 内置的 BEAUTY 算法进行三角化
     使用 bpy.ops.mesh.quads_convert_to_tris 确保一致的三角化结果
+    三角化后，将形态键的变形效果烘焙到网格上
     '''
     if obj.type != 'MESH':
         return
@@ -265,6 +266,10 @@ def mesh_triangulate_beauty(obj):
         bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
         bpy.ops.object.mode_set(mode='OBJECT')
+        
+        if obj.data.shape_keys and len(obj.data.shape_keys.key_blocks) > 0:
+            bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
+            print(f"已将形态键变形效果烘焙到网格: {obj.name}")
         
     finally:
         if original_mode == 'EDIT':

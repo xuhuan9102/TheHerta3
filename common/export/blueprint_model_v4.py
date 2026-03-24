@@ -20,6 +20,7 @@ class BluePrintModel_V4:
         self.cross_ib_match_mode: str = 'IB_HASH'
         self.cross_ib_mapping_objects: dict = {}
         self.cross_ib_vb_condition_mapping: dict = {}
+        self.cross_ib_object_vb_condition: dict = {}
 
     def _get_m_key_class(self):
         from ...base.m_key import M_Key
@@ -198,7 +199,7 @@ class BluePrintModel_V4:
                             'target': vb_condition_target
                         }
             
-            connected_objects = self._collect_cross_ib_objects(unknown_node)
+            connected_objects = self._collect_cross_ib_objects(unknown_node, vb_condition_source, vb_condition_target)
             for obj_info in connected_objects:
                 if obj_info.get('is_cross_ib_source', False):
                     obj_name = obj_info['object_name']
@@ -206,6 +207,8 @@ class BluePrintModel_V4:
                     
                     source_ib_key = obj_info.get('source_ib_key', '')
                     target_ib_keys = obj_info.get('target_ib_keys', [])
+                    obj_vb_source = obj_info.get('vb_condition_source', vb_condition_source)
+                    obj_vb_target = obj_info.get('vb_condition_target', vb_condition_target)
                     
                     if source_ib_key:
                         for target_ib_key in target_ib_keys:
@@ -213,6 +216,12 @@ class BluePrintModel_V4:
                             if mapping_key not in self.cross_ib_mapping_objects:
                                 self.cross_ib_mapping_objects[mapping_key] = set()
                             self.cross_ib_mapping_objects[mapping_key].add(obj_name)
+                            
+                            object_mapping_key = (obj_name, source_ib_key, target_ib_key)
+                            self.cross_ib_object_vb_condition[object_mapping_key] = {
+                                'source': obj_vb_source,
+                                'target': obj_vb_target
+                            }
             
             self.parse_current_node(unknown_node, chain_key_list)
 
@@ -243,7 +252,7 @@ class BluePrintModel_V4:
         else:
             self.parse_current_node(unknown_node, chain_key_list)
 
-    def _collect_cross_ib_objects(self, cross_ib_node):
+    def _collect_cross_ib_objects(self, cross_ib_node, vb_condition_source="", vb_condition_target=""):
         connected_objects = []
         visited_nodes = set()
         
@@ -333,7 +342,9 @@ class BluePrintModel_V4:
                         'index_count': index_count if match_mode == 'INDEX_COUNT' else '',
                         'is_cross_ib_source': is_match,
                         'source_ib_key': source_ib_key,
-                        'target_ib_keys': target_ib_keys
+                        'target_ib_keys': target_ib_keys,
+                        'vb_condition_source': vb_condition_source,
+                        'vb_condition_target': vb_condition_target
                     })
             
             elif node.bl_idname == "SSMTNode_MultiFile_Export":
@@ -376,7 +387,9 @@ class BluePrintModel_V4:
                                 'index_count': index_count,
                                 'is_cross_ib_source': is_match,
                                 'source_ib_key': source_ib_key,
-                                'target_ib_keys': target_ib_keys
+                                'target_ib_keys': target_ib_keys,
+                                'vb_condition_source': vb_condition_source,
+                                'vb_condition_target': vb_condition_target
                             })
             
             elif node.bl_idname == "SSMTNode_Blueprint_Nest":

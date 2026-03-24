@@ -80,7 +80,10 @@ class MeshImporter:
                 mesh.vertex_colors.new(name=element.ElementName)
                 color_layer = mesh.vertex_colors[element.ElementName].data
                 for l in mesh.loops:
-                    color_layer[l.index].color = list(data[l.vertex_index]) + [0] * (4 - len(data[l.vertex_index]))
+                    if l.vertex_index < len(data):
+                        color_layer[l.index].color = list(data[l.vertex_index]) + [0] * (4 - len(data[l.vertex_index]))
+                    else:
+                        color_layer[l.index].color = [1.0, 1.0, 1.0, 1.0]
                 
             elif element.SemanticName == "BLENDINDICES":
                 if data.ndim == 1:
