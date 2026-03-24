@@ -97,11 +97,39 @@ class Properties_ImportModel(bpy.types.PropertyGroup):
     def get_blender_executable_path(cls):
         '''
         获取 Blender 可执行文件路径
+        空的时候不自动检测，需要用户手动填写
         '''
         path = bpy.context.scene.properties_import_model.blender_executable_path
         if path and os.path.exists(path):
             return path
         return None
+    
+    @classmethod
+    def validate_blender_executable_path(cls):
+        '''
+        验证 Blender 可执行文件路径
+        返回: (is_valid: bool, error_message: str or None)
+        '''
+        path = bpy.context.scene.properties_import_model.blender_executable_path
+        
+        if not path or path.strip() == "":
+            return (False, "请填写 Blender 可执行文件路径")
+        
+        if not os.path.exists(path):
+            return (False, f"路径不存在: {path}")
+        
+        if not os.path.isfile(path):
+            return (False, f"路径不是文件: {path}")
+        
+        path_lower = path.lower()
+        if not (path_lower.endswith('blender.exe') or path_lower.endswith('blender')):
+            return (False, "请选择 Blender 可执行文件 (blender.exe 或 blender)")
+        
+        current_blender = bpy.app.binary_path
+        if os.path.normpath(os.path.abspath(path)) == os.path.normpath(os.path.abspath(current_blender)):
+            return (False, "不能使用当前运行的 Blender 实例，请选择其他 Blender 安装路径")
+        
+        return (True, None)
 
     use_normal_map: bpy.props.BoolProperty(
         name="自动上贴图时使用法线贴图",

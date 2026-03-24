@@ -701,6 +701,11 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                 progress_callback=progress_callback
             )
             
+            if manager.validation_error:
+                self.report({'ERROR'}, manager.validation_error)
+                manager.cleanup()
+                return None
+            
             if not object_blend_map:
                 manager.cleanup()
                 if cached_objects:

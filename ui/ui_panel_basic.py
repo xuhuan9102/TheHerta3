@@ -52,6 +52,11 @@ class PanelBasicInformation(bpy.types.Panel):
             row = layout.row()
             row.prop(context.scene.properties_import_model,"parallel_worker_count",text=f"进程数(最大{max_workers})")
             layout.prop(context.scene.properties_import_model,"blender_executable_path",text="Blender路径")
+            
+            is_valid, error_msg = Properties_ImportModel.validate_blender_executable_path()
+            if not is_valid:
+                layout.label(text=error_msg, icon='ERROR')
+            
             if not bpy.data.is_saved:
                 layout.label(text="项目未保存，请先保存",icon='ERROR')
             elif bpy.data.is_dirty:

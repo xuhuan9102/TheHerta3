@@ -46,6 +46,7 @@ class ParallelPreprocessManager:
         self.temp_dir = None
         self.tasks: List[PreprocessTask] = []
         self.results: List[PreprocessResult] = []
+        self.validation_error: Optional[str] = None
     
     def preprocess_parallel(
         self,
@@ -81,6 +82,9 @@ class ParallelPreprocessManager:
             self._create_tasks(blend_file, subsets, mirror_workflow, vg_mapping_texts or {})
             
             self._run_workers(progress_callback)
+            
+            if self.validation_error:
+                return None
             
             object_blend_map = self._collect_results()
             
@@ -159,12 +163,14 @@ class ParallelPreprocessManager:
         import queue
         
         print(f"[ParallelPreprocess] 准备查找 Blender 可执行文件...")
-        blender_exe = self._find_blender_executable()
-        print(f"[ParallelPreprocess] Blender 可执行文件: {blender_exe}")
+        blender_exe, error_message = self._find_blender_executable()
         
-        if not blender_exe or not os.path.exists(blender_exe):
-            print(f"[ParallelPreprocess] 错误: Blender 可执行文件无效或不存在: {blender_exe}")
+        if error_message:
+            print(f"[ParallelPreprocess] 错误: {error_message}")
+            self.validation_error = error_message
             return
+        
+        print(f"[ParallelPreprocess] Blender 可执行文件: {blender_exe}")
         
         print(f"[ParallelPreprocess] 启动 {len(self.tasks)} 个工作进程...")
         
@@ -1048,44 +1054,21 @@ print(f"[Worker {{task_id}}] 完成: {{len(processed_objects)}} 个物体")
     
     @staticmethod
     def _find_blender_executable() -> str:
-        """查找 Blender 可执行文件"""
+        """
+        获取 Blender 可执行文件路径
+        空的时候不自动检测，需要用户手动填写
+        返回: (path: str or None, error_message: str or None)
+        """
         from ..config.properties_import_model import Properties_ImportModel
         
+        is_valid, error_message = Properties_ImportModel.validate_blender_executable_path()
+        
+        if not is_valid:
+            return (None, error_message)
+        
         user_path = Properties_ImportModel.get_blender_executable_path()
-        if user_path:
-            print(f"[ParallelPreprocess] 使用用户指定的 Blender: {user_path}")
-            return user_path
-        
-        import bpy
-        current_blender = bpy.app.binary_path
-        if current_blender and os.path.exists(current_blender):
-            print(f"[ParallelPreprocess] 使用当前 Blender: {current_blender}")
-            return current_blender
-        
-        if sys.platform == 'win32':
-            common_paths = [
-                r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
-            ]
-            
-            for path in common_paths:
-                if os.path.exists(path):
-                    return path
-            
-            try:
-                import winreg
-                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\BlenderFoundation")
-                install_path, _ = winreg.QueryValueEx(key, "InstallPath")
-                return os.path.join(install_path, "blender.exe")
-            except:
-                pass
-        
-        return "blender"
+        print(f"[ParallelPreprocess] 使用用户指定的 Blender: {user_path}")
+        return (user_path, None)
 
 
 def load_preprocessed_objects(object_blend_map: Dict[str, str]):
