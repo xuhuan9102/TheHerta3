@@ -130,72 +130,75 @@ class M_IniHelper:
             else:
                 draw_ib_folder_keys = [draw_ib]
 
-            for draw_ib_folder_key in draw_ib_folder_keys:
-                print(f"调试: 处理文件夹: {draw_ib_folder_key}")
-                
-                hash_deduped_texture_info_dict = WorkSpaceHelper.get_hash_deduped_texture_info_dict(draw_ib=draw_ib_folder_key)
+            folder_hash_deduped_dict = {}
+            for folder_key in draw_ib_folder_keys:
+                folder_hash_deduped_dict[folder_key] = WorkSpaceHelper.get_hash_deduped_texture_info_dict(draw_ib=folder_key)
 
-                for texture_markup_info_list in draw_ib_model.import_config.partname_texturemarkinfolist_dict.values():
-                    for texture_markup_info in texture_markup_info_list:
-                        if texture_markup_info.mark_type != "Hash":
-                            print("Skipping non-Hash style texture: " + texture_markup_info.mark_filename)
-                            continue
+            for texture_markup_info_list in draw_ib_model.import_config.partname_texturemarkinfolist_dict.values():
+                for texture_markup_info in texture_markup_info_list:
+                    if texture_markup_info.mark_type != "Hash":
+                        print("Skipping non-Hash style texture: " + texture_markup_info.mark_filename)
+                        continue
 
-                        if texture_markup_info.mark_hash in repeat_hash_list:
-                            print("Skipping repeated Hash style texture: " + texture_markup_info.mark_filename)
-                            continue
-                        else:
-                            repeat_hash_list.append(texture_markup_info.mark_hash)
+                    if texture_markup_info.mark_hash in repeat_hash_list:
+                        print("Skipping repeated Hash style texture: " + texture_markup_info.mark_filename)
+                        continue
+                    else:
+                        repeat_hash_list.append(texture_markup_info.mark_hash)
 
-                        original_texture_file_path = os.path.join(
-                            GlobalConfig.path_workspace_folder(), 
-                            draw_ib_folder_key, 
-                            "TYPE_" + draw_ib_model.d3d11GameType.GameTypeName,
-                            texture_markup_info.mark_filename
-                        )
-                        print(f"调试: 查找贴图文件: {original_texture_file_path}")
-                        
-                        if not os.path.exists(original_texture_file_path):
-                            print("Skipping missing texture file: " + original_texture_file_path)
-                            continue
+                    texture_folder = texture_markup_info.mark_folder if texture_markup_info.mark_folder else (unique_str if unique_str else draw_ib)
+                    print(f"调试: 贴图来源文件夹: {texture_folder}")
 
-                        hash_style_texture_filename = ""
-                        hash_style_texture_filename = hash_style_texture_filename + draw_ib + "_" + draw_ib_model.draw_ib_alias + "_"
+                    original_texture_file_path = os.path.join(
+                        GlobalConfig.path_workspace_folder(), 
+                        texture_folder, 
+                        "TYPE_" + draw_ib_model.d3d11GameType.GameTypeName,
+                        texture_markup_info.mark_filename
+                    )
+                    print(f"调试: 查找贴图文件: {original_texture_file_path}")
+                    
+                    if not os.path.exists(original_texture_file_path):
+                        print("Skipping missing texture file: " + original_texture_file_path)
+                        continue
 
-                        deduped_texture_info = hash_deduped_texture_info_dict.get(texture_markup_info.mark_hash,None)
-                        if deduped_texture_info is None:
-                            print(f"警告: Hash值 {texture_markup_info.mark_hash} 在文件夹 {draw_ib_folder_key} 中未找到对应的贴图信息，跳过")
-                            continue
+                    hash_style_texture_filename = ""
+                    hash_style_texture_filename = hash_style_texture_filename + draw_ib + "_" + draw_ib_model.draw_ib_alias + "_"
 
-                        component_count_list_str = deduped_texture_info.componet_count_list_str
-                        hash_style_texture_filename = hash_style_texture_filename + "_" + component_count_list_str + "_"
-                        hash_style_texture_filename = hash_style_texture_filename + deduped_texture_info.original_hash + "_" + deduped_texture_info.render_hash + "_" + deduped_texture_info.format + "_" + texture_markup_info.mark_name
+                    hash_deduped_texture_info_dict = folder_hash_deduped_dict.get(texture_folder, {})
+                    deduped_texture_info = hash_deduped_texture_info_dict.get(texture_markup_info.mark_hash,None)
+                    if deduped_texture_info is None:
+                        print(f"警告: Hash值 {texture_markup_info.mark_hash} 在文件夹 {texture_folder} 中未找到对应的贴图信息，跳过")
+                        continue
 
-                        hash_style_texture_filename = hash_style_texture_filename + "." + texture_markup_info.mark_filename.split(".")[1]
-                        print(texture_markup_info.mark_filename)
-                        print(texture_markup_info.get_hash_style_filename())
+                    component_count_list_str = deduped_texture_info.componet_count_list_str
+                    hash_style_texture_filename = hash_style_texture_filename + "_" + component_count_list_str + "_"
+                    hash_style_texture_filename = hash_style_texture_filename + deduped_texture_info.original_hash + "_" + deduped_texture_info.render_hash + "_" + deduped_texture_info.format + "_" + texture_markup_info.mark_name
+
+                    hash_style_texture_filename = hash_style_texture_filename + "." + texture_markup_info.mark_filename.split(".")[1]
+                    print(texture_markup_info.mark_filename)
+                    print(texture_markup_info.get_hash_style_filename())
 
 
 
 
-                        target_texture_file_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=draw_ib_folder_key) + hash_style_texture_filename
-                        
-                        resource_and_textureoverride_texture_section = M_IniSection(M_SectionType.ResourceAndTextureOverride_Texture)
-                        resource_and_textureoverride_texture_section.append("[Resource_Texture_" + texture_markup_info.mark_hash + "]")
-                        resource_and_textureoverride_texture_section.append("filename = Texture/" + hash_style_texture_filename)
-                        resource_and_textureoverride_texture_section.new_line()
+                    target_texture_file_path = GlobalConfig.path_generatemod_texture_folder(draw_ib=texture_folder) + hash_style_texture_filename
+                    
+                    resource_and_textureoverride_texture_section = M_IniSection(M_SectionType.ResourceAndTextureOverride_Texture)
+                    resource_and_textureoverride_texture_section.append("[Resource_Texture_" + texture_markup_info.mark_hash + "]")
+                    resource_and_textureoverride_texture_section.append("filename = Texture/" + hash_style_texture_filename)
+                    resource_and_textureoverride_texture_section.new_line()
 
-                        resource_and_textureoverride_texture_section.append("[TextureOverride_" + texture_markup_info.mark_hash + "]")
-                        resource_and_textureoverride_texture_section.append("; " + texture_markup_info.mark_filename)
-                        resource_and_textureoverride_texture_section.append("hash = " + texture_markup_info.mark_hash)
-                        resource_and_textureoverride_texture_section.append("match_priority = 0")
-                        resource_and_textureoverride_texture_section.append("this = Resource_Texture_" + texture_markup_info.mark_hash)
-                        resource_and_textureoverride_texture_section.new_line()
+                    resource_and_textureoverride_texture_section.append("[TextureOverride_" + texture_markup_info.mark_hash + "]")
+                    resource_and_textureoverride_texture_section.append("; " + texture_markup_info.mark_filename)
+                    resource_and_textureoverride_texture_section.append("hash = " + texture_markup_info.mark_hash)
+                    resource_and_textureoverride_texture_section.append("match_priority = 0")
+                    resource_and_textureoverride_texture_section.append("this = Resource_Texture_" + texture_markup_info.mark_hash)
+                    resource_and_textureoverride_texture_section.new_line()
 
-                        ini_builder.append_section(resource_and_textureoverride_texture_section)
+                    ini_builder.append_section(resource_and_textureoverride_texture_section)
 
-                        if not os.path.exists(target_texture_file_path):
-                            shutil.copy2(original_texture_file_path,target_texture_file_path)
+                    if not os.path.exists(target_texture_file_path):
+                        shutil.copy2(original_texture_file_path,target_texture_file_path)
 
             if GlobalConfig.logic_name != LogicName.WWMI and GlobalConfig.logic_name != LogicName.WuWa:
                 continue

@@ -216,6 +216,7 @@ class TextureMarkUpInfo:
     mark_hash:str = field(default="",init=False)
     mark_slot:str = field(default="",init=False)
     mark_filename:str = field(default="",init=False)
+    mark_folder:str = field(default="",init=False)
     
     def get_resource_name(self):
         filename_without_ext = self.mark_filename.split(".")[0]
@@ -404,6 +405,7 @@ class ImportConfig:
                                         markup_info.mark_slot = texture_markup_info_dict["MarkSlot"]
                                         markup_info.mark_hash = texture_markup_info_dict["MarkHash"]
                                         markup_info.mark_filename = texture_markup_info_dict["MarkFileName"]
+                                        markup_info.mark_folder = folder_name
                                         
                                         texture_markup_info_list.append(markup_info)
                                     
@@ -427,6 +429,7 @@ class ImportConfig:
                 markup_info.mark_slot = texture_markup_info_dict["MarkSlot"]
                 markup_info.mark_hash = texture_markup_info_dict["MarkHash"]
                 markup_info.mark_filename = texture_markup_info_dict["MarkFileName"]
+                markup_info.mark_folder = actual_folder_name
 
                 texture_markup_info_list.append(markup_info)
 

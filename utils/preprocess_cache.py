@@ -582,7 +582,7 @@ class FingerprintCalculator:
                     'active_render': uv_layer.active_render,
                 }
                 
-                if len(mesh.loops) > 0:
+                if len(mesh.loops) > 0 and len(uv_layer.data) == len(mesh.loops):
                     uv_coords = np.empty(len(mesh.loops) * 2, dtype=np.float32)
                     uv_layer.data.foreach_get('uv', uv_coords)
                     layer_info['data_hash'] = hashlib.md5(uv_coords.tobytes()).hexdigest()
