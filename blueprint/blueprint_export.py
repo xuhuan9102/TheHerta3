@@ -328,9 +328,10 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                 if copy_mapping:
                     print("恢复节点引用并删除三角化副本...")
                     start_operation("CleanupCopies")
-                    for original_name, (copy_obj, node_or_item) in copy_mapping.items():
-                        # 恢复节点/项目引用到原始物体
-                        node_or_item.object_name = original_name
+                    for original_name, (copy_obj, node_list) in copy_mapping.items():
+                        # 恢复所有节点/项目引用到原始物体
+                        for node_or_item in node_list:
+                            node_or_item.object_name = original_name
                         
                         # 删除副本（可能已被 submesh_model 合并删除）
                         if copy_obj:
@@ -452,7 +453,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             blend_file: blend 文件路径（用于缓存目录）
         
         Returns:
-            copy_mapping: {原始物体名: (副本物体, 节点/项目)}
+            copy_mapping: {原始物体名: (副本物体, [节点/项目列表])}
         """
         from ..utils.obj_utils import mesh_triangulate_beauty
         
@@ -475,6 +476,15 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                 obj_name = original_obj.name
                 
                 original_name = original_obj.name
+                
+                if original_name in copy_mapping:
+                    copy_obj, node_list = copy_mapping[original_name]
+                    node_list.append(node_or_item)
+                    node_or_item.original_object_name = original_name
+                    node_or_item.object_name = copy_obj.name
+                    print(f"复用副本: {original_name} -> {copy_obj.name} (节点数: {len(node_list)})")
+                    continue
+                
                 if original_name.endswith("-Original"):
                     copy_name = original_name.replace("-Original", "-copy_Original")
                 else:
@@ -542,7 +552,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                         end_operation("CacheStore")
                 
                 node_or_item.original_object_name = original_name
-                copy_mapping[original_name] = (copy_obj, node_or_item)
+                copy_mapping[original_name] = (copy_obj, [node_or_item])
                 
                 if not cache_used:
                     print(f"创建副本: {original_name} -> {copy_obj.name}")
@@ -592,24 +602,25 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         
         for node, node_type in all_process_nodes:
             connected_objects = []
-            for original_name, (copy_obj, node_or_item) in copy_mapping.items():
+            for original_name, (copy_obj, node_list) in copy_mapping.items():
                 if self._is_object_connected_to_node(original_name, node, tree):
-                    connected_objects.append((original_name, copy_obj, node_or_item))
+                    connected_objects.append((original_name, copy_obj, node_list))
             
             if not connected_objects:
                 continue
             
             if node_type == 'name_modify':
-                for original_name, copy_obj, node_or_item in connected_objects:
+                for original_name, copy_obj, node_list in connected_objects:
                     if hasattr(node, 'is_valid') and node.is_valid():
                         current_name = copy_obj.name
                         new_name = node.get_modified_object_name(current_name)
                         if new_name != current_name:
                             copy_obj.name = new_name
-                            if hasattr(node_or_item, 'original_object_name'):
-                                clean_name = new_name.rstrip('_copy') if new_name.endswith('_copy') else new_name
-                                node_or_item.original_object_name = clean_name
-                                print(f"[NameModify] {original_name}: {current_name} -> {new_name} (INI: {clean_name})")
+                            for node_or_item in node_list:
+                                if hasattr(node_or_item, 'original_object_name'):
+                                    clean_name = new_name.rstrip('_copy') if new_name.endswith('_copy') else new_name
+                                    node_or_item.original_object_name = clean_name
+                            print(f"[NameModify] {original_name}: {current_name} -> {new_name}")
             
             elif node_type == 'vg_process':
                 start_operation(f"VGProcess_{node.name}", "batch")
@@ -640,8 +651,9 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                 
                 end_operation(f"VGProcess_{node.name}")
         
-        for original_name, (copy_obj, node_or_item) in copy_mapping.items():
-            node_or_item.object_name = copy_obj.name
+        for original_name, (copy_obj, node_list) in copy_mapping.items():
+            for node_or_item in node_list:
+                node_or_item.object_name = copy_obj.name
     
     def _parallel_preprocess(self, context, obj_node_mapping, mirror_workflow_enabled):
         """
@@ -656,7 +668,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             mirror_workflow_enabled: 是否启用非镜像工作流
         
         Returns:
-            copy_mapping: {原始物体名: (副本物体, 节点/项目)}
+            copy_mapping: {原始物体名: (副本物体, [节点/项目列表])}
         """
         from ..utils.parallel_preprocess import ParallelPreprocessManager, load_preprocessed_objects
         
@@ -667,7 +679,13 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         use_cache = Properties_ImportModel.use_preprocess_cache() if hasattr(Properties_ImportModel, 'use_preprocess_cache') else True
         
         object_names = [obj.name for obj, _ in obj_node_mapping if obj]
-        node_mapping = {obj.name: (obj, node) for obj, node in obj_node_mapping if obj}
+        node_mapping = {}
+        for obj, node in obj_node_mapping:
+            if obj:
+                if obj.name not in node_mapping:
+                    node_mapping[obj.name] = (obj, [node])
+                else:
+                    node_mapping[obj.name][1].append(node)
         
         cached_objects = {}
         objects_to_process = []
@@ -766,7 +784,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         wm.progress_update(50)
         
         copy_mapping = {}
-        for original_name, (original_obj, node_or_item) in node_mapping.items():
+        for original_name, (original_obj, node_list) in node_mapping.items():
             if original_name.endswith("-Original"):
                 copy_name = original_name.replace("-Original", "-copy_Original")
             else:
@@ -784,11 +802,12 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                     copy_obj = loaded_objects[copy_name]
             
             if copy_obj:
+                for node_or_item in node_list:
+                    node_or_item.original_object_name = original_name
+                    node_or_item.object_name = copy_obj.name
+                copy_mapping[original_name] = (copy_obj, node_list)
                 
-                node_or_item.original_object_name = original_name
-                copy_mapping[original_name] = (copy_obj, node_or_item)
-                
-                print(f"[ParallelPreprocess] 加载预处理结果: {original_name} -> {copy_obj.name}")
+                print(f"[ParallelPreprocess] 加载预处理结果: {original_name} -> {copy_obj.name} (节点数: {len(node_list)})")
             else:
                 print(f"[ParallelPreprocess] 警告: 副本 {copy_name} 未在预处理结果中找到")
         
