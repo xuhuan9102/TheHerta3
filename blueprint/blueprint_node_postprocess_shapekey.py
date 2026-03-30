@@ -865,9 +865,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                     if start_v is not None and end_v is not None:
                         all_ranges.append((start_v, end_v))
                 if all_ranges:
-                    min_start = min(r[0] for r in all_ranges)
-                    max_end = max(r[1] for r in all_ranges)
-                    calculated_ranges[obj_name] = (min_start, max_end)
+                    calculated_ranges[obj_name] = all_ranges
 
             vertex_counts = {}
             for s, ls in sections.items():

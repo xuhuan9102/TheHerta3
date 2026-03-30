@@ -83,18 +83,26 @@ class ObjRuleName:
         self.objname_parse_error_tips = "Obj名称规则为: DrawIB-IndexCount-FirstIndex.AliasName,例如[67f829fc-2653-0.头发]第一个.前面的内容要符合规则,后面出现的内容是可以自定义的"
         
         if "." in self.obj_name:
-            obj_name_total_split = self.obj_name.split(".")
-            obj_name_split = obj_name_total_split[0].split("-")
+            obj_name_total_split = self.obj_name.split(".", 1)
+            prefix_part = obj_name_total_split[0]
             
             if len(obj_name_total_split) < 2:
                 raise Exception("Obj名称解析错误: " + self.obj_name + "  不包含'.'分隔符\n" + self.objname_parse_error_tips)
-            self.obj_alias_name = ".".join(obj_name_total_split[1:]) if len(obj_name_total_split) > 1 else ""
-            if len(obj_name_split) < 3:
-                raise Exception("Obj名称解析错误: " + self.obj_name + "  '-'分隔符数量不足，至少需要2个\n" + self.objname_parse_error_tips)
+            self.obj_alias_name = obj_name_total_split[1] if len(obj_name_total_split) > 1 else ""
+            
+            import re
+            normalized_prefix = re.sub(r'[(_\[\{]', '-', prefix_part)
+            
+            obj_name_split = normalized_prefix.split("-")
+            
+            non_empty_parts = [p for p in obj_name_split if p.strip()]
+            
+            if len(non_empty_parts) < 3:
+                raise Exception("Obj名称解析错误: " + self.obj_name + "  '-'分隔符数量不足，至少需要2个\n" + self.objname_parse_error_tips + f"\n解析后的部分: {non_empty_parts}")
             else:
-                self.draw_ib = obj_name_split[0]
-                self.index_count = obj_name_split[1]
-                self.first_index = obj_name_split[2]
+                self.draw_ib = non_empty_parts[0]
+                self.index_count = non_empty_parts[1]
+                self.first_index = non_empty_parts[2]
         else:
             raise Exception("Obj名称解析错误: " + self.obj_name + "  不包含'.'分隔符\n" + self.objname_parse_error_tips)
 

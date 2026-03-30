@@ -330,18 +330,20 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
 
                 for section_name in list(sections.keys()):
                     if section_name.startswith('[Resource_') and section_name.endswith(']'):
-                        original_lines = sections[section_name].copy()
-                        new_lines = []
-                        for line in original_lines:
-                            modified_line = line
-                            for buf_folder in buffer_folders[1:]:
-                                old_path = f"filename = {buf_folder}/"
-                                if old_path in line:
-                                    modified_line = line.replace(old_path, "filename = Buffer01/")
-                                    break
-                            new_lines.append(modified_line)
                         resource_name = section_name[1:-1]
-                        sections[section_name] = [f'[{resource_name}_1]'] + new_lines
+                        
+                        if resource_name.endswith('_Position'):
+                            original_lines = sections[section_name].copy()
+                            new_lines = []
+                            for line in original_lines:
+                                modified_line = line
+                                for buf_folder in buffer_folders[1:]:
+                                    old_path = f"filename = {buf_folder}/"
+                                    if old_path in line:
+                                        modified_line = line.replace(old_path, "filename = Buffer01/")
+                                        break
+                                new_lines.append(modified_line)
+                            sections[section_name] = [f'[{resource_name}_1]'] + new_lines
 
                 for hash_value in hash_values:
                     base_buffer_path = os.path.join("Buffer01", f"{hash_value}-Position.buf")

@@ -333,7 +333,8 @@ class MultiFileExportObjectItem(bpy.types.PropertyGroup):
     object_name: bpy.props.StringProperty(name="物体名称", default="") # type: ignore
     original_object_name: bpy.props.StringProperty(name="原始物体名称", default="") # type: ignore
     draw_ib: bpy.props.StringProperty(name="DrawIB", default="") # type: ignore
-    component: bpy.props.StringProperty(name="Component", default="") # type: ignore
+    index_count: bpy.props.StringProperty(name="IndexCount", default="") # type: ignore
+    first_index: bpy.props.StringProperty(name="FirstIndex", default="") # type: ignore
     alias_name: bpy.props.StringProperty(name="别名", default="") # type: ignore
 
 
@@ -441,7 +442,6 @@ class SSMTNode_MultiFile_Export(SSMTNodeBase):
         if export_index < 0:
             return None
         
-        # 如果索引超出范围，使用最后一个物体
         if export_index >= len(self.object_list):
             export_index = len(self.object_list) - 1
         
@@ -450,7 +450,8 @@ class SSMTNode_MultiFile_Export(SSMTNodeBase):
             "object_name": item.object_name,
             "original_object_name": getattr(item, 'original_object_name', item.object_name),
             "draw_ib": item.draw_ib,
-            "component": item.component,
+            "index_count": item.index_count,
+            "first_index": item.first_index,
             "alias_name": item.alias_name
         }
     
@@ -466,13 +467,30 @@ class SSMTNode_MultiFile_Export(SSMTNodeBase):
         item = self.object_list.add()
         item.object_name = object_name
         
-        if "-" in object_name:
-            parts = object_name.split("-")
-            if len(parts) >= 2:
-                item.draw_ib = parts[0]
-                item.component = parts[1]
-                if len(parts) >= 3:
-                    item.alias_name = "-".join(parts[2:])
+        import re
+        if "." in object_name:
+            parts = object_name.split(".", 1)
+            prefix_part = parts[0]
+            item.alias_name = parts[1] if len(parts) > 1 else ""
+            
+            normalized_prefix = re.sub(r'[(_\[\{]', '-', prefix_part)
+            prefix_parts = normalized_prefix.split("-")
+            non_empty_parts = [p for p in prefix_parts if p.strip()]
+            
+            if len(non_empty_parts) >= 1:
+                item.draw_ib = non_empty_parts[0]
+            if len(non_empty_parts) >= 2:
+                item.index_count = non_empty_parts[1]
+            if len(non_empty_parts) >= 3:
+                item.first_index = non_empty_parts[2]
+        elif "-" in object_name:
+            prefix_parts = object_name.split("-")
+            if len(prefix_parts) >= 1:
+                item.draw_ib = prefix_parts[0]
+            if len(prefix_parts) >= 2:
+                item.index_count = prefix_parts[1]
+            if len(prefix_parts) >= 3:
+                item.first_index = prefix_parts[2]
         
         self.update_node_width([item.object_name for item in self.object_list])
     
