@@ -170,6 +170,9 @@ class SubMeshModel:
 
         if should_delete_merged:
             bpy.data.objects.remove(submesh_merged_obj, do_unlink=True)
-            print("SubMeshModel: " + self.unique_str + " 计算完成，合并临时对象已删除")
+            if self.use_temp_copy_for_merge:
+                print("SubMeshModel: " + self.unique_str + " 计算完成，合并临时对象已删除")
+            else:
+                print("SubMeshModel: " + self.unique_str + " 计算完成，合并对象已删除")
         else:
             print("SubMeshModel: " + self.unique_str + " 计算完成，单对象保留由清理流程处理")

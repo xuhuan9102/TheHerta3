@@ -178,7 +178,7 @@ class BluePrintModel_V4:
                 
                 self.ordered_draw_obj_data_model_list.append(obj_model)
                 print(f"BluePrintModel_V4: 解析 MultiFile_Export 节点，导出索引: {export_index + 1}, 物体: {current_item.object_name}, DrawIB: {draw_ib}, IndexCount: {index_count}")
-            self.multifile_export_nodes.append(unknown_node)
+                self.multifile_export_nodes.append(unknown_node)
             self.parse_current_node(unknown_node, chain_key_list)
 
         elif unknown_node.bl_idname == "SSMTNode_DataType":
