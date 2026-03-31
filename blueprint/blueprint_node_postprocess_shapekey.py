@@ -425,7 +425,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                             open(f"{output_prefix}{filename_suffix}.buf", 'wb').close()
                             open(f"{output_prefix}_map.buf", 'wb').close()
                         else:
-                             open(f"{output_prefix}{filename_suffix}.buf", 'wb').close()
+                            open(f"{output_prefix}{filename_suffix}.buf", 'wb').close()
                         continue
 
                     if use_packed:
@@ -689,8 +689,8 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         
         生成一个打包缓冲区，存储所有slot的FREQ索引：
         - 布局: [vertex0_slot0, vertex0_slot1, ..., vertex0_slotN, vertex1_slot0, ...]
-        - 每个元素: uint8 (0-11 for FREQ index, 255 for no animation)
-        - 总大小: vertex_count * num_slots 字节
+        - 每个元素: uint32 (0-11 for FREQ index, 255 for no animation)
+        - 总大小: vertex_count * num_slots * 4 字节
         
         支持同一个IB下多个物体拥有不同形态键的情况：
         - 根据每个物体的顶点范围（start_v, end_v）来设置对应的FREQ值

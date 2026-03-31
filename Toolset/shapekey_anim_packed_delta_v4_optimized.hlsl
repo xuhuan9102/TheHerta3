@@ -16,8 +16,8 @@
 //   - FREQ values are still read from IniParams[100-111]
 //
 // MEMORY OVERHEAD:
-//   - Per vertex: MAX_SLOTS bytes (one byte per slot)
-//   - For 100k vertices × 5 slots = 500KB additional memory
+//   - Per vertex: MAX_SLOTS * 4 bytes (one uint32 per slot)
+//   - For 100k vertices × 5 slots = 2MB additional memory
 
 #define MAX_SLOTS 24
 #define MAX_FREQS 12
@@ -34,7 +34,7 @@ StructuredBuffer<float3> shapekey_pos_deltas[MAX_SLOTS] : register(t51);
 StructuredBuffer<int> shapekey_maps[MAX_SLOTS] : register(t75);
 
 // Per-vertex FREQ index buffer (packed: vertex * MAX_SLOTS + slot)
-// Each element is a uint8 (0-11 for FREQ index, 255 for no animation)
+// Each element is a uint32 (0-11 for FREQ index, 255 for no animation)
 StructuredBuffer<uint> vertex_freq_indices : register(t99);
 
 Texture1D<float4> IniParams : register(t120);

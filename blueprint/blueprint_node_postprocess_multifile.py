@@ -121,6 +121,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
         total_bytes = 0
         total_floats = 0
         attributes = []
+        unrecognized_types = set()
         
         lines = struct_definition.split('\n')
         for line in lines:
@@ -140,6 +141,11 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                     total_bytes += byte_size
                     total_floats += byte_size // 4
                     attributes.append({'type': type_name, 'name': var_name, 'size': byte_size})
+                elif type_name.lower() != 'struct' and not line.endswith('{') and not line.endswith('}'):
+                    unrecognized_types.add(type_name)
+        
+        if unrecognized_types:
+            print(f"警告: 发现未识别的顶点属性类型: {', '.join(unrecognized_types)}")
         
         if total_bytes == 0:
             return None
@@ -195,10 +201,19 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
             return False
 
     def _calculate_deltas(self, base_buffer, target_buffer):
-        return target_buffer - base_buffer
+        min_len = min(len(base_buffer), len(target_buffer))
+        if len(base_buffer) != len(target_buffer):
+            print(f"警告: 基准缓冲区({len(base_buffer)})和目标缓冲区({len(target_buffer)})大小不一致，将使用较小的长度({min_len})进行计算")
+        return target_buffer[:min_len] - base_buffer[:min_len]
 
     def _create_packed_buffers(self, base_buffer, target_buffer, use_delta=True):
         try:
+            min_len = min(len(base_buffer), len(target_buffer))
+            if len(base_buffer) != len(target_buffer):
+                print(f"警告: 基准缓冲区({len(base_buffer)})和目标缓冲区({len(target_buffer)})大小不一致，将使用较小的长度({min_len})进行计算")
+                base_buffer = base_buffer[:min_len]
+                target_buffer = target_buffer[:min_len]
+
             if use_delta:
                 deltas = self._calculate_deltas(base_buffer, target_buffer)
             else:
@@ -332,18 +347,21 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                     if section_name.startswith('[Resource_') and section_name.endswith(']'):
                         resource_name = section_name[1:-1]
                         
+                        original_lines = sections[section_name].copy()
+                        new_lines = []
+                        for line in original_lines:
+                            modified_line = line
+                            for buf_folder in buffer_folders[1:]:
+                                old_path = f"filename = {buf_folder}/"
+                                if old_path in line:
+                                    modified_line = line.replace(old_path, "filename = Buffer01/")
+                                    break
+                            new_lines.append(modified_line)
+                        
                         if resource_name.endswith('_Position'):
-                            original_lines = sections[section_name].copy()
-                            new_lines = []
-                            for line in original_lines:
-                                modified_line = line
-                                for buf_folder in buffer_folders[1:]:
-                                    old_path = f"filename = {buf_folder}/"
-                                    if old_path in line:
-                                        modified_line = line.replace(old_path, "filename = Buffer01/")
-                                        break
-                                new_lines.append(modified_line)
                             sections[section_name] = [f'[{resource_name}_1]'] + new_lines
+                        else:
+                            sections[section_name] = new_lines
 
                 for hash_value in hash_values:
                     base_buffer_path = os.path.join("Buffer01", f"{hash_value}-Position.buf")
@@ -408,14 +426,14 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                         shader_lines.append("; " + self.comment)
                         shader_lines.append("")
                     
-                    for state_index, (folder_num, buffer_folder) in enumerate(processed_frames):
+                    for state_index, (folder_num, buffer_folder) in enumerate(processed_frames, 1):
                         shader_lines.append(f"if {self.animation_swapkey} == {state_index}")
                         shader_lines.append(f"      cs-t51 = copy Resource_{hash_prefix}_Position{folder_num:02d}_packed_pos_delta")
                         shader_lines.append(f"endif")
 
                     shader_lines.append("")
 
-                    for state_index, (folder_num, buffer_folder) in enumerate(processed_frames):
+                    for state_index, (folder_num, buffer_folder) in enumerate(processed_frames, 1):
                         shader_lines.append(f"if {self.animation_swapkey} == {state_index}")
                         shader_lines.append(f"      cs-t75 = copy Resource_{hash_prefix}_Position{folder_num:02d}_Map")
                         shader_lines.append(f"endif")
@@ -435,10 +453,18 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                         print(f"已复制并更新着色器文件: merge_anim_packed_delta.hlsl")
 
                     vertex_count = self._get_vertex_count(sections, hash_value)
-                    if vertex_count:
-                        shader_lines.append(f"    Dispatch = {vertex_count}, 1, 1")
-                    else:
-                        shader_lines.append("    Dispatch = 10000, 1, 1")
+                    if not vertex_count:
+                        try:
+                            file_size = os.path.getsize(base_buffer_full_path)
+                            vertex_size_bytes = self._get_vertex_size() * 4
+                            vertex_count = file_size // vertex_size_bytes
+                            print(f"  [DEBUG] 从文件大小推断顶点数: file={os.path.basename(base_buffer_full_path)}, size={file_size}, vertex_size={vertex_size_bytes}, count={vertex_count}")
+                        except Exception as e:
+                            print(f"  [WARNING] 无法推断顶点数: {e}")
+                            vertex_count = 100000
+                    if vertex_count == 0:
+                        vertex_count = 100000
+                    shader_lines.append(f"    Dispatch = {vertex_count}, 1, 1")
 
                     shader_lines.append("    cs-u5 = null")
                     shader_lines.append("    cs-t51 = null")

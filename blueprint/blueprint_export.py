@@ -616,10 +616,6 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                         new_name = node.get_modified_object_name(current_name)
                         if new_name != current_name:
                             copy_obj.name = new_name
-                            for node_or_item in node_list:
-                                if hasattr(node_or_item, 'original_object_name'):
-                                    clean_name = new_name.rstrip('_copy') if new_name.endswith('_copy') else new_name
-                                    node_or_item.original_object_name = clean_name
                             print(f"[NameModify] {original_name}: {current_name} -> {new_name}")
             
             elif node_type == 'vg_process':
@@ -813,7 +809,8 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         
         if not copy_mapping:
             print(f"[ParallelPreprocess] copy_mapping 为空，加载失败")
-            manager.cleanup()
+            if manager:
+                manager.cleanup()
             return None
         
         tree = BlueprintExportHelper.get_current_blueprint_tree()
@@ -1011,7 +1008,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             object_names = []
             
             if current_node.bl_idname == 'SSMTNode_Object_Info':
-                found_name = getattr(current_node, 'object_name', '')
+                found_name = getattr(current_node, 'original_object_name', '') or getattr(current_node, 'object_name', '')
                 if found_name:
                     print(f"[VGProcess]{indent} 找到物体节点: {found_name}")
                     return [found_name]
@@ -1019,7 +1016,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             elif current_node.bl_idname == 'SSMTNode_MultiFile_Export':
                 object_list = getattr(current_node, 'object_list', [])
                 for item in object_list:
-                    item_name = getattr(item, 'object_name', '')
+                    item_name = getattr(item, 'original_object_name', '') or getattr(item, 'object_name', '')
                     if item_name:
                         object_names.append(item_name)
                 if object_names:
@@ -1112,14 +1109,14 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             object_names = []
             
             if current_node.bl_idname == 'SSMTNode_Object_Info':
-                found_name = getattr(current_node, 'object_name', '')
+                found_name = getattr(current_node, 'original_object_name', '') or getattr(current_node, 'object_name', '')
                 if found_name:
                     return [found_name]
             
             elif current_node.bl_idname == 'SSMTNode_MultiFile_Export':
                 object_list = getattr(current_node, 'object_list', [])
                 for item in object_list:
-                    item_name = getattr(item, 'object_name', '')
+                    item_name = getattr(item, 'original_object_name', '') or getattr(item, 'object_name', '')
                     if item_name:
                         object_names.append(item_name)
                 if object_names:
