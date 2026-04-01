@@ -536,6 +536,10 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                     mesh_triangulate_beauty(copy_obj)
                     end_operation("Triangulate")
                     
+                    start_operation("ApplyTransforms", obj_name)
+                    ObjUtils.apply_all_transforms(copy_obj)
+                    end_operation("ApplyTransforms")
+                    
                     if mirror_workflow_enabled:
                         start_operation("MirrorWorkflow_Post", obj_name)
                         ObjUtils.apply_mirror_transform(copy_obj)

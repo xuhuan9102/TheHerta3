@@ -325,6 +325,8 @@ def apply_modifiers_for_object_with_shape_keys_optimized(context, selected_modif
                 disabled_armature_modifiers.append(modifier)
                 modifier.show_viewport = False
     
+    apply_all_constraints(obj)
+    
     if not obj.data.shape_keys:
         for modifier_name in selected_modifiers:
             mod = obj.modifiers.get(modifier_name)
@@ -570,7 +572,8 @@ def apply_all_modifiers(obj):
     
     优化：
     1. 先删除禁用的修改器（不应用）
-    2. 只应用启用的修改器
+    2. 先应用约束（如果有的话）
+    3. 只应用启用的修改器
     """
     if obj.type != 'MESH':
         return
@@ -583,6 +586,8 @@ def apply_all_modifiers(obj):
     
     if not obj.modifiers:
         return
+    
+    apply_all_constraints(obj)
     
     has_shape_keys = obj.data.shape_keys is not None
     
@@ -656,6 +661,24 @@ def prepare_copy_for_mirror_workflow(copy_obj):
     else:
         apply_all_modifiers(copy_obj)
 
+def apply_all_constraints(obj):
+    """应用物体上的所有约束，将约束效果烘焙到变换中"""
+    if obj.type != 'MESH':
+        return
+    
+    if not obj.constraints:
+        return
+    
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    
+    if obj.constraints:
+        print(f"应用 {len(obj.constraints)} 个约束: {obj.name}")
+        bpy.ops.object.visual_transform_apply()
+        for constraint in obj.constraints[:]:
+            obj.constraints.remove(constraint)
+        print(f"已删除所有约束: {obj.name}")
 
 def clear_materials(obj):
     """清除物体的所有材质槽，减少文件体积"""
@@ -715,6 +738,20 @@ def flip_face_normals(obj):
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.flip_normals()
     bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def apply_all_transforms(obj):
+    """应用全部变换（位置、旋转、缩放），让原点回到世界中心"""
+    if obj.type != 'MESH':
+        return
+    
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    
+    print(f"应用全部变换: {obj.name}")
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    print(f"变换已应用，原点已回到世界中心: {obj.name}")
 
 
 def process_vertex_groups(obj, vg_mapping_texts):
@@ -864,6 +901,13 @@ for obj_name in object_names:
             mesh_triangulate_beauty(copy_obj)
         except Exception as e:
             print(f"[Worker {{task_id}}] 三角化失败 {{copy_obj.name}}: {{e}}")
+            traceback.print_exc()
+        
+        # 3.5 应用全部变换，让原点回到世界中心
+        try:
+            apply_all_transforms(copy_obj)
+        except Exception as e:
+            print(f"[Worker {{task_id}}] 应用变换失败 {{copy_obj.name}}: {{e}}")
             traceback.print_exc()
         
         # 4. 清除材质，减少文件体积

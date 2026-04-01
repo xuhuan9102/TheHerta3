@@ -864,6 +864,110 @@ class ObjUtils:
                     pass
 
     @classmethod
+    def apply_all_constraints(cls, obj):
+        '''
+        应用物体上的所有约束
+        将约束效果烘焙到变换中
+        
+        注意：此操作会删除所有约束
+        '''
+        if obj.type != 'MESH':
+            return
+        
+        if not obj.constraints:
+            return
+        
+        original_active = bpy.context.view_layer.objects.active
+        original_selected = list(bpy.context.selected_objects)
+        original_mode = obj.mode
+        
+        try:
+            if original_mode == 'EDIT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+            
+            if obj.constraints:
+                print(f"应用 {len(obj.constraints)} 个约束: {obj.name}")
+                bpy.ops.object.visual_transform_apply()
+                for constraint in obj.constraints[:]:
+                    obj.constraints.remove(constraint)
+                print(f"已删除所有约束: {obj.name}")
+            
+        finally:
+            if original_mode == 'EDIT':
+                try:
+                    bpy.ops.object.select_all(action='DESELECT')
+                    obj.select_set(True)
+                    bpy.context.view_layer.objects.active = obj
+                    bpy.ops.object.mode_set(mode='EDIT')
+                except:
+                    pass
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            for sel_obj in original_selected:
+                if sel_obj:
+                    try:
+                        sel_obj.select_set(True)
+                    except:
+                        pass
+            if original_active:
+                try:
+                    bpy.context.view_layer.objects.active = original_active
+                except:
+                    pass
+
+    @classmethod
+    def apply_all_transforms(cls, obj):
+        '''
+        应用物体的全部变换（位置、旋转、缩放）
+        让原点回到世界中心
+        '''
+        if obj.type != 'MESH':
+            return
+        
+        original_active = bpy.context.view_layer.objects.active
+        original_selected = list(bpy.context.selected_objects)
+        original_mode = obj.mode
+        
+        try:
+            if original_mode == 'EDIT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+            
+            print(f"应用全部变换: {obj.name}")
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+            print(f"变换已应用，原点已回到世界中心: {obj.name}")
+            
+        finally:
+            if original_mode == 'EDIT':
+                try:
+                    bpy.ops.object.select_all(action='DESELECT')
+                    obj.select_set(True)
+                    bpy.context.view_layer.objects.active = obj
+                    bpy.ops.object.mode_set(mode='EDIT')
+                except:
+                    pass
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            for sel_obj in original_selected:
+                if sel_obj:
+                    try:
+                        sel_obj.select_set(True)
+                    except:
+                        pass
+            if original_active:
+                try:
+                    bpy.context.view_layer.objects.active = original_active
+                except:
+                    pass
+
+    @classmethod
     def prepare_copy_for_mirror_workflow(cls, copy_obj):
         '''
         为非镜像工作流准备副本
@@ -909,10 +1013,11 @@ class ObjUtils:
         '''
         处理有形态键的绑定物体
         1. 删除禁用的修改器（优化：不应用不需要的修改器）
-        2. 保存形态键参数
-        3. 归零形态键
-        4. 应用修改器（使用优化算法）
-        5. 重新应用形态键（保留原始参数值）
+        2. 先应用约束（如果有的话）
+        3. 保存形态键参数
+        4. 归零形态键
+        5. 应用修改器（使用优化算法）
+        6. 重新应用形态键（保留原始参数值）
         '''
         if obj.type != 'MESH':
             return
@@ -928,6 +1033,8 @@ class ObjUtils:
         if not obj.modifiers:
             print(f"物体 {obj.name} 没有启用的修改器，跳过应用")
             return
+        
+        cls.apply_all_constraints(obj)
         
         shape_key_values = {}
         for kb in obj.data.shape_keys.key_blocks:
@@ -991,7 +1098,8 @@ class ObjUtils:
         
         优化：
         1. 先删除禁用的修改器（不应用）
-        2. 只应用启用的修改器
+        2. 先应用约束（如果有的话）
+        3. 只应用启用的修改器
         '''
         if obj.type != 'MESH':
             return
@@ -1019,6 +1127,8 @@ class ObjUtils:
             if not obj.modifiers:
                 print(f"物体 {obj.name} 没有启用的修改器")
                 return
+            
+            cls.apply_all_constraints(obj)
             
             from .shapekey_utils import ShapeKeyUtils
             
