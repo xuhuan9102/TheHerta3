@@ -46,13 +46,13 @@ def set_user_context(context, user_context):
     for object in user_context.selected_objects:
         try:
             select_object(object)
-        except (ReferenceError, ValueError):
+        except (ReferenceError, ValueError, RuntimeError):
             pass
     if user_context.active_object:
         try:
             set_active_object(context, user_context.active_object)
             set_mode(context, user_context.mode)
-        except (ReferenceError, ValueError):
+        except (ReferenceError, ValueError, RuntimeError):
             pass
 
 

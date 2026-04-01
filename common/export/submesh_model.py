@@ -108,48 +108,33 @@ class SubMeshModel:
         if len(mesh_objects) == 1:
             submesh_merged_obj = mesh_objects[0]
         else:
-            if self.use_temp_copy_for_merge:
-                for obj in mesh_objects:
-                    temp_copy = obj.copy()
-                    temp_copy.data = obj.data.copy()
-                    bpy.context.scene.collection.objects.link(temp_copy)
-                    temp_copy.hide_set(False)
-                    temp_copy.hide_viewport = False
-                    temp_obj_copies.append(temp_copy)
-                
-                first_temp = temp_obj_copies[0]
-                
-                bpy.ops.object.select_all(action='DESELECT')
-                for temp_obj in temp_obj_copies:
-                    temp_obj.select_set(True)
-                bpy.context.view_layer.objects.active = first_temp
+            for obj in mesh_objects:
+                temp_copy = obj.copy()
+                temp_copy.data = obj.data.copy()
+                bpy.context.scene.collection.objects.link(temp_copy)
+                temp_copy.hide_set(False)
+                temp_copy.hide_viewport = False
+                temp_obj_copies.append(temp_copy)
+            
+            first_temp = temp_obj_copies[0]
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            for temp_obj in temp_obj_copies:
+                temp_obj.select_set(True)
+            bpy.context.view_layer.objects.active = first_temp
 
-                ObjUtils.join_objects(bpy.context, temp_obj_copies)
+            ObjUtils.join_objects(bpy.context, temp_obj_copies)
 
-                submesh_merged_obj = bpy.data.objects.get(first_temp.name)
-                if submesh_merged_obj is None:
-                    print(f"SubMeshModel 错误: 合并后找不到临时对象 {first_temp.name}")
-                    for tc in temp_obj_copies:
-                        try:
-                            if tc.name in bpy.data.objects:
-                                bpy.data.objects.remove(tc, do_unlink=True)
-                        except:
-                            pass
-                    return
-            else:
-                first_obj_name = mesh_objects[0].name
-                
-                bpy.ops.object.select_all(action='DESELECT')
-                for obj in mesh_objects:
-                    obj.select_set(True)
-                bpy.context.view_layer.objects.active = mesh_objects[0]
-
-                ObjUtils.join_objects(bpy.context, mesh_objects)
-
-                submesh_merged_obj = bpy.data.objects.get(first_obj_name)
-                if submesh_merged_obj is None:
-                    print(f"SubMeshModel 错误: 合并后找不到对象 {first_obj_name}")
-                    return
+            submesh_merged_obj = bpy.data.objects.get(first_temp.name)
+            if submesh_merged_obj is None:
+                print(f"SubMeshModel 错误: 合并后找不到临时对象 {first_temp.name}")
+                for tc in temp_obj_copies:
+                    try:
+                        if tc.name in bpy.data.objects:
+                            bpy.data.objects.remove(tc, do_unlink=True)
+                    except:
+                        pass
+                return
             
             should_delete_merged = True
 
@@ -170,9 +155,6 @@ class SubMeshModel:
 
         if should_delete_merged:
             bpy.data.objects.remove(submesh_merged_obj, do_unlink=True)
-            if self.use_temp_copy_for_merge:
-                print("SubMeshModel: " + self.unique_str + " 计算完成，合并临时对象已删除")
-            else:
-                print("SubMeshModel: " + self.unique_str + " 计算完成，合并对象已删除")
+            print("SubMeshModel: " + self.unique_str + " 计算完成，合并临时对象已删除")
         else:
             print("SubMeshModel: " + self.unique_str + " 计算完成，单对象保留由清理流程处理")
