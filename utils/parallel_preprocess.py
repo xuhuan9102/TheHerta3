@@ -585,6 +585,10 @@ def apply_all_modifiers(obj):
     has_shape_keys = obj.data.shape_keys is not None
     
     if has_shape_keys:
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        
         modifier_names = [mod.name for mod in obj.modifiers]
         apply_modifiers_for_object_with_shape_keys(
             bpy.context, 
@@ -640,6 +644,8 @@ def prepare_copy_for_mirror_workflow(copy_obj):
         
         modifier_names = [mod.name for mod in copy_obj.modifiers]
         if modifier_names:
+            bpy.ops.object.select_all(action='DESELECT')
+            copy_obj.select_set(True)
             bpy.context.view_layer.objects.active = copy_obj
             apply_modifiers_for_object_with_shape_keys(
                 bpy.context,
@@ -667,11 +673,11 @@ def apply_all_constraints(obj):
     bpy.context.view_layer.objects.active = obj
     
     if obj.constraints:
-        print(f"应用 {len(obj.constraints)} 个约束: {obj.name}")
+        print(f"应用 {{len(obj.constraints)}} 个约束: {{obj.name}}")
         bpy.ops.object.visual_transform_apply()
         for constraint in obj.constraints[:]:
             obj.constraints.remove(constraint)
-        print(f"已删除所有约束: {obj.name}")
+        print(f"已删除所有约束: {{obj.name}}")
 
 def clear_materials(obj):
     """清除物体的所有材质槽，减少文件体积"""
@@ -742,9 +748,9 @@ def apply_all_transforms(obj):
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
     
-    print(f"应用全部变换: {obj.name}")
+    print(f"应用全部变换: {{obj.name}}")
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    print(f"变换已应用，原点已回到世界中心: {obj.name}")
+    print(f"变换已应用，原点已回到世界中心: {{obj.name}}")
 
 
 processed_objects = []
