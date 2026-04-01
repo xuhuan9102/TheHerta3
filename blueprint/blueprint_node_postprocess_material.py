@@ -344,14 +344,17 @@ class SSMTNode_PostProcess_Material(SSMTNode_PostProcess_Base):
             is_rabbitfx_style = any(k.lower().startswith("resource\\rabbitfx\\") for k in ini_mapping.keys())
             if is_pst_style or is_zzmi_style or is_rabbitfx_style:
                 for param_name, texture_type in ini_mapping.items():
-                    if param_name.lower().startswith("resource\\zzmi\\"): 
-                        generated_zzmi_style = True
-                    elif param_name.lower().startswith("resource\\rabbitfx\\"): 
-                        generated_rabbitfx_style = True
-                    elif not param_name.lower().startswith("ps-t"):
+                    is_zzmi_param = param_name.lower().startswith("resource\\zzmi\\")
+                    is_rabbitfx_param = param_name.lower().startswith("resource\\rabbitfx\\")
+                    
+                    if not is_zzmi_param and not is_rabbitfx_param and not param_name.lower().startswith("ps-t"):
                         continue
                     matching_materials = self.find_matching_materials(obj, texture_type)
                     if matching_materials:
+                        if is_zzmi_param:
+                            generated_zzmi_style = True
+                        elif is_rabbitfx_param:
+                            generated_rabbitfx_style = True
                         generated_lines, next_swap_key_num = self.generate_material_lines(
                             matching_materials, param_name, texture_type, obj, texture_folder, all_sections,
                             object_to_diffuse_swapkey, material_group_to_swapkey,
