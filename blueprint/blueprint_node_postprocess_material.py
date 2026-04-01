@@ -201,26 +201,54 @@ class SSMTNode_PostProcess_Material(SSMTNode_PostProcess_Base):
                 if linked_image: return linked_image
         except (StopIteration, AttributeError):
             pass
+            
+        # 尝试寻找材质节点树里被选中/激活的贴图节点，这通常是用户想应用但没连线的节点
+        active_node = getattr(material.node_tree.nodes, "active", None)
+        if active_node and active_node.type == 'TEX_IMAGE' and active_node.image:
+            return active_node.image
+            
         for node in material.node_tree.nodes:
             if node.type == 'TEX_IMAGE' and node.image:
                 return node.image
         return None
 
     def copy_texture_file(self, texture_image, target_folder, material):
-        if not texture_image or not texture_image.filepath:
+        if not texture_image:
             return None
         try:
-            source_path = bpy.path.abspath(texture_image.filepath)
-            if not os.path.exists(source_path): return None
             os.makedirs(target_folder, exist_ok=True)
+            
+            source_path = ""
+            if texture_image.filepath:
+                source_path = bpy.path.abspath(texture_image.filepath)
+                
+            file_extension = ".png"
+            if source_path:
+                _, file_extension = os.path.splitext(os.path.basename(source_path))
 
-            _, file_extension = os.path.splitext(os.path.basename(source_path))
             new_filename = f"{material.name}{file_extension}"
-
             target_path = os.path.join(target_folder, new_filename)
+
             if os.path.exists(target_path) and not self.material_to_resource_override:
                 return new_filename
-            shutil.copy2(source_path, target_path)
+
+            saved_internally = False
+            # 解决读取外部引用贴图而不是Blender内部引用的问题
+            # 优先考虑Blender内部数据保存，支持未存盘修改、内置创建的图案以及打包的内容
+            if getattr(texture_image, 'has_data', False):
+                try:
+                    texture_image.save_render(filepath=target_path)
+                    saved_internally = True
+                except Exception as e:
+                    print(f"尝试内部直接保存贴图失败 ({e})，将回退至普通文件复制...")
+            
+            # 如果从内存保存失败（例如格式限制或无内存数据），则回退原逻辑：复制外部连接原文件
+            if not saved_internally:
+                if source_path and os.path.exists(source_path):
+                    shutil.copy2(source_path, target_path)
+                else:
+                    return None
+
             return new_filename
         except Exception as e:
             print(f"复制纹理文件失败: {e}")
