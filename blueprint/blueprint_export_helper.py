@@ -639,6 +639,54 @@ class BlueprintExportHelper:
         return len(cross_ib_nodes) > 0
     
     @staticmethod
+    def has_special_postprocess_nodes():
+        """检查当前蓝图中是否存在特殊后处理节点（材质转资源、形态键配置）
+        
+        返回: (是否存在特殊节点, 节点类型列表)
+        """
+        tree = BlueprintExportHelper.get_current_blueprint_tree()
+        if not tree:
+            return False, []
+        
+        special_node_types = [
+            ('SSMTNode_PostProcess_Material', '材质转资源'),
+            ('SSMTNode_PostProcess_ShapeKey', '形态键配置'),
+            ('SSMTNode_PostProcess_MultiFile', '多文件配置'),
+        ]
+        
+        found_types = []
+        visited_blueprints = set()
+        
+        def collect_special_nodes(current_tree):
+            """递归收集特殊后处理节点"""
+            if current_tree.name in visited_blueprints:
+                return
+            visited_blueprints.add(current_tree.name)
+            
+            for node in current_tree.nodes:
+                if node.mute:
+                    continue
+                for bl_idname, type_name in special_node_types:
+                    if node.bl_idname == bl_idname:
+                        if type_name not in found_types:
+                            found_types.append(type_name)
+                if node.bl_idname == 'SSMTNode_Blueprint_Nest':
+                    blueprint_name = getattr(node, 'blueprint_name', '')
+                    if blueprint_name and blueprint_name != 'NONE':
+                        nested_tree = bpy.data.node_groups.get(blueprint_name)
+                        if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
+                            collect_special_nodes(nested_tree)
+        
+        collect_special_nodes(tree)
+        
+        multifile_nodes = BlueprintExportHelper.get_multifile_export_nodes()
+        if multifile_nodes:
+            if '多文件导出' not in found_types:
+                found_types.append('多文件导出')
+        
+        return len(found_types) > 0, found_types
+    
+    @staticmethod
     def get_cross_ib_info():
         """获取当前蓝图中所有跨IB节点的映射信息"""
         cross_ib_nodes = BlueprintExportHelper.get_cross_ib_nodes()

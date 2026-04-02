@@ -1,4 +1,5 @@
 import bpy
+import os
 
 from ..utils.timer_utils import TimerUtils
 from ..utils.translate_utils import TR
@@ -80,8 +81,44 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
     bl_description = "根据当前工作空间对应的蓝图架构生成对应的Mod文件"
     bl_options = {'REGISTER','UNDO'}
 
-    # 允许通过属性传入指定的蓝图树名称
     node_tree_name: bpy.props.StringProperty(name="Node Tree Name", default="") # type: ignore
+
+    def invoke(self, context, event):
+        target_tree_name = self.node_tree_name
+        
+        if not target_tree_name:
+            space_data = getattr(context, "space_data", None)
+            if space_data and (space_data.type == 'NODE_EDITOR'):
+                tree = getattr(space_data, "edit_tree", None)
+                if not tree:
+                    tree = getattr(space_data, "node_tree", None)
+                if tree:
+                    target_tree_name = tree.name
+        
+        if target_tree_name:
+            BlueprintExportHelper.forced_target_tree_name = target_tree_name
+        
+        has_special_nodes, node_types = BlueprintExportHelper.has_special_postprocess_nodes()
+        
+        if has_special_nodes:
+            mod_export_path = GlobalConfig.path_generate_mod_folder()
+            
+            if mod_export_path and os.path.exists(mod_export_path):
+                if os.listdir(mod_export_path):
+                    self._special_node_types = node_types
+                    self._export_path = mod_export_path
+                    return context.window_manager.invoke_props_dialog(self, width=400)
+        
+        BlueprintExportHelper.forced_target_tree_name = None
+        return self.execute(context)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="导出目录不为空！", icon='ERROR')
+        layout.label(text=f"路径: {getattr(self, '_export_path', '未知')}")
+        layout.label(text=f"检测到特殊节点: {', '.join(getattr(self, '_special_node_types', []))}")
+        layout.separator()
+        layout.label(text="继续导出可能会覆盖现有文件，是否继续？")
 
     def execute(self, context):
         TimerUtils.Start("GenerateMod Mod")
