@@ -721,9 +721,8 @@ class SSMT_OT_BatchConnectNodes(bpy.types.Operator):
 
         # 判断连接模式
         if len(type_count_dict) == 1:
-            # 只有一种类型：无法连接
-            self.report({'ERROR'}, "所选节点类型相同，无法连接")
-            return {'CANCELLED'}
+            # 只有一种类型：根据位置分组连接
+            return self.connect_same_type_nodes(selected_nodes, node_tree)
         else:
             # 两种类型：判断是一对一还是多对一
             type_items = list(type_count_dict.items())
@@ -935,6 +934,140 @@ class SSMT_OT_BatchConnectNodes(bpy.types.Operator):
         total_connections = len(connection_info)
         self.report({'INFO'}, f"多对一连接：成功连接 {total_connections} 个节点对")
         print(f"多对一连接完成，共创建 {total_connections} 个连接:")
+        for info in connection_info:
+            print(f"  {info}")
+
+        return {'FINISHED'}
+
+    def connect_same_type_nodes(self, selected_nodes, node_tree):
+        """相同类型节点连接模式：根据位置分组，多的连接到少的"""
+        if len(selected_nodes) < 2:
+            self.report({'WARNING'}, "请至少选择2个节点")
+            return {'CANCELLED'}
+
+        # 按X坐标排序节点
+        sorted_by_x = sorted(selected_nodes, key=lambda n: n.location.x)
+        
+        # 计算X坐标的中位数作为分界点
+        x_values = [n.location.x for n in selected_nodes]
+        x_min = min(x_values)
+        x_max = max(x_values)
+        x_range = x_max - x_min
+        
+        # 如果所有节点的X坐标几乎相同，则按Y坐标分组
+        if x_range < 50:
+            sorted_by_y = sorted(selected_nodes, key=lambda n: n.location.y)
+            y_values = [n.location.y for n in selected_nodes]
+            y_min = min(y_values)
+            y_max = max(y_values)
+            y_range = y_max - y_min
+            
+            if y_range < 50:
+                self.report({'WARNING'}, "节点位置过于集中，无法根据位置分组")
+                return {'CANCELLED'}
+            
+            # 按Y坐标分组：上方的作为源节点，下方的作为目标节点
+            y_median = (y_min + y_max) / 2
+            source_nodes = [n for n in selected_nodes if n.location.y > y_median]
+            target_nodes = [n for n in selected_nodes if n.location.y <= y_median]
+        else:
+            # 按X坐标分组：左边的作为源节点，右边的作为目标节点
+            x_median = (x_min + x_max) / 2
+            source_nodes = [n for n in selected_nodes if n.location.x < x_median]
+            target_nodes = [n for n in selected_nodes if n.location.x >= x_median]
+
+        # 确保源节点和目标节点都不为空
+        if not source_nodes or not target_nodes:
+            self.report({'WARNING'}, "无法根据位置将节点分成两组，请调整节点位置")
+            return {'CANCELLED'}
+
+        # 检查节点是否有合适的输入/输出端口
+        for node in source_nodes:
+            if len(node.outputs) == 0:
+                self.report({'ERROR'}, f"源节点 '{node.name}' 没有输出端口")
+                return {'CANCELLED'}
+
+        for node in target_nodes:
+            if len(node.inputs) == 0:
+                self.report({'ERROR'}, f"目标节点 '{node.name}' 没有输入端口")
+                return {'CANCELLED'}
+
+        # 如果源节点比目标节点多，保持原样；如果目标节点比源节点多，交换
+        if len(source_nodes) < len(target_nodes):
+            source_nodes, target_nodes = target_nodes, source_nodes
+            # 交换后需要重新检查端口
+            for node in source_nodes:
+                if len(node.outputs) == 0:
+                    self.report({'ERROR'}, f"源节点 '{node.name}' 没有输出端口")
+                    return {'CANCELLED'}
+            for node in target_nodes:
+                if len(node.inputs) == 0:
+                    self.report({'ERROR'}, f"目标节点 '{node.name}' 没有输入端口")
+                    return {'CANCELLED'}
+
+        # 清除现有连接（只清除选中节点之间的连接）
+        for node in source_nodes:
+            for output in node.outputs:
+                for link in output.links:
+                    if link.to_node in target_nodes:
+                        node_tree.links.remove(link)
+
+        # 按从上到下的顺序排序节点（y坐标降序）
+        source_nodes.sort(key=lambda n: -n.location.y)
+        target_nodes.sort(key=lambda n: -n.location.y)
+
+        # 分配连接：将源节点平均分配到各个目标节点
+        source_count = len(source_nodes)
+        target_count = len(target_nodes)
+        nodes_per_target = source_count // target_count
+        remainder = source_count % target_count
+
+        connection_info = []
+        source_index = 0
+
+        for target_index, target_node in enumerate(target_nodes):
+            current_batch_size = nodes_per_target + (1 if target_index < remainder else 0)
+
+            for i in range(current_batch_size):
+                if source_index >= len(source_nodes):
+                    break
+
+                source_node = source_nodes[source_index]
+
+                # 查找可用的输入端口
+                available_input = None
+                for input_socket in target_node.inputs:
+                    if not input_socket.is_linked:
+                        available_input = input_socket
+                        break
+
+                # 如果没有可用的输入端口，尝试创建新端口
+                if not available_input:
+                    try:
+                        if hasattr(target_node, 'update'):
+                            target_node.inputs.new('SSMTSocketObject', f"Input {len(target_node.inputs) + 1}")
+                            available_input = target_node.inputs[-1]
+                    except:
+                        self.report({'WARNING'}, f"节点 '{target_node.name}' 没有可用的输入端口")
+                        source_index += 1
+                        continue
+
+                # 创建连接
+                if available_input and len(source_node.outputs) > 0:
+                    node_tree.links.new(source_node.outputs[0], available_input)
+                    connection_info.append(f"{source_node.name} -> {target_node.name}")
+
+                source_index += 1
+
+        # 触发节点更新
+        for node in target_nodes:
+            if hasattr(node, 'update'):
+                node.update()
+
+        # 提供成功反馈
+        total_connections = len(connection_info)
+        self.report({'INFO'}, f"相同类型连接：成功连接 {total_connections} 个节点对（{len(source_nodes)}个源节点 -> {len(target_nodes)}个目标节点）")
+        print(f"相同类型连接完成，共创建 {total_connections} 个连接:")
         for info in connection_info:
             print(f"  {info}")
 
