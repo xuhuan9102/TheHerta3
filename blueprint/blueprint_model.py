@@ -222,7 +222,23 @@ class BluePrintModel:
             obj_model = ObjDataModel(obj_name=unknown_node.object_name)
             
             obj_model.draw_ib = unknown_node.draw_ib
-            obj_model.component_count = int(unknown_node.component) 
+            
+            # 兼容第三代和第四代：优先使用 component，如果没有则使用 index_count
+            component_value = getattr(unknown_node, 'component', None)
+            if component_value is not None and component_value:
+                obj_model.component_count = int(component_value)
+            else:
+                # 第四代格式使用 index_count
+                index_count = getattr(unknown_node, 'index_count', '0')
+                obj_model.component_count = int(index_count) if index_count else 0
+            
+            # 第四代格式需要 first_index 和 index_count
+            first_index = getattr(unknown_node, 'first_index', None)
+            if first_index is not None and first_index:
+                obj_model.first_index = int(first_index)
+                obj_model.index_count = getattr(unknown_node, 'index_count', '')
+                obj_model.is_ssmt4 = True
+            
             obj_model.obj_alias_name = unknown_node.alias_name
             
             if hasattr(unknown_node, 'original_object_name') and unknown_node.original_object_name:
@@ -237,7 +253,22 @@ class BluePrintModel:
                 first_item = unknown_node.object_list[0]
                 obj_model = ObjDataModel(obj_name=first_item.object_name)
                 obj_model.draw_ib = first_item.draw_ib
-                obj_model.component_count = int(first_item.component) if first_item.component else 0
+                
+                # 兼容第三代和第四代：优先使用 component，如果没有则使用 index_count
+                component_value = getattr(first_item, 'component', None)
+                if component_value is not None:
+                    obj_model.component_count = int(component_value) if component_value else 0
+                else:
+                    # 第四代格式使用 index_count
+                    index_count = getattr(first_item, 'index_count', '0')
+                    obj_model.component_count = int(index_count) if index_count else 0
+                
+                # 第四代格式需要 first_index
+                first_index = getattr(first_item, 'first_index', None)
+                if first_index is not None:
+                    obj_model.first_index = int(first_index) if first_index else 0
+                    obj_model.index_count = getattr(first_item, 'index_count', '')
+                
                 obj_model.obj_alias_name = first_item.alias_name
                 
                 if hasattr(first_item, 'original_object_name') and first_item.original_object_name:
@@ -458,7 +489,22 @@ class BluePrintModel:
                     obj_name = multifile_object_info["object_name"]
                     obj_model.obj_name = obj_name
                     obj_model.draw_ib = multifile_object_info["draw_ib"]
-                    obj_model.component_count = int(multifile_object_info["component"]) if multifile_object_info["component"] else 0
+                    
+                    # 兼容第三代和第四代：优先使用 component，如果没有则使用 index_count
+                    component_value = multifile_object_info.get("component")
+                    if component_value is not None:
+                        obj_model.component_count = int(component_value) if component_value else 0
+                    else:
+                        # 第四代格式使用 index_count
+                        index_count = multifile_object_info.get("index_count", "0")
+                        obj_model.component_count = int(index_count) if index_count else 0
+                    
+                    # 第四代格式需要 first_index 和 index_count
+                    first_index = multifile_object_info.get("first_index")
+                    if first_index is not None:
+                        obj_model.first_index = int(first_index) if first_index else 0
+                        obj_model.index_count = multifile_object_info.get("index_count", "")
+                    
                     obj_model.obj_alias_name = multifile_object_info["alias_name"]
                     
                     original_name = multifile_object_info.get("original_object_name", obj_name)

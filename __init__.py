@@ -5,7 +5,6 @@ from .ui import ui_panel_basic
 from .ui import ui_panel_model
 from .ui import ui_panel_sword
 from .ui import ui_panel_import
-from .ui import ui_panel_fast_texture
 from .blueprint import blueprint_node_obj
 from .blueprint import blueprint_import
 from .blueprint import blueprint_export
@@ -59,7 +58,7 @@ bl_info = {
     "name": "TheHerta3",
     "description": "SSMT3.0 Series's Blender Plugin.",
     "blender": (4, 5, 0),
-    "version": (3, 9, 7),
+    "version": (3, 9, 8),
     "location": "View3D",
     "min_ssmt_version": 361,
     "category": "Generic"
@@ -161,7 +160,6 @@ def register():
     ui_panel_model.register()
     ui_panel_sword.register()
     ui_panel_import.register()
-    ui_panel_fast_texture.register()
 
     # 蓝图系统
     blueprint_node_obj.register()
@@ -217,7 +215,6 @@ def unregister():
     blueprint_drag_drop.unregister()
     blueprint_node_base.unregister()
 
-    ui_panel_fast_texture.unregister()
     ui_panel_import.unregister()
     ui_panel_sword.unregister()
     ui_panel_model.unregister()

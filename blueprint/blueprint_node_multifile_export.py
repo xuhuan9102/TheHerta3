@@ -39,11 +39,6 @@ class SSMT_OT_MultiFileExport_SplitAnimation(bpy.types.Operator):
         
         obj = context.selected_objects[0]
         
-        # 检查是否有动画
-        if not obj.animation_data or not obj.animation_data.action:
-            self.report({'WARNING'}, "选中物体没有动画数据")
-            return {'CANCELLED'}
-        
         # 获取节点设置的帧范围
         start_frame = node.split_start_frame
         end_frame = node.split_end_frame

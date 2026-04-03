@@ -22,7 +22,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
 
     hash_values: bpy.props.StringProperty(
         name="哈希值",
-        description="需要处理的哈希值，多个用逗号分隔（如：4816de84,5c0240db）",
+        description="需要处理的哈希值，多个用逗号分隔。支持两种格式：\n1. IB hash（如：bb0999e6）\n2. 完整名称（如：bb0999e6-43191-0）\n会自动提取IB hash进行查找",
         default="",
         update=lambda self, context: self.update_node_width([self.hash_values, self.animation_swapkey, self.active_swapkey, self.comment])
     )
@@ -181,7 +181,29 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
             return False
 
     def _parse_hash_values(self, hash_str):
-        return [h.strip() for h in hash_str.split(',') if h.strip()]
+        """
+        解析哈希值字符串，提取IB hash（第一个部分）
+        
+        例如：
+        - 输入: "bb0999e6-43191-0,bb0999e6-10416-52236,bb0999e6-9045-43191"
+        - 输出: ["bb0999e6"]（去重后的IB hash列表）
+        
+        这样可以确保查找文件时使用的是IB hash，而不是完整的名称
+        """
+        hash_list = [h.strip() for h in hash_str.split(',') if h.strip()]
+        
+        # 提取IB hash（第一个部分）
+        ib_hashes = set()
+        for hash_value in hash_list:
+            # 如果包含连字符，提取第一个部分作为IB hash
+            if '-' in hash_value:
+                ib_hash = hash_value.split('-')[0]
+                ib_hashes.add(ib_hash)
+            else:
+                # 如果没有连字符，直接使用原值
+                ib_hashes.add(hash_value)
+        
+        return sorted(list(ib_hashes))
 
     def _read_buffer_file(self, buffer_path):
         try:
@@ -363,22 +385,74 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                         else:
                             sections[section_name] = new_lines
 
-                for hash_value in hash_values:
-                    base_buffer_path = os.path.join("Buffer01", f"{hash_value}-Position.buf")
-                    base_buffer_full_path = os.path.join(mod_export_path, base_buffer_path)
-                    if not os.path.exists(base_buffer_full_path):
-                        print(f"基准帧文件不存在: {base_buffer_full_path}")
-                        continue
+                # 存储所有处理过的基础名称和资源前缀
+                processed_base_names = []
 
+                for hash_value in hash_values:
+                    # 在 Buffer01 中查找所有以 hash_value 开头的 Position 文件
+                    buffer01_path = os.path.join(mod_export_path, "Buffer01")
+                    if not os.path.exists(buffer01_path):
+                        print(f"Buffer01 文件夹不存在: {buffer01_path}")
+                        continue
+                    
+                    # 查找所有匹配的 Position 文件
+                    position_files = []
+                    try:
+                        for filename in os.listdir(buffer01_path):
+                            if filename.startswith(hash_value) and filename.endswith("-Position.buf"):
+                                position_files.append(filename)
+                    except Exception as e:
+                        print(f"读取 Buffer01 文件夹失败: {e}")
+                        continue
+                    
+                    if not position_files:
+                        print(f"在 Buffer01 中未找到以 {hash_value} 开头的 Position 文件")
+                        print(f"查找路径: {buffer01_path}")
+                        print(f"查找模式: {hash_value}*-Position.buf")
+                        continue
+                    
+                    # 使用第一个找到的文件作为基准帧
+                    base_position_file = position_files[0]
+                    print(f"找到 {len(position_files)} 个匹配的 Position 文件，使用: {base_position_file}")
+                    
+                    # 从文件名中提取基础名称（去掉 -Position.buf 后缀）
+                    # 例如：bb0999e6-10416-52236-Position.buf -> bb0999e6-10416-52236
+                    base_name = base_position_file.replace("-Position.buf", "")
+                    hash_prefix = self._hash_to_resource_prefix(base_name)
+                    print(f"使用基础名称: {base_name}，资源前缀: {hash_prefix}")
+                    
+                    # 保存处理过的 base_name 和 hash_prefix
+                    processed_base_names.append((base_name, hash_prefix))
+                    
+                    base_buffer_path = os.path.join("Buffer01", base_position_file)
+                    base_buffer_full_path = os.path.join(mod_export_path, base_buffer_path)
+                    
                     base_buffer = self._read_buffer_file(base_buffer_full_path)
                     if base_buffer is None:
                         continue
 
-                    hash_prefix = self._hash_to_resource_prefix(hash_value)
-
                     processed_frames = []
                     for buffer_folder in buffer_folders[1:]:
-                        target_filename = os.path.join(buffer_folder, f"{hash_value}-Position.buf")
+                        buffer_folder_path = os.path.join(mod_export_path, buffer_folder)
+                        if not os.path.exists(buffer_folder_path):
+                            continue
+                        
+                        # 在当前 Buffer 文件夹中查找匹配的 Position 文件
+                        target_position_files = []
+                        try:
+                            for filename in os.listdir(buffer_folder_path):
+                                if filename.startswith(hash_value) and filename.endswith("-Position.buf"):
+                                    target_position_files.append(filename)
+                        except Exception as e:
+                            print(f"读取 {buffer_folder} 文件夹失败: {e}")
+                            continue
+                        
+                        if not target_position_files:
+                            continue
+                        
+                        # 使用第一个找到的文件
+                        target_position_file = target_position_files[0]
+                        target_filename = os.path.join(buffer_folder, target_position_file)
                         target_buffer_full_path = os.path.join(mod_export_path, target_filename)
 
                         if os.path.exists(target_buffer_full_path):
@@ -390,10 +464,11 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                                 base_buffer, target_buffer, True
                             )
 
-                            pos_output_path = os.path.join(mod_export_path, buffer_folder, f"{hash_value}-Position_packed_pos_delta.buf")
+                            # 使用完整的基础名称生成输出文件名
+                            pos_output_path = os.path.join(mod_export_path, buffer_folder, f"{base_name}-Position_packed_pos_delta.buf")
                             self._write_buffer_file(pos_deltas_array, pos_output_path)
 
-                            map_output_path = os.path.join(mod_export_path, buffer_folder, f"{hash_value}-Position_map.buf")
+                            map_output_path = os.path.join(mod_export_path, buffer_folder, f"{base_name}-Position_map.buf")
                             self._write_buffer_file(map_array, map_output_path)
 
                             folder_num = int(buffer_folder[-2:])
@@ -403,14 +478,14 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                             sections[pos_resource_section] = [
                                 'type = Buffer',
                                 f'stride = {stride}',
-                                f'filename = {buffer_folder}/{hash_value}-Position_packed_pos_delta.buf'
+                                f'filename = {buffer_folder}/{base_name}-Position_packed_pos_delta.buf'
                             ]
 
                             map_resource_section = f'[Resource_{hash_prefix}_Position{folder_num:02d}_Map]'
                             sections[map_resource_section] = [
                                 'type = Buffer',
                                 'stride = 4',
-                                f'filename = {buffer_folder}/{hash_value}-Position_map.buf'
+                                f'filename = {buffer_folder}/{base_name}-Position_map.buf'
                             ]
                             
                             processed_frames.append((folder_num, buffer_folder))
@@ -419,7 +494,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                         print(f"没有找到有效的目标帧文件，跳过哈希值: {hash_value}")
                         continue
 
-                    shader_section = f'[CustomShader_{hash_value}_1Anim]'
+                    shader_section = f'[CustomShader_{base_name}_1Anim]'
                     shader_lines = []
                     
                     if self.comment:
@@ -489,10 +564,9 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                 if not active_swapkey_defined:
                     constants_lines.append(f"global persist {self.active_swapkey} = 0")
 
-                for hash_value in hash_values:
-                    hash_prefix = self._hash_to_resource_prefix(hash_value)
+                for base_name, hash_prefix in processed_base_names:
                     post_copy_line = f"post Resource_{hash_prefix}_Position = copy_desc Resource_{hash_prefix}_Position_1"
-                    post_run_line = f"post run = CustomShader_{hash_value}_1Anim"
+                    post_run_line = f"post run = CustomShader_{base_name}_1Anim"
 
                     if post_copy_line not in constants_lines:
                         constants_lines.append(post_copy_line)
@@ -515,15 +589,15 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                         break
 
                 if active_block_start >= 0 and active_block_end >= 0:
-                    for hash_value in hash_values:
-                        run_line = f"    run = CustomShader_{hash_value}_1Anim"
+                    for base_name, hash_prefix in processed_base_names:
+                        run_line = f"    run = CustomShader_{base_name}_1Anim"
                         if run_line not in present_lines[active_block_start:active_block_end]:
                             present_lines.insert(active_block_end, run_line)
                 else:
                     present_lines.append("")
                     present_lines.append(f"if {self.active_swapkey} == {self.active_value}")
-                    for hash_value in hash_values:
-                        present_lines.append(f"    run = CustomShader_{hash_value}_1Anim")
+                    for base_name, hash_prefix in processed_base_names:
+                        present_lines.append(f"    run = CustomShader_{base_name}_1Anim")
                     present_lines.append("endif")
 
                 sections[present_section] = present_lines
