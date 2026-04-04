@@ -1,6 +1,7 @@
 from .m_condition import M_Condition
 from .m_draw_indexed import M_DrawIndexed
 
+from ..utils.log_utils import LOG
 
 from dataclasses import dataclass, field
 
@@ -46,12 +47,21 @@ class ObjDataModel:
                     except ValueError:
                         pass
                 
-                self.component_count = int(obj_name_split[1])
-                self.obj_alias_name = obj_name_split[2]
+                try:
+                    self.component_count = int(obj_name_split[1])
+                    self.obj_alias_name = obj_name_split[2]
+                except ValueError:
+                    LOG.warning(f"ObjDataModel: 无法解析 component_count，物体名称 '{self.obj_name}' 中的 '{obj_name_split[1]}' 不是有效数字")
+                    self.obj_alias_name = obj_name_split[2] if len(obj_name_split) > 2 else ""
             elif len(obj_name_split) >= 4:
                 self.is_ssmt4 = True
-                self.index_count = int(obj_name_split[1])
-                self.first_index = int(obj_name_split[2])
+                try:
+                    self.index_count = int(obj_name_split[1])
+                    self.first_index = int(obj_name_split[2])
+                except ValueError:
+                    LOG.warning(f"ObjDataModel: 无法解析 index_count 或 first_index，物体名称 '{self.obj_name}' 格式错误")
+                    self.index_count = 0
+                    self.first_index = 0
                 self.component_count = 1
                 alias_part = obj_name_split[3]
                 if "." in alias_part:
@@ -59,6 +69,10 @@ class ObjDataModel:
                 else:
                     self.obj_alias_name = alias_part
             else:
-                self.component_count = int(obj_name_split[1])
-                self.obj_alias_name = obj_name_split[2]
+                try:
+                    self.component_count = int(obj_name_split[1])
+                    self.obj_alias_name = obj_name_split[2]
+                except (ValueError, IndexError):
+                    LOG.warning(f"ObjDataModel: 无法解析物体名称 '{self.obj_name}'，格式不正确")
+                    self.obj_alias_name = obj_name_split[2] if len(obj_name_split) > 2 else ""
        
