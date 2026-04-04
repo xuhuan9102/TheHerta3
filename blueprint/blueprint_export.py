@@ -6,7 +6,7 @@ from ..utils.translate_utils import TR
 from ..utils.command_utils import CommandUtils
 from ..utils.collection_utils import CollectionUtils
 from ..utils.obj_utils import ObjUtils, get_user_context, set_user_context
-from ..utils.performance_stats import start_operation, end_operation, print_performance_report, save_performance_report_to_editor, reset_performance_stats, set_performance_stats_enabled, is_performance_stats_enabled
+from ..utils.performance_stats import start_operation, end_operation, print_performance_report, save_performance_report_to_editor, reset_performance_stats, set_performance_stats_enabled, is_performance_stats_enabled, start_log_collecting, stop_log_collecting, save_export_log_to_editor, clear_export_log
 from ..utils.preprocess_cache import get_cache_manager, FingerprintCalculator, reset_cache_manager
 
 from ..config.main_config import GlobalConfig, LogicName
@@ -128,6 +128,13 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         
         # 重置性能统计
         reset_performance_stats()
+        
+        # 如果启用性能统计，同时启动日志收集
+        if is_performance_stats_enabled():
+            clear_export_log()
+            start_log_collecting()
+            print("[Export] 性能统计已启用，开始收集导出流程日志")
+        
         start_operation("GenerateMod_Total")
         
         # 记录原始上下文状态
@@ -423,6 +430,12 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             end_operation("GenerateMod_Total")
             print_performance_report()
             save_performance_report_to_editor("性能统计报告")
+            
+            # 如果启用了性能统计，停止日志收集并保存导出流程日志
+            if is_performance_stats_enabled():
+                stop_log_collecting()
+                save_export_log_to_editor("导出流程日志")
+                print("[Export] 导出流程日志已保存")
             
             # 恢复用户原本的上下文状态（例如权重模式及选中的物体）
             set_user_context(context, original_user_context)
