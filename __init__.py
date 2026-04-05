@@ -2,9 +2,11 @@ import bpy
 
 # UI界面
 from .ui import ui_panel_basic
-from .ui import ui_panel_model
 from .ui import ui_panel_sword
 from .ui import ui_panel_import
+
+# 工具集
+from . import toolkit
 from .blueprint import blueprint_node_obj
 from .blueprint import blueprint_import
 from .blueprint import blueprint_export
@@ -58,7 +60,7 @@ bl_info = {
     "name": "TheHerta3",
     "description": "SSMT3.0 Series's Blender Plugin.",
     "blender": (4, 5, 0),
-    "version": (3, 9, 9),
+    "version": (4, 0, 0),
     "location": "View3D",
     "min_ssmt_version": 361,
     "category": "Generic"
@@ -78,6 +80,10 @@ class UpdaterPanel(bpy.types.Panel):
     bl_category = "TheHerta3"
     bl_order = 99
     bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return not getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout
@@ -157,9 +163,11 @@ def register():
     # 3. UI Panels & Logic
     blueprint_node_base.register()
     ui_panel_basic.register()
-    ui_panel_model.register()
     ui_panel_sword.register()
     ui_panel_import.register()
+    
+    # 工具集
+    toolkit.register()
 
     # 蓝图系统
     blueprint_node_obj.register()
@@ -217,8 +225,10 @@ def unregister():
 
     ui_panel_import.unregister()
     ui_panel_sword.unregister()
-    ui_panel_model.unregister()
     ui_panel_basic.unregister()
+    
+    # 工具集
+    toolkit.unregister()
 
     # 2. Addon Updater (local classes)
     bpy.utils.unregister_class(HertaUpdatePreference)

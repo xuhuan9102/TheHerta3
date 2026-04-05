@@ -125,7 +125,7 @@ class ModModelEFMI:
         mapping_key = (source_ib_key, target_ib_key)
         condition_info = self.cross_ib_vb_condition_mapping.get(mapping_key, {})
         if condition_type == 'source':
-            return condition_info.get('source', "if vs == 200 || vs == 201")
+            return condition_info.get('source', "if vs == 200 || vs == 201 || vs == 204")
         else:
             return condition_info.get('target', "if vs == 202 || vs == 203")
     
@@ -133,7 +133,7 @@ class ModModelEFMI:
         object_mapping_key = (obj_name, source_ib_key, target_ib_key)
         condition_info = self.cross_ib_object_vb_condition.get(object_mapping_key, {})
         if condition_type == 'source':
-            return condition_info.get('source', "if vs == 200 || vs == 201")
+            return condition_info.get('source', "if vs == 200 || vs == 201 || vs == 204")
         else:
             return condition_info.get('target', "if vs == 202 || vs == 203")
     
@@ -311,12 +311,18 @@ class ModModelEFMI:
         present_section.new_line()
         
         shader_overrides = [
-            ("ShaderOverridevs22", "617db42150841836", "200"),
-            ("ShaderOverridevs2", "847947b4a1ad40cf", "200"),
-            ("ShaderOverridevs10", "cada6d476255bdcf", "201"),
-            ("ShaderOverridevs1", "d9d6448a7b62687e", "202"),
-            ("ShaderOverridevs33", "e8d242aae0b3bacf", "203"),
-            ("ShaderOverridevs88", "f0e7d4b491273aae", "203"),
+            ("ShaderOverridevs1000", "617db42150841836", "200"),
+            ("ShaderOverridevs1001", "c98b450a62081ecd", "200"),
+            ("ShaderOverridevs1002", "847947b4a1ad40cf", "200"),
+            ("ShaderOverridevs1003", "cada6d476255bdcf", "201"),
+            ("ShaderOverridevs1004", "2d76aa4224fa7500", "201"),
+            ("ShaderOverridevs1005", "d9d6448a7b62687e", "202"),
+            ("ShaderOverridevs1006", "e8d242aae0b3bacf", "203"),
+            ("ShaderOverridevs1007", "8e1c0782db9e85d1", "203"),
+            ("ShaderOverridevs1008", "c4e7c530806e7424", "203"),
+            ("ShaderOverridevs1009", "06c94dd56f447210", "204"),
+            ("ShaderOverridevs1010", "c568b3b3834b0e7f", "204"),
+            ("ShaderOverridevs1011", "0ba16985f9f74f8d", "204"),
         ]
         
         

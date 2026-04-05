@@ -142,9 +142,9 @@ class SSMT_OT_PickObjectModal(bpy.types.Operator):
     bl_options = {'REGISTER', 'INTERNAL'}
     
     def invoke(self, context, event):
-        global _picking_node_name
+        global _picking_node_name, _picking_tree_name
         
-        if not _picking_node_name:
+        if not _picking_node_name or not _picking_tree_name:
             return {'CANCELLED'}
         
         self._initial_selected_objs = set(context.selected_objects)
@@ -176,12 +176,13 @@ class SSMT_OT_PickObjectModal(bpy.types.Operator):
             if current_selected:
                 current_obj = current_selected[0]
                 if current_obj != self._last_selected_obj and current_obj not in self._initial_selected_objs:
-                    tree = bpy.data.node_groups.get(_picking_tree_name)
-                    if tree:
-                        node = tree.nodes.get(_picking_node_name)
-                        if node:
-                            node.object_name = current_obj.name
-                            self.report({'INFO'}, f"已选择物体: {current_obj.name}")
+                    if _picking_tree_name and _picking_node_name:
+                        tree = bpy.data.node_groups.get(_picking_tree_name)
+                        if tree:
+                            node = tree.nodes.get(_picking_node_name)
+                            if node:
+                                node.object_name = current_obj.name
+                                self.report({'INFO'}, f"已选择物体: {current_obj.name}")
                     
                     _picking_node_name = None
                     _picking_tree_name = None
@@ -418,6 +419,22 @@ class SSMTNode_Result_Output(SSMTNodeBase):
              op.node_tree_name = self.id_data.name
         
         layout.prop(context.scene.properties_generate_mod, "preview_export_only", text="配置表预导出 (仅生成INI)")
+        
+        dedup_expanded = context.scene.properties_wwmi.dedup_options_expanded
+        dedup_icon = 'TRIA_DOWN' if dedup_expanded else 'TRIA_RIGHT'
+        row = layout.row()
+        row.prop(context.scene.properties_wwmi, "dedup_options_expanded", icon=dedup_icon, icon_only=True, emboss=False)
+        row.label(text="顶点去重精度控制")
+        
+        if dedup_expanded:
+            box = layout.box()
+            box.prop(context.scene.properties_wwmi, "dedup_include_position")
+            box.prop(context.scene.properties_wwmi, "dedup_include_normal")
+            box.prop(context.scene.properties_wwmi, "dedup_include_tangent")
+            box.prop(context.scene.properties_wwmi, "dedup_include_texcoord")
+            box.prop(context.scene.properties_wwmi, "dedup_include_color")
+            box.prop(context.scene.properties_wwmi, "dedup_include_blend")
+            box.prop(context.scene.properties_wwmi, "dedup_include_vertex_id")
         
         if GlobalConfig.logic_name == LogicName.WWMI or GlobalConfig.logic_name == LogicName.WuWa:
             layout.prop(context.scene.properties_wwmi, "ignore_muted_shape_keys")
