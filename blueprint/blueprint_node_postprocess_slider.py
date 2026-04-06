@@ -20,8 +20,23 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
         default=True
     )
 
+    check_hash: bpy.props.StringProperty(
+        name="检测Hash值",
+        default="",
+        description="用于检测当前角色的hash值 (如: 8b240678)，留空则不生成hash行"
+    )
+
+    match_index_count: bpy.props.IntProperty(
+        name="Match Index Count",
+        default=0,
+        min=0,
+        description="匹配索引数量 (如: 554564)，设为0则不生成match_index_count行"
+    )
+
     def draw_buttons(self, context, layout):
         layout.prop(self, "create_cumulative_backup")
+        layout.prop(self, "check_hash")
+        layout.prop(self, "match_index_count")
 
     def execute_postprocess(self, mod_export_path):
         print(f"滑块面板后处理节点开始执行，Mod导出路径: {mod_export_path}")
@@ -128,9 +143,16 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             "\n[ResourceSliderHandle]", "filename = ./res/1.png",
             "\n[ResourceLeftBar]", "filename = ./res/2.png",
             "\n[ResourceRightBar]", "filename = ./res/3.png",
-            "\n; 2. 配置用以检测当前角色的hash值 (请根据需要修改)",
-            "[TextureOverrideCheckHash]", "hash = ", "$active = 1",
         ])
+
+        if self.check_hash or self.match_index_count > 0:
+            content.append("\n; 2. 配置用以检测当前角色的hash值 (请根据需要修改)")
+            content.append("[TextureOverrideCheckHash]")
+            if self.check_hash:
+                content.append(f"hash = {self.check_hash}")
+            if self.match_index_count > 0:
+                content.append(f"match_index_count = {self.match_index_count}")
+            content.append("$active = 1")
 
         constants_lines.extend([
             "; --- UI 几何与位置配置 ---",

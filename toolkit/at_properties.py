@@ -228,6 +228,19 @@ class ATP_Properties(bpy.types.PropertyGroup):
         description="形态键动画序列导出的结束帧"
     )
 
+    slider_check_hash: bpy.props.StringProperty(
+        name="检测Hash值",
+        default="",
+        description="用于检测当前角色的hash值 (如: 8b240678)，留空则不生成hash行"
+    )
+
+    slider_match_index_count: bpy.props.IntProperty(
+        name="Match Index Count",
+        default=0,
+        min=0,
+        description="匹配索引数量 (如: 554564)，设为0则不生成match_index_count行"
+    )
+
 
 at_properties_list = (
     ATP_ShapeKeyItem,

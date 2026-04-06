@@ -58,7 +58,19 @@ from .at_batch_export import at_batch_export_list
 from .at_shape_key_export import at_shape_key_export_list
 from .at_animation_export import at_animation_export_list
 from .at_buffer_merge import at_buffer_merge_list
-from .ui_panel_animation import ui_panel_animation_list
+from .ui_panel_animation import (
+    ui_panel_animation_list,
+    ATP_PT_MainPanel,
+    ATP_PT_ShapeKeyTools,
+    ATP_PT_AlembicTools,
+    ATP_PT_AnimationFrameSplit,
+    ATP_PT_Automation,
+    ATP_PT_ShapeKeyOperations,
+    ATP_PT_ShapeKeyCreation,
+    ATP_PT_ShapeKeyAnimationExport,
+    ATP_PT_AutomationShapeKeyExport,
+    ATP_PT_AutomationBufferMerge,
+)
 
 __all__ = [
     'ToolkitPanel',
@@ -391,25 +403,30 @@ def register():
     bpy.utils.register_class(TT_LightmapPanel)
     bpy.utils.register_class(TT_MaterialPreviewPanel)
     
-    bpy.utils.register_class(ui_panel_animation_list[0])
-    bpy.utils.register_class(ui_panel_animation_list[1])
-    bpy.utils.register_class(ui_panel_animation_list[2])
-    bpy.utils.register_class(ui_panel_animation_list[3])
-    bpy.utils.register_class(ui_panel_animation_list[4])
-    bpy.utils.register_class(ui_panel_animation_list[5])
-    bpy.utils.register_class(ui_panel_animation_list[6])
-    bpy.utils.register_class(ui_panel_animation_list[7])
-    bpy.utils.register_class(ui_panel_animation_list[8])
-    bpy.utils.register_class(ui_panel_animation_list[9])
+    bpy.utils.register_class(ATP_PT_MainPanel)
+    bpy.utils.register_class(ATP_PT_ShapeKeyTools)
+    bpy.utils.register_class(ATP_PT_AlembicTools)
+    bpy.utils.register_class(ATP_PT_AnimationFrameSplit)
+    bpy.utils.register_class(ATP_PT_Automation)
+    bpy.utils.register_class(ATP_PT_ShapeKeyOperations)
+    bpy.utils.register_class(ATP_PT_ShapeKeyCreation)
+    bpy.utils.register_class(ATP_PT_ShapeKeyAnimationExport)
+    bpy.utils.register_class(ATP_PT_AutomationShapeKeyExport)
+    bpy.utils.register_class(ATP_PT_AutomationBufferMerge)
     
     print("[TheHerta3] 工具集注册完成")
 
 def unregister():
-    for panel_class in reversed(ui_panel_animation_list):
-        try:
-            bpy.utils.unregister_class(panel_class)
-        except Exception:
-            pass
+    bpy.utils.unregister_class(ATP_PT_AutomationBufferMerge)
+    bpy.utils.unregister_class(ATP_PT_AutomationShapeKeyExport)
+    bpy.utils.unregister_class(ATP_PT_ShapeKeyAnimationExport)
+    bpy.utils.unregister_class(ATP_PT_ShapeKeyCreation)
+    bpy.utils.unregister_class(ATP_PT_ShapeKeyOperations)
+    bpy.utils.unregister_class(ATP_PT_Automation)
+    bpy.utils.unregister_class(ATP_PT_AnimationFrameSplit)
+    bpy.utils.unregister_class(ATP_PT_AlembicTools)
+    bpy.utils.unregister_class(ATP_PT_ShapeKeyTools)
+    bpy.utils.unregister_class(ATP_PT_MainPanel)
     
     bpy.utils.unregister_class(TT_MaterialPreviewPanel)
     bpy.utils.unregister_class(TT_LightmapPanel)

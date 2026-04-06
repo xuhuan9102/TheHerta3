@@ -2,17 +2,6 @@
 
 import bpy
 
-from . import at_shape_key_control
-from . import at_shape_key_operations
-from . import at_shape_key_creation
-from . import at_alembic_tools
-from . import at_multi_frame_split
-from . import at_batch_export
-from . import at_shape_key_export
-from . import at_animation_export
-from . import at_buffer_merge
-from . import at_utils
-
 
 class ATP_PT_MainPanel(bpy.types.Panel):
     bl_label = "动画处理工具"
@@ -23,10 +12,6 @@ class ATP_PT_MainPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_Toolkit_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 3
-
-    @classmethod
-    def poll(cls, context):
-        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout
@@ -44,6 +29,8 @@ class ATP_PT_ShapeKeyTools(bpy.types.Panel):
     bl_order = 0
 
     def draw(self, context):
+        from . import at_shape_key_control
+        
         layout = self.layout
         props = context.scene.atp_props
         
@@ -67,6 +54,9 @@ class ATP_PT_ShapeKeyOperations(bpy.types.Panel):
     bl_order = 0
 
     def draw(self, context):
+        from . import at_shape_key_control
+        from . import at_shape_key_operations
+        
         layout = self.layout
         props = context.scene.atp_props
         
@@ -125,6 +115,9 @@ class ATP_PT_ShapeKeyCreation(bpy.types.Panel):
     bl_order = 1
 
     def draw(self, context):
+        from . import at_shape_key_creation
+        from . import at_multi_frame_split
+        
         layout = self.layout
         props = context.scene.atp_props
         
@@ -205,6 +198,8 @@ class ATP_PT_ShapeKeyAnimationExport(bpy.types.Panel):
     bl_order = 2
 
     def draw(self, context):
+        from . import at_shape_key_creation
+        
         layout = self.layout
         props = context.scene.atp_props
         
@@ -253,6 +248,8 @@ class ATP_PT_AlembicTools(bpy.types.Panel):
     bl_order = 1
 
     def draw(self, context):
+        from . import at_alembic_tools
+        
         layout = self.layout
         props = context.scene.atp_props
 
@@ -301,6 +298,9 @@ class ATP_PT_AnimationFrameSplit(bpy.types.Panel):
     bl_order = 2
 
     def draw(self, context):
+        from . import at_alembic_tools
+        from . import at_utils
+        
         layout = self.layout
         props = context.scene.atp_props
         
@@ -375,6 +375,8 @@ class ATP_PT_AutomationShapeKeyExport(bpy.types.Panel):
     bl_order = 0
 
     def draw(self, context):
+        from . import at_shape_key_export
+        
         layout = self.layout
         props = context.scene.atp_props
         
@@ -416,6 +418,9 @@ class ATP_PT_AutomationBufferMerge(bpy.types.Panel):
     bl_order = 1
 
     def draw(self, context):
+        from . import at_animation_export
+        from . import at_buffer_merge
+        
         layout = self.layout
         props = context.scene.atp_props
         

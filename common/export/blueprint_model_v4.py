@@ -196,10 +196,38 @@ class BluePrintModel_V4:
                 obj_model = DrawCallModel(obj_name=resolved_obj_name)
                 obj_model.condition = V4_Condition(work_key_list=copy.deepcopy(chain_key_list))
                 
-                draw_ib = getattr(current_item, 'draw_ib', '')
-                index_count = getattr(current_item, 'index_count', '')
-                first_index = getattr(current_item, 'first_index', '')
-                alias_name = getattr(current_item, 'alias_name', '')
+                # 从修改后的物体名称中解析 draw_ib 等属性
+                # 这样可以正确处理物体名称修改节点修改后的名称
+                draw_ib = ""
+                index_count = ""
+                first_index = ""
+                alias_name = ""
+                
+                if resolved_obj_name:
+                    if "." in resolved_obj_name:
+                        obj_name_total_split = resolved_obj_name.split(".")
+                        obj_name_split = obj_name_total_split[0].split("-")
+                        
+                        if len(obj_name_split) >= 3:
+                            draw_ib = obj_name_split[0]
+                            index_count = obj_name_split[1]
+                            first_index = obj_name_split[2]
+                        elif len(obj_name_split) >= 2:
+                            draw_ib = obj_name_split[0]
+                            index_count = obj_name_split[1]
+                        elif len(obj_name_split) >= 1:
+                            draw_ib = obj_name_split[0]
+                        
+                        if len(obj_name_total_split) >= 2:
+                            alias_name = ".".join(obj_name_total_split[1:])
+                            
+                    elif "-" in resolved_obj_name:
+                        obj_name_split = resolved_obj_name.split("-")
+                        draw_ib = obj_name_split[0]
+                        if len(obj_name_split) >= 2:
+                            index_count = obj_name_split[1]
+                        if len(obj_name_split) >= 3:
+                            first_index = obj_name_split[2]
                 
                 if draw_ib:
                     obj_model.set_draw_info(draw_ib, index_count, first_index, alias_name)
