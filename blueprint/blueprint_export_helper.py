@@ -698,6 +698,7 @@ class BlueprintExportHelper:
         
         这个方法会在导出阶段之前执行，确保跨IB节点的映射信息是最新的
         只处理连接到输出节点链路中的物体名称修改节点
+        支持穿透嵌套蓝图节点
         """
         tree = BlueprintExportHelper.get_current_blueprint_tree()
         if not tree:
@@ -710,28 +711,38 @@ class BlueprintExportHelper:
         name_modify_nodes = []
         visited_nodes = set()
         
-        def collect_name_modify_nodes_from_inputs(node):
-            """从节点的输入插槽向前递归收集名称修改节点"""
-            if node.name in visited_nodes:
+        def collect_name_modify_nodes_from_inputs(node, current_tree):
+            """从节点的输入插槽向前递归收集名称修改节点，支持穿透嵌套蓝图"""
+            node_key = f"{current_tree.name}:{node.name}"
+            if node_key in visited_nodes:
                 return
-            visited_nodes.add(node.name)
+            visited_nodes.add(node_key)
+            
+            if node.mute:
+                return
+            
+            if node.bl_idname == 'SSMTNode_Object_Name_Modify':
+                if node not in name_modify_nodes:
+                    name_modify_nodes.append(node)
+                return
+            
+            if node.bl_idname == 'SSMTNode_Blueprint_Nest':
+                blueprint_name = getattr(node, 'blueprint_name', '')
+                if blueprint_name and blueprint_name != 'NONE':
+                    nested_tree = bpy.data.node_groups.get(blueprint_name)
+                    if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
+                        for nested_node in nested_tree.nodes:
+                            if nested_node.bl_idname == 'SSMTNode_Result_Output':
+                                collect_name_modify_nodes_from_inputs(nested_node, nested_tree)
+                return
             
             for input_socket in node.inputs:
                 if input_socket.is_linked:
                     for link in input_socket.links:
                         source_node = link.from_node
-                        
-                        if source_node.mute:
-                            continue
-                        
-                        if source_node.bl_idname == 'SSMTNode_Object_Name_Modify':
-                            if source_node not in name_modify_nodes:
-                                name_modify_nodes.append(source_node)
-                        
-                        # 继续向前查找
-                        collect_name_modify_nodes_from_inputs(source_node)
+                        collect_name_modify_nodes_from_inputs(source_node, current_tree)
         
-        collect_name_modify_nodes_from_inputs(output_node)
+        collect_name_modify_nodes_from_inputs(output_node, tree)
         
         if not name_modify_nodes:
             return
@@ -750,28 +761,42 @@ class BlueprintExportHelper:
             
             visited_crossib = set()
             
-            def apply_to_upstream_crossib(node):
-                """向上游查找跨IB节点并应用映射"""
-                if node.name in visited_crossib:
+            def apply_to_upstream_crossib(node, current_tree):
+                """向上游查找跨IB节点并应用映射，支持穿透嵌套蓝图"""
+                node_key = f"{current_tree.name}:{node.name}"
+                if node_key in visited_crossib:
                     return
-                visited_crossib.add(node.name)
+                visited_crossib.add(node_key)
+                
+                if node.mute:
+                    return
                 
                 if node.bl_idname == 'SSMTNode_CrossIB':
                     if hasattr(node, 'save_original_params'):
                         node.save_original_params()
                     if hasattr(node, 'apply_indexcount_mapping'):
                         node.apply_indexcount_mapping(indexcount_mapping)
+                        print(f"[NameModify] 已将IndexCount映射应用到跨IB节点: {node.name} (蓝图: {current_tree.name})")
+                    return
+                
+                if node.bl_idname == 'SSMTNode_Blueprint_Nest':
+                    blueprint_name = getattr(node, 'blueprint_name', '')
+                    if blueprint_name and blueprint_name != 'NONE':
+                        nested_tree = bpy.data.node_groups.get(blueprint_name)
+                        if nested_tree and nested_tree.bl_idname == 'SSMTBlueprintTreeType':
+                            for nested_node in nested_tree.nodes:
+                                if nested_node.bl_idname == 'SSMTNode_Result_Output':
+                                    apply_to_upstream_crossib(nested_node, nested_tree)
                     return
                 
                 for input_socket in node.inputs:
                     if input_socket.is_linked:
                         for link in input_socket.links:
                             source_node = link.from_node
-                            if not source_node.mute:
-                                apply_to_upstream_crossib(source_node)
+                            apply_to_upstream_crossib(source_node, current_tree)
             
             for link in name_modify_node.inputs[0].links:
-                apply_to_upstream_crossib(link.from_node)
+                apply_to_upstream_crossib(link.from_node, tree)
     
     @staticmethod
     def restore_crossib_nodes_params():

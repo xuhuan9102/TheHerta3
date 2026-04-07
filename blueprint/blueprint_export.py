@@ -231,6 +231,9 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         try:
             tree = BlueprintExportHelper.get_current_blueprint_tree()
             
+            # 应用物体名称修改节点的映射到跨IB节点（支持嵌套蓝图）
+            BlueprintExportHelper.apply_name_modify_to_crossib_nodes()
+            
             # 循环执行多次导出（每次导出都是独立的）
             for export_index in range(1, max_export_count + 1):
                 BlueprintExportHelper.current_export_index = export_index
