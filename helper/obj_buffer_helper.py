@@ -10,7 +10,6 @@ from ..utils.tbn_codec import TBNCodec
 
 from ..config.main_config import GlobalConfig, LogicName
 from ..config.properties_generate_mod import Properties_GenerateMod
-from ..config.properties_wwmi import Properties_WWMI
 
 
 import bpy
@@ -579,14 +578,15 @@ class ObjBufferHelper:
         - 使用 numpy.unique(..., axis=0, return_index=True, return_inverse=True) 在 C 层完成唯一化与逆映射。
         - 仅在构建 per-polygon IB 时使用少量 Python 切片，整体效率大幅提高。
         - 当 structured dtype 非连续时，内部会做一次拷贝（ascontiguousarray）；通常开销小于逐顶点哈希开销。
-        - 支持通过配置选项选择性参与去重的字段，实现精度调整。
         '''
 
+        # (1) loop -> vertex mapping
         loops = mesh.loops
         n_loops = len(loops)
         loop_vertex_indices = numpy.empty(n_loops, dtype=int)
         loops.foreach_get("vertex_index", loop_vertex_indices)
 
+        # (2) 将 element_vertex_ndarray 保证为连续，并视为 (n_loops, row_bytes) uint8 矩阵
         vb = numpy.ascontiguousarray(element_vertex_ndarray)
         row_size = vb.dtype.itemsize
         try:
@@ -595,94 +595,38 @@ class ObjBufferHelper:
             raw = vb.tobytes()
             row_bytes = numpy.frombuffer(raw, dtype=numpy.uint8).reshape(n_loops, row_size)
 
-        include_position = Properties_WWMI.dedup_include_position()
-        include_normal = Properties_WWMI.dedup_include_normal()
-        include_tangent = Properties_WWMI.dedup_include_tangent()
-        include_texcoord = Properties_WWMI.dedup_include_texcoord()
-        include_color = Properties_WWMI.dedup_include_color()
-        include_blend = Properties_WWMI.dedup_include_blend()
-        include_vertex_id = Properties_WWMI.dedup_include_vertex_id()
+        # WWMI-Tools deduplicates loop rows including the loop's VertexId -> they
+        # effectively perform uniqueness on loop attributes + VertexId treated as
+        # a field. To replicate that reliably (preserving structured field layout
+        # and alignment) we build a structured array that copies all existing
+        # fields and appends a 'VERTEXID' uint32 field, then call numpy.unique on it.
+        # Afterwards we select unique rows from the original `row_bytes` using
+        # the indices returned by numpy.unique to preserve exact original layout.
 
-        print(f"[去重精度] Position:{include_position} Normal:{include_normal} Tangent:{include_tangent} UV:{include_texcoord} Color:{include_color} Blend:{include_blend} VertexID:{include_vertex_id}")
-        print(f"[去重精度] dtype字段: {dtype.names}")
-
-        field_byte_ranges = []
-        for field_name in dtype.names:
-            field_offset = dtype.fields[field_name][1]
-            field_dtype = dtype.fields[field_name][0]
-            field_size = field_dtype.itemsize
-            
-            upper_name = field_name.upper()
-            is_position = 'POSITION' in upper_name
-            is_normal = 'NORMAL' in upper_name and 'BINORMAL' not in upper_name
-            is_tangent = 'TANGENT' in upper_name and 'BINORMAL' not in upper_name
-            is_texcoord = 'TEXCOORD' in upper_name
-            is_color = 'COLOR' in upper_name
-            is_blend = 'BLEND' in upper_name
-            
-            should_include = True
-            if is_position and not include_position:
-                should_include = False
-            elif is_normal and not include_normal:
-                should_include = False
-            elif is_tangent and not include_tangent:
-                should_include = False
-            elif is_texcoord and not include_texcoord:
-                should_include = False
-            elif is_color and not include_color:
-                should_include = False
-            elif is_blend and not include_blend:
-                should_include = False
-            
-            print(f"[去重精度] 字段 {field_name}: offset={field_offset}, size={field_size}, include={should_include}")
-            
-            if should_include:
-                field_byte_ranges.append((field_offset, field_offset + field_size))
-        
-        field_byte_ranges.sort()
-        
-        if field_byte_ranges:
-            merged_ranges = []
-            current_start, current_end = field_byte_ranges[0]
-            for start, end in field_byte_ranges[1:]:
-                if start <= current_end:
-                    current_end = max(current_end, end)
-                else:
-                    merged_ranges.append((current_start, current_end))
-                    current_start, current_end = start, end
-            merged_ranges.append((current_start, current_end))
-            
-            selected_bytes_list = []
-            for start, end in merged_ranges:
-                selected_bytes_list.append(row_bytes[:, start:end])
-            
-            if selected_bytes_list:
-                selected_row_bytes = numpy.hstack(selected_bytes_list)
-            else:
-                selected_row_bytes = numpy.zeros((n_loops, 0), dtype=numpy.uint8)
-        else:
-            selected_row_bytes = numpy.zeros((n_loops, 0), dtype=numpy.uint8)
-
+        # Build 4-byte vertex index array (little-endian) and concatenate to row bytes
+        # to form combined rows: [row_bytes | vid_bytes]. Use numpy.unique on combined
+        # rows to get uniqueness, then reorder unique results to match insertion
+        # order (first occurrence). This vectorized path keeps behavior identical
+        # to the OrderedDict+bytes approach but runs much faster in numpy.
+        # Build 4-byte vertex index array (little-endian)
         vid_bytes = loop_vertex_indices.astype(numpy.uint32).view(numpy.uint8).reshape(n_loops, 4)
 
-        if include_vertex_id:
-            combined_bytes = numpy.hstack([selected_row_bytes, vid_bytes])
-        else:
-            combined_bytes = selected_row_bytes
-
-        if combined_bytes.shape[1] == 0:
-            combined_bytes = numpy.zeros((n_loops, 1), dtype=numpy.uint8)
-
-        total_bytes = combined_bytes.shape[1]
+        # Combine row bytes + vid bytes, but to make numpy.unique faster we pad the
+        # combined row to a multiple of 8 bytes and view it as uint64 blocks.
+        total_bytes = row_size + 4
         pad = (-total_bytes) % 8
         padded_width = total_bytes + pad
 
+        # Allocate padded combined buffer and fill
         combined_padded = numpy.zeros((n_loops, padded_width), dtype=numpy.uint8)
-        combined_padded[:, :total_bytes] = combined_bytes
+        combined_padded[:, :row_size] = row_bytes
+        combined_padded[:, row_size:row_size+4] = vid_bytes
 
+        # View as uint64 blocks (shape: n_loops x n_blocks)
         n_blocks = padded_width // 8
         combined_u64 = combined_padded.view(numpy.uint64).reshape(n_loops, n_blocks)
 
+        # Create a structured view so numpy.unique treats each row as a single record
         dtype_descr = [(f'f{i}', numpy.uint64) for i in range(n_blocks)]
         structured = combined_u64.view(numpy.dtype(dtype_descr)).reshape(n_loops)
 
@@ -690,8 +634,7 @@ class ObjBufferHelper:
             structured, return_index=True, return_inverse=True
         )
 
-        print(f"[去重精度] Loops: {n_loops} -> Unique: {len(unique_struct)} (合并了 {n_loops - len(unique_struct)} 个)")
-
+        # Remap unique ids to insertion order (first occurrence order)
         order = numpy.argsort(unique_first_indices)
         new_id = numpy.empty_like(order)
         new_id[order] = numpy.arange(len(order), dtype=new_id.dtype)
@@ -699,25 +642,43 @@ class ObjBufferHelper:
 
         unique_first_indices_insertion = unique_first_indices[order]
 
+        # Pick original unique rows from row_bytes using insertion-ordered indices
         unique_rows = row_bytes[unique_first_indices_insertion]
 
+        # Expose the loop indices (first-occurrence loop indices) used to select
+        # the unique rows. Callers can sample per-loop original arrays using
+        # these indices to reconstruct per-unique-row original element values.
         unique_first_loop_indices = unique_first_indices_insertion
 
+        # Reconstruct a structured ndarray of the unique element rows.
+        # This lets callers access element fields by name for the unique
+        # vertex set (useful for debugging or further processing).
+        # Ensure the byte width matches the dtype itemsize.
         if unique_rows.shape[1] != dtype.itemsize:
             raise Fatal(f"Unique row byte-size ({unique_rows.shape[1]}) does not match structured dtype itemsize ({dtype.itemsize})")
 
         n_unique = unique_rows.shape[0]
         unique_rows_contig = numpy.ascontiguousarray(unique_rows)
         try:
+            # Zero-copy view where possible
             unique_element_vertex_ndarray = unique_rows_contig.view(dtype).reshape(n_unique)
         except Exception:
+            # Fallback to a safe copy-based reconstruction
             unique_element_vertex_ndarray = numpy.frombuffer(unique_rows_contig.tobytes(), dtype=dtype).reshape(n_unique)
 
+        # Expose for downstream use: structure-aligned unique vertex records
+        # self.unique_element_vertex_ndarray = unique_element_vertex_ndarray
+
+        # 构建 index -> original vertex id（使用每个 unique 行的第一个 loop 对应的 vertex）
         original_vertex_ids = loop_vertex_indices[unique_first_indices_insertion]
         index_vertex_id_dict = dict(enumerate(original_vertex_ids.astype(int).tolist()))
 
+        # (4) 为每个 polygon 构建 IB（使用 inverse 映射）
+        # inverse is already ordered by loops; concatenating polygon slices in
+        # polygon order is equivalent to taking inverse in sequence.
         flattened_ib_arr = inverse.astype(numpy.int32)
 
+        # (5) 按 category 从 unique_rows 切分 bytes 序列
         category_stride_dict = d3d11_game_type.get_real_category_stride_dict()
         category_buffer_dict = {}
         stride_offset = 0
@@ -725,10 +686,13 @@ class ObjBufferHelper:
             category_buffer_dict[cname] = unique_rows[:, stride_offset:stride_offset + cstride].flatten()
             stride_offset += cstride
 
+        # (6) 翻转三角形方向（高效）
+        # 鸣潮需要翻转这一下
         flat_arr = flattened_ib_arr
         if flat_arr.size % 3 == 0:
             flipped = flat_arr.reshape(-1, 3)[:, ::-1].flatten().tolist()
         else:
+            # Rare irregular case: fallback to python loop on numpy array
             flipped = []
             iarr = flat_arr.tolist()
             for i in range(0, len(iarr), 3):
@@ -966,26 +930,12 @@ class ObjBufferHelper:
         缺点：
         - 如果模型存在硬边或UV接缝，数据会被覆盖（合并），可能导致渲染错误（如法线平滑过度、UV错乱）。
         
-        1. Blender 的"顶点数"= mesh.vertices 长度，只要位置不同就算一个。
+        1. Blender 的“顶点数”= mesh.vertices 长度，只要位置不同就算一个。
         2. 我们预分配同样长度的盒子列表，盒子下标 == 顶点下标，保证一一对应。
         3. 遍历 loop 时，把真实数据写进对应盒子；没人引用的盒子留 dummy（坐标填对，其余 0）。
         4. 最后按盒子顺序打包成字节数组，长度必然与 mesh.vertices 相同，导出数就能和 Blender 状态栏完全一致。
-        
-        注意：此模式下"顶点去重精度控制"选项不适用，因为顶点数已强制固定。
         '''
         print("calc ivb gf2")
-        
-        # 读取去重精度控制选项（此模式下仅用于调试显示）
-        include_position = Properties_WWMI.dedup_include_position()
-        include_normal = Properties_WWMI.dedup_include_normal()
-        include_tangent = Properties_WWMI.dedup_include_tangent()
-        include_texcoord = Properties_WWMI.dedup_include_texcoord()
-        include_color = Properties_WWMI.dedup_include_color()
-        include_blend = Properties_WWMI.dedup_include_blend()
-        include_vertex_id = Properties_WWMI.dedup_include_vertex_id()
-        
-        print(f"[去重精度-gf2] 此模式强制顶点对齐，精度控制选项不生效")
-        print(f"[去重精度-gf2] Position:{include_position} Normal:{include_normal} Tangent:{include_tangent} UV:{include_texcoord} Color:{include_color} Blend:{include_blend} VertexID:{include_vertex_id}")
 
         loops = mesh.loops
         v_cnt = len(mesh.vertices)
@@ -999,24 +949,22 @@ class ObjBufferHelper:
         used_mask = numpy.zeros(v_cnt, dtype=bool)
         used_mask[loop_vidx] = True
 
-        # 3. 共享 TANGENT 字典（仅当 TANGENT 字段存在时使用）
-        has_tangent = 'TANGENT' in element_vertex_ndarray.dtype.names
+        # 3. 共享 TANGENT 字典
         pos_normal_key = {}   # (position_tuple, normal_tuple) -> tangent
 
-        # 4. 先给"被用到"的顶点填真实数据
+        # 4. 先给“被用到”的顶点填真实数据
         for lp in loops:
             v_idx = lp.vertex_index
-            if used_mask[v_idx]:
+            if used_mask[v_idx]:          # 其实恒为 True，留着可读性
                 data = element_vertex_ndarray[lp.index].copy()
-                if has_tangent:
-                    pn_key = (tuple(data['POSITION']), tuple(data['NORMAL']))
-                    if pn_key in pos_normal_key:
-                        data['TANGENT'] = pos_normal_key[pn_key]
-                    else:
-                        pos_normal_key[pn_key] = data['TANGENT']
+                pn_key = (tuple(data['POSITION']), tuple(data['NORMAL']))
+                if pn_key in pos_normal_key:
+                    data['TANGENT'] = pos_normal_key[pn_key]
+                else:
+                    pos_normal_key[pn_key] = data['TANGENT']
                 vertex_buffer[v_idx] = data
 
-        # 5. 给"死顶点"也填上 dummy，但位置必须对
+        # 5. 给“死顶点”也填上 dummy，但位置必须对
         for v_idx in range(v_cnt):
             if not used_mask[v_idx]:
                 vertex_buffer[v_idx]['POSITION'] = mesh.vertices[v_idx].co
@@ -1032,8 +980,6 @@ class ObjBufferHelper:
                     for v_idx in [lp.vertex_index]])
 
         flattened_ib = [i for sub in ib for i in sub]
-        
-        print(f"[去重精度-gf2] Blender顶点数: {v_cnt}, 导出顶点数: {len(indexed_vertices)} (强制对齐)")
 
         # 8. 拆 CategoryBuffer
         category_stride_dict = d3d11_game_type.get_real_category_stride_dict()
@@ -1077,79 +1023,8 @@ class ObjBufferHelper:
 
         计算IndexBuffer和CategoryBufferDict并返回
         如果模型具有形态键，那么形态键盘的值为0到1的任何值应用后，都不会造成由于顶点合并导致的顶点数改变。
-        
-        支持通过配置选项选择性参与去重的字段，实现精度调整。
         '''
         # TimerUtils.Start("Calc IB VB")
-        
-        # 读取去重精度控制选项
-        include_position = Properties_WWMI.dedup_include_position()
-        include_normal = Properties_WWMI.dedup_include_normal()
-        include_tangent = Properties_WWMI.dedup_include_tangent()
-        include_texcoord = Properties_WWMI.dedup_include_texcoord()
-        include_color = Properties_WWMI.dedup_include_color()
-        include_blend = Properties_WWMI.dedup_include_blend()
-        include_vertex_id = Properties_WWMI.dedup_include_vertex_id()
-        
-        print(f"[去重精度-unified] Position:{include_position} Normal:{include_normal} Tangent:{include_tangent} UV:{include_texcoord} Color:{include_color} Blend:{include_blend} VertexID:{include_vertex_id}")
-        
-        # 构建字段字节范围映射（用于选择性提取）
-        field_byte_ranges = []
-        for field_name in dtype.names:
-            field_offset = dtype.fields[field_name][1]
-            field_dtype = dtype.fields[field_name][0]
-            field_size = field_dtype.itemsize
-            
-            upper_name = field_name.upper()
-            is_position = 'POSITION' in upper_name
-            is_normal = 'NORMAL' in upper_name and 'BINORMAL' not in upper_name
-            is_tangent = 'TANGENT' in upper_name and 'BINORMAL' not in upper_name
-            is_texcoord = 'TEXCOORD' in upper_name
-            is_color = 'COLOR' in upper_name
-            is_blend = 'BLEND' in upper_name
-            
-            should_include = True
-            if is_position and not include_position:
-                should_include = False
-            elif is_normal and not include_normal:
-                should_include = False
-            elif is_tangent and not include_tangent:
-                should_include = False
-            elif is_texcoord and not include_texcoord:
-                should_include = False
-            elif is_color and not include_color:
-                should_include = False
-            elif is_blend and not include_blend:
-                should_include = False
-            
-            if should_include:
-                field_byte_ranges.append((field_offset, field_offset + field_size))
-        
-        field_byte_ranges.sort()
-        
-        # 合并相邻的字节范围
-        if field_byte_ranges:
-            merged_ranges = []
-            current_start, current_end = field_byte_ranges[0]
-            for start, end in field_byte_ranges[1:]:
-                if start <= current_end:
-                    current_end = max(current_end, end)
-                else:
-                    merged_ranges.append((current_start, current_end))
-                    current_start, current_end = start, end
-            merged_ranges.append((current_start, current_end))
-            field_byte_ranges = merged_ranges
-        
-        n_loops = len(element_vertex_ndarray)
-        row_size = dtype.itemsize
-        
-        # 将 element_vertex_ndarray 转换为字节视图
-        vb = numpy.ascontiguousarray(element_vertex_ndarray)
-        try:
-            row_bytes = vb.view(numpy.uint8).reshape(n_loops, row_size)
-        except Exception:
-            raw = vb.tobytes()
-            row_bytes = numpy.frombuffer(raw, dtype=numpy.uint8).reshape(n_loops, row_size)
         
         # 统一逻辑：始终将 (数据 + 顶点索引) 作为唯一标识
         # 1. 彻底解决 ShapeKey 问题：防止 Basis 中重合但在 Morph 中分离的顶点被错误合并。
@@ -1166,25 +1041,11 @@ class ObjBufferHelper:
             poly_indices = []
             for loop_index in range(poly.loop_start, poly.loop_start + poly.loop_total):
                 loop = mesh.loops[loop_index]
-                
-                # 根据配置选择性提取字段数据
-                if field_byte_ranges:
-                    selected_bytes_list = []
-                    for start, end in field_byte_ranges:
-                        selected_bytes_list.append(row_bytes[loop.index, start:end])
-                    if selected_bytes_list:
-                        data = numpy.hstack(selected_bytes_list).tobytes()
-                    else:
-                        data = b''
-                else:
-                    data = b''
+                data = element_vertex_ndarray[loop.index].tobytes()
                 
                 # 核心：Key 始终包含 vertex_index (data, index)
                 # 这样只有当 "数据完全一致" 且 "是同一个顶点(仅因硬边/UV断开)" 时才会共用索引
-                if include_vertex_id:
-                    key = (data, loop.vertex_index)
-                else:
-                    key = data
+                key = (data, loop.vertex_index)
                 
                 if key in unique_map:
                     idx = unique_map[key]
@@ -1196,20 +1057,15 @@ class ObjBufferHelper:
                 poly_indices.append(idx)
             ib.append(poly_indices)
         
-        print(f"[去重精度-unified] Loops: {n_loops} -> Unique: {len(unique_map)} (合并了 {n_loops - len(unique_map)} 个)")
-        
-        # 提取 vertex buffer 需要的数据 (使用完整的原始数据)
+        # 提取 vertex buffer 需要的数据 (也就是 key 中的 data 部分)
         # vertex_data_list = [k[0] for k in unique_map.keys()]
 
         # 同时构建 index -> blender_loop_index 的映射
         # 这对于后续生成 ShapeKey Buffer 至关重要，因为我们需要知道当前生成的第 i 个点对应 Blender 的哪个 Loop
         # Loop Index 可进一步转换为 Vertex Index，但 Vertex Index 无法反推唯一的 Loop Index (Split Normals)
         vertex_data_list = []
-        for key in unique_map.keys():
-            # 获取对应的 loop_index，然后从原始数据中提取完整数据
-            loop_idx = unique_loop_map[unique_map[key]]
-            full_data = element_vertex_ndarray[loop_idx].tobytes()
-            vertex_data_list.append(full_data)
+        for i, (data_bytes, blender_v_idx) in enumerate(unique_map.keys()):
+            vertex_data_list.append(data_bytes)
         
         index_loop_id_dict = unique_loop_map
 

@@ -53,21 +53,10 @@ class ObjBufferModelUnity:
 
         # 因为只有存在TANGENT时，顶点数才会增加，所以如果是GF2并且存在TANGENT才使用共享TANGENT防止增加顶点数
         if GlobalConfig.logic_name == LogicName.UnityCPU and "TANGENT" in self.d3d11_game_type.OrderedFullElementList:
-            self.ib, self.category_buffer_dict, self.index_loop_id_dict = ObjBufferHelper.calc_index_vertex_buffer_girlsfrontline2(
-                mesh=mesh, 
-                element_vertex_ndarray=self.element_vertex_ndarray, 
-                d3d11_game_type=self.d3d11_game_type, 
-                dtype=dtype
-            )
+            self.ib, self.category_buffer_dict, self.index_loop_id_dict = ObjBufferHelper.calc_index_vertex_buffer_girlsfrontline2(mesh=mesh, element_vertex_ndarray=self.element_vertex_ndarray, d3d11_game_type=self.d3d11_game_type, dtype=dtype)
         else:
             # 计算IndexBuffer和CategoryBufferDict
-            self.ib, self.category_buffer_dict, self.index_loop_id_dict = ObjBufferHelper.calc_index_vertex_buffer_unified(
-                mesh=mesh, 
-                element_vertex_ndarray=self.element_vertex_ndarray, 
-                d3d11_game_type=self.d3d11_game_type, 
-                dtype=dtype,
-                obj=self.obj
-            )
+            self.ib, self.category_buffer_dict, self.index_loop_id_dict = ObjBufferHelper.calc_index_vertex_buffer_unified(mesh=mesh, element_vertex_ndarray=self.element_vertex_ndarray, d3d11_game_type=self.d3d11_game_type, dtype=dtype,obj=self.obj)
 
         # 此时根据前面的计算，我们得到了 index_loop_id_dict
         # 它记录了每个索引对应的Blender Loop ID，方便后续ShapeKey数据的提取 (支持 Split Normals/Tangents)

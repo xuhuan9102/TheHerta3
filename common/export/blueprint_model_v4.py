@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 
 class BluePrintModel_V4:
-    def __init__(self, object_name_mapping: dict = None):
+    def __init__(self):
         self.keyname_mkey_dict: dict = {}
         self.ordered_draw_obj_data_model_list: list = []
         self.visited_blueprints: set = set()
@@ -21,7 +21,6 @@ class BluePrintModel_V4:
         self.cross_ib_mapping_objects: dict = {}
         self.cross_ib_vb_condition_mapping: dict = {}
         self.cross_ib_object_vb_condition: dict = {}
-        self._object_name_mapping = object_name_mapping or {}
 
     def _get_m_key_class(self):
         from ...base.m_key import M_Key
@@ -30,31 +29,6 @@ class BluePrintModel_V4:
     def _get_draw_call_model_classes(self):
         from .draw_call_model import DrawCallModel, M_Condition as V4_Condition
         return DrawCallModel, V4_Condition
-
-    def _get_resolved_object_name(self, node_or_item):
-        '''
-        获取解析后的物体名称。
-        优先使用预处理阶段更新的物体名称（副本名称）。
-        
-        逻辑：
-        1. 如果节点/项目有 original_object_name 属性，说明预处理阶段已处理过
-           - 此时 object_name 已被更新为副本名称，直接使用
-        2. 如果有映射表，尝试从映射表中获取
-        3. 否则使用原始的 object_name
-        '''
-        original_object_name = getattr(node_or_item, 'original_object_name', '')
-        current_object_name = getattr(node_or_item, 'object_name', '')
-        
-        if original_object_name and original_object_name != current_object_name:
-            print(f"[BluePrintModel_V4] 使用预处理副本: {original_object_name} -> {current_object_name}")
-            return current_object_name
-        
-        if current_object_name in self._object_name_mapping:
-            resolved_name = self._object_name_mapping[current_object_name]
-            print(f"[BluePrintModel_V4] 使用映射副本: {current_object_name} -> {resolved_name}")
-            return resolved_name
-        
-        return current_object_name
 
     def initialize_from_tree(self, tree):
         if tree:
@@ -159,8 +133,7 @@ class BluePrintModel_V4:
             self.parse_current_node(unknown_node, chain_key_list)
 
         elif unknown_node.bl_idname == "SSMTNode_Object_Info":
-            resolved_obj_name = self._get_resolved_object_name(unknown_node)
-            obj_model = DrawCallModel(obj_name=resolved_obj_name)
+            obj_model = DrawCallModel(obj_name=unknown_node.object_name)
             obj_model.condition = V4_Condition(work_key_list=copy.deepcopy(chain_key_list))
             
             draw_ib = getattr(unknown_node, 'draw_ib', '')
@@ -171,14 +144,11 @@ class BluePrintModel_V4:
             if draw_ib:
                 obj_model.set_draw_info(draw_ib, index_count, first_index, alias_name)
             
-            original_object_name = getattr(unknown_node, 'original_object_name', '')
-            if original_object_name:
-                obj_model.display_name = original_object_name
-            else:
-                obj_model.display_name = getattr(unknown_node, 'object_name', resolved_obj_name)
+            if hasattr(unknown_node, 'original_object_name') and unknown_node.original_object_name:
+                obj_model.display_name = unknown_node.original_object_name
             
             self.ordered_draw_obj_data_model_list.append(obj_model)
-            print(f"BluePrintModel_V4: 解析 Object_Info 节点，物体: {resolved_obj_name}, 原始: {original_object_name}, DrawIB: {draw_ib}, IndexCount: {index_count}")
+            print(f"BluePrintModel_V4: 解析 Object_Info 节点，物体: {unknown_node.object_name}, DrawIB: {draw_ib}, IndexCount: {index_count}")
 
         elif unknown_node.bl_idname == "SSMTNode_MultiFile_Export":
             if len(unknown_node.object_list) > 0:
@@ -192,54 +162,22 @@ class BluePrintModel_V4:
                     export_index = len(unknown_node.object_list) - 1
                 
                 current_item = unknown_node.object_list[export_index]
-                resolved_obj_name = self._get_resolved_object_name(current_item)
-                obj_model = DrawCallModel(obj_name=resolved_obj_name)
+                obj_model = DrawCallModel(obj_name=current_item.object_name)
                 obj_model.condition = V4_Condition(work_key_list=copy.deepcopy(chain_key_list))
                 
-                # 从修改后的物体名称中解析 draw_ib 等属性
-                # 这样可以正确处理物体名称修改节点修改后的名称
-                draw_ib = ""
-                index_count = ""
-                first_index = ""
-                alias_name = ""
-                
-                if resolved_obj_name:
-                    if "." in resolved_obj_name:
-                        obj_name_total_split = resolved_obj_name.split(".")
-                        obj_name_split = obj_name_total_split[0].split("-")
-                        
-                        if len(obj_name_split) >= 3:
-                            draw_ib = obj_name_split[0]
-                            index_count = obj_name_split[1]
-                            first_index = obj_name_split[2]
-                        elif len(obj_name_split) >= 2:
-                            draw_ib = obj_name_split[0]
-                            index_count = obj_name_split[1]
-                        elif len(obj_name_split) >= 1:
-                            draw_ib = obj_name_split[0]
-                        
-                        if len(obj_name_total_split) >= 2:
-                            alias_name = ".".join(obj_name_total_split[1:])
-                            
-                    elif "-" in resolved_obj_name:
-                        obj_name_split = resolved_obj_name.split("-")
-                        draw_ib = obj_name_split[0]
-                        if len(obj_name_split) >= 2:
-                            index_count = obj_name_split[1]
-                        if len(obj_name_split) >= 3:
-                            first_index = obj_name_split[2]
+                draw_ib = getattr(current_item, 'draw_ib', '')
+                index_count = getattr(current_item, 'index_count', '')
+                first_index = getattr(current_item, 'first_index', '')
+                alias_name = getattr(current_item, 'alias_name', '')
                 
                 if draw_ib:
                     obj_model.set_draw_info(draw_ib, index_count, first_index, alias_name)
                 
-                original_object_name = getattr(current_item, 'original_object_name', '')
-                if original_object_name:
-                    obj_model.display_name = original_object_name
-                else:
-                    obj_model.display_name = getattr(current_item, 'object_name', resolved_obj_name)
+                if hasattr(current_item, 'original_object_name') and current_item.original_object_name:
+                    obj_model.display_name = current_item.original_object_name
                 
                 self.ordered_draw_obj_data_model_list.append(obj_model)
-                print(f"BluePrintModel_V4: 解析 MultiFile_Export 节点，导出索引: {export_index + 1}, 物体: {resolved_obj_name}, 原始: {original_object_name}, DrawIB: {draw_ib}, IndexCount: {index_count}")
+                print(f"BluePrintModel_V4: 解析 MultiFile_Export 节点，导出索引: {export_index + 1}, 物体: {current_item.object_name}, DrawIB: {draw_ib}, IndexCount: {index_count}")
                 self.multifile_export_nodes.append(unknown_node)
             self.parse_current_node(unknown_node, chain_key_list)
 

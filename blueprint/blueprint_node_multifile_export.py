@@ -433,12 +433,7 @@ class SSMTNode_MultiFile_Export(SSMTNodeBase):
         row.label(text="选择一个物体后点击", icon='INFO')
     
     def get_current_object_info(self, export_index):
-        """获取当前导出次数对应的物体信息
-        
-        注意：如果物体名称被修改（如通过物体名称修改节点），会从新的物体名称中重新解析 draw_ib 等属性
-        """
-        import re
-        
+        """获取当前导出次数对应的物体信息"""
         if export_index < 0:
             return None
         
@@ -446,44 +441,14 @@ class SSMTNode_MultiFile_Export(SSMTNodeBase):
             export_index = len(self.object_list) - 1
         
         item = self.object_list[export_index]
-        object_name = item.object_name
-        
-        result = {
-            "object_name": object_name,
+        return {
+            "object_name": item.object_name,
             "original_object_name": getattr(item, 'original_object_name', item.object_name),
             "draw_ib": item.draw_ib,
             "index_count": item.index_count,
             "first_index": item.first_index,
             "alias_name": item.alias_name
         }
-        
-        if object_name:
-            if "." in object_name:
-                obj_name_total_split = object_name.split(".")
-                obj_name_split = obj_name_total_split[0].split("-")
-                
-                if len(obj_name_split) >= 3:
-                    result["draw_ib"] = obj_name_split[0]
-                    result["index_count"] = obj_name_split[1]
-                    result["first_index"] = obj_name_split[2]
-                elif len(obj_name_split) >= 2:
-                    result["draw_ib"] = obj_name_split[0]
-                    result["index_count"] = obj_name_split[1]
-                elif len(obj_name_split) >= 1:
-                    result["draw_ib"] = obj_name_split[0]
-                
-                if len(obj_name_total_split) >= 2:
-                    result["alias_name"] = ".".join(obj_name_total_split[1:])
-                    
-            elif "-" in object_name:
-                obj_name_split = object_name.split("-")
-                result["draw_ib"] = obj_name_split[0]
-                if len(obj_name_split) >= 2:
-                    result["index_count"] = obj_name_split[1]
-                if len(obj_name_split) >= 3:
-                    result["first_index"] = obj_name_split[2]
-        
-        return result
     
     def add_object_to_list(self, object_name):
         """添加物体到列表"""

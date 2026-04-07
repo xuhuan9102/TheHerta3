@@ -598,16 +598,9 @@ class ObjUtils:
         :param obj_list: 要合并的对象列表
         :param target_collection: 目标集合，如果为None，则使用当前场景的活动集合
         """
-        # 过滤出网格类型的物体
-        mesh_objects = [obj for obj in obj_list if obj and obj.type == 'MESH']
-        
-        # 确保至少有一个网格对象可以进行合并
-        if len(mesh_objects) < 1:
-            non_mesh_objects = [obj.name for obj in obj_list if obj and obj.type != 'MESH']
-            if non_mesh_objects:
-                # 只在有非网格对象时打印警告
-                print(f"警告: 没有可供合并的网格数据，以下物体不是网格类型: {', '.join(non_mesh_objects)}")
-            # 空列表时不打印警告
+        # 确保至少有一个对象可以进行合并
+        if len(obj_list) < 1:
+            print("没有足够的对象进行合并")
             return
         
         # 如果目标集合未指定，则使用当前场景的默认集合
@@ -618,7 +611,7 @@ class ObjUtils:
         bpy.ops.object.select_all(action='DESELECT')
 
         # Select and make one of the objects in the list active
-        for obj in mesh_objects:
+        for obj in obj_list:
             obj.select_set(True)
             if obj.name in bpy.context.view_layer.objects:
                 bpy.context.view_layer.objects.active = obj
