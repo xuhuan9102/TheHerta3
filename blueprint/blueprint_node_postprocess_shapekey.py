@@ -120,6 +120,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                     mesh_match = re.search(r'\[mesh:([^\]]+)\]', stripped_line)
                     if mesh_match:
                         current_mesh_name = mesh_match.group(1).strip()
+                        current_mesh_name = self._apply_name_mapping_to_object(current_mesh_name)
                         continue
                     if current_mesh_name:
                         lower_line = stripped_line.lower()
