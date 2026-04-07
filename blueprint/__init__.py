@@ -1,6 +1,7 @@
 from .blueprint_node_base import *
 from .blueprint_node_obj import *
 from .blueprint_node_shapekey import *
+from .blueprint_node_shapekey_controller import *
 from .blueprint_node_menu import *
 from .blueprint_node_datatype import *
 from .blueprint_node_nest import *
@@ -24,3 +25,7 @@ from .blueprint_node_vertex_group_process import *
 from .blueprint_node_vertex_group_mapping_input import *
 from .blueprint_node_object_name_modify import *
 from .blueprint_shader_quick_connect import *
+from .blueprint_node_postprocess_unify_texture import *
+from .blueprint_preset import *
+from .blueprint_node_postprocess_ib_skip import *
+from .blueprint_node_postprocess_shapekey_anim_control import *

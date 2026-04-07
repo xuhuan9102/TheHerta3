@@ -252,41 +252,31 @@ class BluePrintModel:
             if len(unknown_node.object_list) > 0:
                 first_item = unknown_node.object_list[0]
                 obj_model = ObjDataModel(obj_name=first_item.object_name)
+                obj_model.draw_ib = first_item.draw_ib
                 
-                # 从物体名称中解析 draw_ib 等属性（而不是使用 item.draw_ib）
-                # 这样可以正确处理物体名称修改节点修改后的名称
-                object_name = first_item.object_name
-                if object_name:
-                    if "." in object_name:
-                        obj_name_total_split = object_name.split(".")
-                        obj_name_split = obj_name_total_split[0].split("-")
-                        
-                        if len(obj_name_split) >= 3:
-                            obj_model.draw_ib = obj_name_split[0]
-                            obj_model.component_count = int(obj_name_split[1]) if obj_name_split[1] else 0
-                            obj_model.first_index = int(obj_name_split[2]) if obj_name_split[2] else 0
-                            obj_model.index_count = obj_name_split[1]
-                        elif len(obj_name_split) >= 2:
-                            obj_model.draw_ib = obj_name_split[0]
-                            obj_model.component_count = int(obj_name_split[1]) if obj_name_split[1] else 0
-                        elif len(obj_name_split) >= 1:
-                            obj_model.draw_ib = obj_name_split[0]
-                        
-                        if len(obj_name_total_split) >= 2:
-                            obj_model.obj_alias_name = ".".join(obj_name_total_split[1:])
-                            
-                    elif "-" in object_name:
-                        obj_name_split = object_name.split("-")
-                        obj_model.draw_ib = obj_name_split[0]
-                        if len(obj_name_split) >= 2:
-                            obj_model.component_count = int(obj_name_split[1]) if obj_name_split[1] else 0
+                # 兼容第三代和第四代：优先使用 component，如果没有则使用 index_count
+                component_value = getattr(first_item, 'component', None)
+                if component_value is not None:
+                    obj_model.component_count = int(component_value) if component_value else 0
+                else:
+                    # 第四代格式使用 index_count
+                    index_count = getattr(first_item, 'index_count', '0')
+                    obj_model.component_count = int(index_count) if index_count else 0
+                
+                # 第四代格式需要 first_index
+                first_index = getattr(first_item, 'first_index', None)
+                if first_index is not None:
+                    obj_model.first_index = int(first_index) if first_index else 0
+                    obj_model.index_count = getattr(first_item, 'index_count', '')
+                
+                obj_model.obj_alias_name = first_item.alias_name
+                
+                if hasattr(first_item, 'original_object_name') and first_item.original_object_name:
+                    obj_model.display_name = first_item.original_object_name
                 
                 obj_model.condition = M_Condition(work_key_list=copy.deepcopy(chain_key_list))
                 obj_model.is_multifile_export = True
                 obj_model.multifile_node_name = unknown_node.name
-                
-                if hasattr(first_item, 'original_object_name') and first_item.original_object_name:
-                    obj_model.display_name = first_item.original_object_name
                 
                 # 每遇到一个obj，都把这个obj加入顺序渲染列表
                 self.ordered_draw_obj_data_model_list.append(obj_model)

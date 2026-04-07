@@ -2,17 +2,16 @@ import bpy
 
 # UI界面
 from .ui import ui_panel_basic
+from .ui import ui_panel_model
 from .ui import ui_panel_sword
 from .ui import ui_panel_import
-
-# 工具集
-from . import toolkit
 from .blueprint import blueprint_node_obj
 from .blueprint import blueprint_import
 from .blueprint import blueprint_export
 from .blueprint import blueprint_node_base
 from .blueprint import blueprint_node_menu
 from .blueprint import blueprint_node_shapekey
+from .blueprint import blueprint_node_shapekey_controller
 from .blueprint import blueprint_node_datatype
 from .blueprint import blueprint_node_multifile_export
 from .blueprint import blueprint_drag_drop
@@ -31,6 +30,10 @@ from .blueprint import blueprint_node_object_name_modify
 from .blueprint import blueprint_nest_navigate
 from .blueprint import blueprint_node_cross_ib
 from .blueprint import blueprint_shader_quick_connect
+from .blueprint import blueprint_node_postprocess_unify_texture
+from .blueprint import blueprint_preset
+from .blueprint import blueprint_node_postprocess_ib_skip
+from .blueprint import blueprint_node_postprocess_shapekey_anim_control
 
 # 第四代导出模块
 try:
@@ -60,7 +63,7 @@ bl_info = {
     "name": "TheHerta3",
     "description": "SSMT3.0 Series's Blender Plugin.",
     "blender": (4, 5, 0),
-    "version": (4, 0, 2),
+    "version": (3, 9, 8),
     "location": "View3D",
     "min_ssmt_version": 361,
     "category": "Generic"
@@ -80,10 +83,6 @@ class UpdaterPanel(bpy.types.Panel):
     bl_category = "TheHerta3"
     bl_order = 99
     bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        return not getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout
@@ -163,11 +162,9 @@ def register():
     # 3. UI Panels & Logic
     blueprint_node_base.register()
     ui_panel_basic.register()
+    ui_panel_model.register()
     ui_panel_sword.register()
     ui_panel_import.register()
-    
-    # 工具集
-    toolkit.register()
 
     # 蓝图系统
     blueprint_node_obj.register()
@@ -175,6 +172,7 @@ def register():
     blueprint_export.register()
     blueprint_node_menu.register()
     blueprint_node_shapekey.register()
+    blueprint_node_shapekey_controller.register()
     blueprint_node_datatype.register()
     blueprint_node_multifile_export.register()
     blueprint_drag_drop.register()
@@ -193,6 +191,10 @@ def register():
     blueprint_nest_navigate.register()
     blueprint_node_cross_ib.register()
     blueprint_shader_quick_connect.register()
+    blueprint_node_postprocess_unify_texture.register()
+    blueprint_preset.register()
+    blueprint_node_postprocess_ib_skip.register()
+    blueprint_node_postprocess_shapekey_anim_control.register()
 
 
 
@@ -218,17 +220,20 @@ def unregister():
     blueprint_export.unregister()
     blueprint_node_menu.unregister()
     blueprint_node_shapekey.unregister()
+    blueprint_node_shapekey_controller.unregister()
     blueprint_node_datatype.unregister()
     blueprint_node_multifile_export.unregister()
     blueprint_drag_drop.unregister()
     blueprint_node_base.unregister()
-
+    blueprint_node_postprocess_unify_texture.unregister()
+    blueprint_preset.unregister()
+    blueprint_node_postprocess_ib_skip.unregister()
+    blueprint_node_postprocess_shapekey_anim_control.unregister()
+    
     ui_panel_import.unregister()
     ui_panel_sword.unregister()
+    ui_panel_model.unregister()
     ui_panel_basic.unregister()
-    
-    # 工具集
-    toolkit.unregister()
 
     # 2. Addon Updater (local classes)
     bpy.utils.unregister_class(HertaUpdatePreference)
@@ -241,7 +246,4 @@ def unregister():
     properties_wwmi.unregister()
     properties_import_model.unregister()
     version_config.unregister()
-
-
-
-
+    

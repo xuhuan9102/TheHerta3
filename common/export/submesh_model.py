@@ -77,11 +77,7 @@ class SubMeshModel:
         for draw_call_model in self.drawcall_model_list:
             source_obj = ObjUtils.get_obj_by_name(draw_call_model.obj_name)
             if source_obj is None:
-                print(f"[SubMeshModel] 警告: 找不到物体 {draw_call_model.obj_name}，跳过")
                 continue
-            
-            if "_copy" not in draw_call_model.obj_name and "-copy" not in draw_call_model.obj_name:
-                print(f"[SubMeshModel] 注意: 物体 {draw_call_model.obj_name} 可能不是预处理副本")
 
             draw_call_model.vertex_count = len(source_obj.data.vertices)
             draw_call_model.index_count = len(source_obj.data.polygons) * 3

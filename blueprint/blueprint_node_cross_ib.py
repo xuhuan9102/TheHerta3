@@ -217,12 +217,6 @@ class SSMTNode_CrossIB(SSMTNodeBase):
         default=True
     )
     
-    vb_slot_204: BoolProperty(
-        name="204",
-        description="源块 VB 槽位 204",
-        default=True
-    )
-    
     current_logic_name: StringProperty(
         name="当前运行模式",
         description="当前游戏的运行模式",
@@ -285,7 +279,6 @@ class SSMTNode_CrossIB(SSMTNodeBase):
             row.label(text="源块:")
             row.prop(self, "vb_slot_200", text="200")
             row.prop(self, "vb_slot_201", text="201")
-            row.prop(self, "vb_slot_204", text="204")
             
             row = box_vb.row()
             row.label(text="目标块:")
@@ -333,8 +326,6 @@ class SSMTNode_CrossIB(SSMTNodeBase):
             vb_slots.append("200")
         if self.vb_slot_201:
             vb_slots.append("201")
-        if self.vb_slot_204:
-            vb_slots.append("204")
         
         if not vb_slots:
             return ""

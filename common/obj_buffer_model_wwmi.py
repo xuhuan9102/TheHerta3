@@ -61,6 +61,7 @@ class ObjBufferModelWWMI:
         self.dtype = self.obj_element_model.total_structured_dtype
         self.element_vertex_ndarray = self.obj_element_model.element_vertex_ndarray
 
+        # 计算IB和分类缓冲区以及索引映射表
         self.ib,self.category_buffer_dict,self.index_vertex_id_dict,self.unique_element_vertex_ndarray,self.unique_first_loop_indices = ObjBufferHelper.calc_index_vertex_buffer_wwmi_v2(
             mesh=self.mesh,
             element_vertex_ndarray=self.element_vertex_ndarray,
@@ -68,6 +69,7 @@ class ObjBufferModelWWMI:
             d3d11_game_type=self.d3d11_game_type
         )
         
+        # 获取ShapeKey数据
         if self.obj.data.shape_keys is None or len(getattr(self.obj.data.shape_keys, 'key_blocks', [])) == 0:
             print(f'No shapekeys found to process!')
             self.export_shapekey = False
