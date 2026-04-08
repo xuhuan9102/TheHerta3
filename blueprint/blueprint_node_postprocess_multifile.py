@@ -354,7 +354,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                     continue
 
                 buffer_folders = []
-                for i in range(1, 100):
+                for i in range(1, 10000):
                     buffer_folder = os.path.join(mod_export_path, f"Buffer{i:02d}")
                     if os.path.exists(buffer_folder):
                         buffer_folders.append(f"Buffer{i:02d}")
