@@ -275,9 +275,11 @@ class ImportConfig:
         # 优先读取 import.json（SSMT4 格式），如果不存在则回退到 tmp.json（SSMT3 格式）
         import_json_path = os.path.join(extract_gametype_folder_path, "import.json")
         tmp_json_path = os.path.join(extract_gametype_folder_path, "tmp.json")
+        is_ssmt4_format = False  # 标记是否为 SSMT4 格式
         
         if os.path.exists(import_json_path):
             tmp_json_path = import_json_path
+            is_ssmt4_format = True
         else:
             pass
         
@@ -299,10 +301,13 @@ class ImportConfig:
                 raise Fatal(error_msg)
             if found_path:
                 tmp_json_path = found_path
+                # 根据实际找到的文件来判断是否为 SSMT4 格式
+                if os.path.basename(tmp_json_path) == "import.json":
+                    is_ssmt4_format = True
                 # 从找到的 tmp.json 路径中提取 gametype 和文件夹名
                 # 路径格式: workspace/folder_name/TYPE_gametype/tmp.json
                 path_parts = tmp_json_path.replace('/', os.sep).split(os.sep)
-                print(f"调试: 找到的 tmp.json 路径: {tmp_json_path}")
+                print(f"调试: 找到的 json 路径: {tmp_json_path}")
                 print(f"调试: 路径分割后: {path_parts}")
                 if len(path_parts) >= 2:
                     type_folder = path_parts[-2]  # TYPE_gametype
@@ -346,17 +351,29 @@ class ImportConfig:
             tmp_json_dict = JsonUtils.LoadFromFile(tmp_json_path)
         
         '''
-        读取tmp.json中的内容，后续会用于生成Mod的ini文件
+        读取json中的内容，后续会用于生成Mod的ini文件
         需要在确定了D3D11GameType之后再执行
-        注意：这里使用已经确定的 tmp_json_dict
+        注意：SSMT3（tmp.json）和 SSMT4（import.json）的字段不同
+        SSMT4 格式不需要 ImportModelList、MatchFirstIndex、PartNameList 等字段
         '''
-        self.category_hash_dict = tmp_json_dict["CategoryHash"]
-        self.import_model_list = tmp_json_dict["ImportModelList"]
-        self.match_first_index_list = tmp_json_dict["MatchFirstIndex"]
-        self.part_name_list = tmp_json_dict["PartNameList"]
-        # print(self.partname_textureresourcereplace_dict)
-        self.vertex_limit_hash = tmp_json_dict["VertexLimitVB"]
-        self.work_game_type = tmp_json_dict["WorkGameType"]
+        self.category_hash_dict = tmp_json_dict.get("CategoryHash", {})
+        
+        # 这些字段只在 SSMT3 格式中存在
+        # SSMT4 格式使用 get() 防止 KeyError
+        if is_ssmt4_format:
+            # SSMT4 格式：这些字段可能不存在，使用默认值
+            self.import_model_list = tmp_json_dict.get("ImportModelList", [])
+            self.match_first_index_list = tmp_json_dict.get("MatchFirstIndex", [])
+            self.part_name_list = tmp_json_dict.get("PartNameList", [])
+            print(f"[SSMT4] 跳过 SSMT3 特定字段: ImportModelList={self.import_model_list}, MatchFirstIndex={self.match_first_index_list}, PartNameList={self.part_name_list}")
+        else:
+            # SSMT3 格式：这些字段必须存在
+            self.import_model_list = tmp_json_dict["ImportModelList"]
+            self.match_first_index_list = tmp_json_dict["MatchFirstIndex"]
+            self.part_name_list = tmp_json_dict["PartNameList"]
+        
+        self.vertex_limit_hash = tmp_json_dict.get("VertexLimitVB", "")
+        self.work_game_type = tmp_json_dict.get("WorkGameType", "")
         self.vshash_list = tmp_json_dict.get("VSHashList",[])
         self.original_vertex_count = tmp_json_dict.get("OriginalVertexCount",0)
 
