@@ -354,7 +354,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                     continue
 
                 buffer_folders = []
-                for i in range(1, 10000):
+                for i in range(1, 1000):
                     buffer_folder = os.path.join(mod_export_path, f"Buffer{i:02d}")
                     if os.path.exists(buffer_folder):
                         buffer_folders.append(f"Buffer{i:02d}")
@@ -471,7 +471,7 @@ class SSMTNode_PostProcess_MultiFile(SSMTNode_PostProcess_Base):
                             map_output_path = os.path.join(mod_export_path, buffer_folder, f"{base_name}-Position_map.buf")
                             self._write_buffer_file(map_array, map_output_path)
 
-                            folder_num = int(buffer_folder[-2:])
+                            folder_num = int(buffer_folder.replace("Buffer", ""))
                             pos_resource_section = f'[Resource_{hash_prefix}_Position{folder_num:02d}_packed_pos_delta]'
                             stride = 12
 
