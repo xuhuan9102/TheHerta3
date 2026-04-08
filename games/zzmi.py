@@ -139,6 +139,11 @@ class ModModelZZMI:
                 current_ib_key = f"{draw_ib}_{first_index}"
                 is_cross_ib_source = current_ib_key in self.cross_ib_info_dict
                 is_cross_ib_target = any(current_ib_key in targets for targets in self.cross_ib_info_dict.values())
+                
+                print(f"[CrossIB ZZMI] SSMT4: current_ib_key={current_ib_key}, is_source={is_cross_ib_source}, is_target={is_cross_ib_target}")
+                if self.has_cross_ib:
+                    print(f"[CrossIB ZZMI] cross_ib_info_dict keys: {list(self.cross_ib_info_dict.keys())}")
+                
                 source_ib_list_for_target = []
                 if is_cross_ib_target:
                     for source_ib, target_ib_list in self.cross_ib_info_dict.items():
@@ -273,11 +278,9 @@ class ModModelZZMI:
                                         break
                             
                             if source_component_model:
-                                target_first_index = first_index
-                                target_ib_resource_name = None
-                                for part_idx, ib_res_name in draw_ib_model.PartName_IBResourceName_Dict.items():
-                                    texture_override_ib_section.append("ib = " + ib_resource_name)
-                                    break
+                                source_component_index = source_component_model.component_name.replace("Component ", "")
+                                source_ib_resource_name = source_ib_model.PartName_IBResourceName_Dict.get(source_component_index, "")
+                                texture_override_ib_section.append("ib = " + source_ib_resource_name)
                                 
                                 texture_override_ib_section.append("vb0 = ResourceBodyVB_" + source_hash + "_" + str(source_first_index))
                                 texture_override_ib_section.append("vb1 = Resource" + source_hash + "Texcoord")
@@ -311,6 +314,11 @@ class ModModelZZMI:
                 
                 is_cross_ib_source = current_ib_key in self.cross_ib_info_dict
                 is_cross_ib_target = any(current_ib_key in targets for targets in self.cross_ib_info_dict.values())
+                
+                print(f"[CrossIB ZZMI] SSMT3: current_ib_key={current_ib_key}, is_source={is_cross_ib_source}, is_target={is_cross_ib_target}")
+                if self.has_cross_ib:
+                    print(f"[CrossIB ZZMI] cross_ib_info_dict keys: {list(self.cross_ib_info_dict.keys())}")
+                
                 source_ib_list_for_target = []
                 if is_cross_ib_target:
                     for source_ib, target_ib_list in self.cross_ib_info_dict.items():
@@ -415,12 +423,12 @@ class ModModelZZMI:
                                     source_component_model = source_ib_model.component_name_component_model_dict[src_component_name]
                         
                         if source_component_model:
-                            source_ib_resource_name = source_ib_model.PartName_IBResourceName_Dict.get(part_name, "")
+                            source_ib_resource_name = source_ib_model.PartName_IBResourceName_Dict.get(src_part_name, "")
                             texture_override_ib_section.append("ib = " + source_ib_resource_name)
-                            texture_override_ib_section.append("vb0 = ResourceBodyVB_" + source_hash)
+                            texture_override_ib_section.append("vb0 = ResourceBodyVB_" + source_hash + "_" + str(source_component_index))
                             texture_override_ib_section.append("vb1 = Resource" + source_hash + "Texcoord")
                             texture_override_ib_section.append("vb2 = Resource" + source_hash + "Blend")
-                            texture_override_ib_section.append("vb3 = ResourceBodyVB_" + source_hash)
+                            texture_override_ib_section.append("vb3 = ResourceBodyVB_" + source_hash + "_" + str(source_component_index))
                             
                             cross_ib_objects = []
                             for obj_model in source_component_model.final_ordered_draw_obj_model_list:

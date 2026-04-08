@@ -15,22 +15,70 @@ class DedupedTextureInfo:
 
 class WorkSpaceHelper:
 
-
+    @staticmethod
+    def find_json_file_in_marktexture_folder(filename_pattern: str, draw_ib: str) -> str:
+        '''
+        在 Config/MarkTexture 文件夹下递归查找匹配的 JSON 文件
+        优先查找文件名包含 draw_ib 的文件，否则返回第一个匹配的文件
+        '''
+        workspace_folder = GlobalConfig.path_workspace_folder()
+        marktexture_folder = os.path.join(workspace_folder, "Config", "MarkTexture")
+        
+        if not os.path.exists(marktexture_folder):
+            print(f"MarkTexture 文件夹不存在: {marktexture_folder}")
+            return ""
+        
+        matching_files = []
+        draw_ib_matching_files = []
+        
+        for root, dirs, files in os.walk(marktexture_folder):
+            for file in files:
+                if filename_pattern in file and file.endswith(".json"):
+                    full_path = os.path.join(root, file)
+                    matching_files.append(full_path)
+                    if draw_ib in file:
+                        draw_ib_matching_files.append(full_path)
+        
+        if draw_ib_matching_files:
+            print(f"找到匹配 draw_ib 的文件: {draw_ib_matching_files[0]}")
+            return draw_ib_matching_files[0]
+        
+        if matching_files:
+            print(f"使用默认文件: {matching_files[0]}")
+            return matching_files[0]
+        
+        print(f"未找到匹配的文件: {filename_pattern}")
+        return ""
 
     @staticmethod
     def get_hash_deduped_texture_info_dict(draw_ib:str) -> Dict[str,DedupedTextureInfo]:
 
-        draw_ib_folder_path = GlobalConfig.path_workspace_folder() + draw_ib + "\\"
-        # 接下来计算ComponentList，也就是当前DrawIB使用到这个贴图的所有Component的Count，从1开始
-        component_name__drawcall_indexlist_json_path = os.path.join(draw_ib_folder_path,"ComponentName_DrawCallIndexList.json")
-        trianglelist_deduped_filename_json_path = os.path.join(draw_ib_folder_path,"TrianglelistDedupedFileName.json")
+        workspace_folder = GlobalConfig.path_workspace_folder()
+        
+        component_name__drawcall_indexlist_json_path = WorkSpaceHelper.find_json_file_in_marktexture_folder(
+            "ComponentName_DrawCallIndexList", draw_ib
+        )
+        trianglelist_deduped_filename_json_path = WorkSpaceHelper.find_json_file_in_marktexture_folder(
+            "TrianglelistDedupedFileName", draw_ib
+        )
+        
+        if not component_name__drawcall_indexlist_json_path or not trianglelist_deduped_filename_json_path:
+            print(f"无法找到必要的贴图标记文件，跳过哈希贴图生成")
+            return {}
 
         component_name__drawcall_indexlist_json_dict = JsonUtils.LoadFromFile(component_name__drawcall_indexlist_json_path)
 
         drawcall_component_count_dict = {}
         for component_name, drawcall_indexlist in component_name__drawcall_indexlist_json_dict.items():
+            parts = component_name.split(" ")
+            if len(parts) >= 2:
+                component_count = parts[1]
+            else:
+                component_count = parts[0] if parts else ""
+            
             for drawcall_index in drawcall_indexlist:
-                drawcall_component_count_dict[drawcall_index] = component_name.split(" ")[1]  # 取Component的Count部分
+                if component_count:
+                    drawcall_component_count_dict[drawcall_index] = component_count
 
         trianglelist_deduped_filename_json_dict = JsonUtils.LoadFromFile(trianglelist_deduped_filename_json_path)
 

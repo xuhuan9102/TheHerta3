@@ -161,19 +161,13 @@ class M_IniHelper:
                         print("Skipping missing texture file: " + original_texture_file_path)
                         continue
 
-                    hash_style_texture_filename = ""
-                    hash_style_texture_filename = hash_style_texture_filename + draw_ib + "_" + draw_ib_model.draw_ib_alias + "_"
-
                     hash_deduped_texture_info_dict = folder_hash_deduped_dict.get(texture_folder, {})
                     deduped_texture_info = hash_deduped_texture_info_dict.get(texture_markup_info.mark_hash,None)
                     if deduped_texture_info is None:
                         print(f"警告: Hash值 {texture_markup_info.mark_hash} 在文件夹 {texture_folder} 中未找到对应的贴图信息，跳过")
                         continue
 
-                    component_count_list_str = deduped_texture_info.componet_count_list_str
-                    hash_style_texture_filename = hash_style_texture_filename + "_" + component_count_list_str + "_"
-                    hash_style_texture_filename = hash_style_texture_filename + deduped_texture_info.original_hash + "_" + deduped_texture_info.render_hash + "_" + deduped_texture_info.format + "_" + texture_markup_info.mark_name
-
+                    hash_style_texture_filename = f"{draw_ib}_{deduped_texture_info.original_hash}_{deduped_texture_info.format}_{texture_markup_info.mark_name}"
                     hash_style_texture_filename = hash_style_texture_filename + "." + texture_markup_info.mark_filename.split(".")[1]
                     print(texture_markup_info.mark_filename)
                     print(texture_markup_info.get_hash_style_filename())
