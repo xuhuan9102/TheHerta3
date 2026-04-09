@@ -544,11 +544,9 @@ class BluePrintModel:
                     __obj_name_shape_key_buffer_dict[obj.name] = obj_model_cached.shape_key_buffer_dict
             else:
                 # XXX 我们在导出具体数据之前，先对模型整体的权重进行normalize_all预处理，才能让后续的具体每一个权重的normalize_all更好的工作
-                # 使用这个的前提是当前obj中没有锁定的顶点组，所以这里要先进行判断。
+                # normalize_all 函数内部会自动处理顶点组锁定的情况
                 if "Blend" in d3d11_game_type.OrderedCategoryNameList:
-                    all_vgs_locked = ObjUtils.is_all_vertex_groups_locked(obj)
-                    if not all_vgs_locked:
-                        ObjUtils.normalize_all(obj)
+                    ObjUtils.normalize_all(obj)
                 
                 # 预处理翻转过去
                 # TODO 目前的处理方式是翻转过去，然后读取完数据再翻转回来
