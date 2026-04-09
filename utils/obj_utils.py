@@ -179,6 +179,16 @@ def remove_vertex_groups(obj, vertex_groups):
 
 
 def normalize_all_weights(context, obj):
+    obj = ObjUtils.assert_object(obj)
+    if obj and obj.type == 'MESH':
+        if bpy.context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        
+        if ObjUtils.is_all_vertex_groups_locked(obj):
+            print(f"警告: 对象 {obj.name} 的所有顶点组均被锁定，正在尝试解锁以执行归一化...")
+            for vg in obj.vertex_groups:
+                vg.lock_weight = False
+            bpy.context.view_layer.update()
     with OpenObject(context, obj, mode='WEIGHT_PAINT') as obj:
         bpy.ops.object.vertex_group_normalize_all()
 
@@ -643,19 +653,20 @@ class ObjUtils:
         cls.select_obj(obj)
 
         if obj and obj.type == 'MESH':
+            if bpy.context.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            
             if cls.is_all_vertex_groups_locked(obj):
                 print(f"警告: 对象 {obj.name} 的所有顶点组均被锁定，正在尝试解锁以执行归一化...")
                 for vg in obj.vertex_groups:
                     vg.lock_weight = False
-                bpy.context.view_layer.update()
-
-            bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
             
             bpy.context.view_layer.objects.active = obj
             obj.select_set(True)
+            bpy.context.view_layer.update()
             
+            bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
             bpy.ops.object.vertex_group_normalize_all()
-
             bpy.ops.object.mode_set(mode='OBJECT')
         else:
             print("没有找到合适的网格对象来执行规范化操作。")
@@ -725,18 +736,14 @@ class ObjUtils:
         '''
         vgs_number = 0
         locked_groups = []
-        # 确保对象类型为MESH，因为只有这种类型的对象才有顶点组
         if obj.type == 'MESH':
-            # 遍历对象的所有顶点组
             for vg in obj.vertex_groups:
                 vgs_number = vgs_number + 1
-                # 如果顶点组被锁定，则添加到列表中
                 if vg.lock_weight:
                     locked_groups.append(vg.name)
-        if len(locked_groups) == vgs_number:
-            return True
-        else:
+        if vgs_number == 0:
             return False
+        return len(locked_groups) == vgs_number
 
     @staticmethod
     def copy_object(context, obj, name=None, collection=None):
