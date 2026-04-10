@@ -4,6 +4,7 @@ import bpy
 import copy
 
 from ..config.main_config import GlobalConfig, LogicName
+from ..config.version_config import VersionManager
 
 from ..utils.obj_utils import ObjUtils
 from ..utils.log_utils import LOG
@@ -223,21 +224,25 @@ class BluePrintModel:
             
             obj_model.draw_ib = unknown_node.draw_ib
             
-            # 兼容第三代和第四代：优先使用 component，如果没有则使用 index_count
-            component_value = getattr(unknown_node, 'component', None)
-            if component_value is not None and component_value:
-                obj_model.component_count = int(component_value)
-            else:
-                # 第四代格式使用 index_count
+            if VersionManager.is_gen4():
                 index_count = getattr(unknown_node, 'index_count', '0')
                 obj_model.component_count = int(index_count) if index_count else 0
-            
-            # 第四代格式需要 first_index 和 index_count
-            first_index = getattr(unknown_node, 'first_index', None)
-            if first_index is not None and first_index:
-                obj_model.first_index = int(first_index)
-                obj_model.index_count = getattr(unknown_node, 'index_count', '')
-                obj_model.is_ssmt4 = True
+                
+                first_index = getattr(unknown_node, 'first_index', None)
+                if first_index is not None and first_index:
+                    try:
+                        obj_model.first_index = int(first_index)
+                        obj_model.index_count = getattr(unknown_node, 'index_count', '')
+                        obj_model.is_ssmt4 = True
+                    except ValueError:
+                        pass
+            else:
+                component_value = getattr(unknown_node, 'component', None)
+                if component_value is not None and component_value:
+                    obj_model.component_count = int(component_value)
+                else:
+                    index_count = getattr(unknown_node, 'index_count', '0')
+                    obj_model.component_count = int(index_count) if index_count else 0
             
             obj_model.obj_alias_name = unknown_node.alias_name
             
@@ -253,24 +258,32 @@ class BluePrintModel:
                 first_item = unknown_node.object_list[0]
                 obj_model = ObjDataModel(obj_name=first_item.object_name)
                 
-                # 从物体名称中解析 draw_ib 等属性（而不是使用 item.draw_ib）
-                # 这样可以正确处理物体名称修改节点修改后的名称
                 object_name = first_item.object_name
                 if object_name:
                     if "." in object_name:
                         obj_name_total_split = object_name.split(".")
                         obj_name_split = obj_name_total_split[0].split("-")
                         
-                        if len(obj_name_split) >= 3:
-                            obj_model.draw_ib = obj_name_split[0]
-                            obj_model.component_count = int(obj_name_split[1]) if obj_name_split[1] else 0
-                            obj_model.first_index = int(obj_name_split[2]) if obj_name_split[2] else 0
-                            obj_model.index_count = obj_name_split[1]
-                        elif len(obj_name_split) >= 2:
-                            obj_model.draw_ib = obj_name_split[0]
-                            obj_model.component_count = int(obj_name_split[1]) if obj_name_split[1] else 0
-                        elif len(obj_name_split) >= 1:
-                            obj_model.draw_ib = obj_name_split[0]
+                        if VersionManager.is_gen4():
+                            if len(obj_name_split) >= 3:
+                                obj_model.draw_ib = obj_name_split[0]
+                                obj_model.component_count = int(obj_name_split[1]) if obj_name_split[1] else 0
+                                try:
+                                    obj_model.first_index = int(obj_name_split[2]) if obj_name_split[2] else 0
+                                except ValueError:
+                                    obj_model.first_index = 0
+                                obj_model.index_count = obj_name_split[1]
+                            elif len(obj_name_split) >= 2:
+                                obj_model.draw_ib = obj_name_split[0]
+                                obj_model.component_count = int(obj_name_split[1]) if obj_name_split[1] else 0
+                            elif len(obj_name_split) >= 1:
+                                obj_model.draw_ib = obj_name_split[0]
+                        else:
+                            if len(obj_name_split) >= 2:
+                                obj_model.draw_ib = obj_name_split[0]
+                                obj_model.component_count = int(obj_name_split[1]) if obj_name_split[1] else 0
+                            elif len(obj_name_split) >= 1:
+                                obj_model.draw_ib = obj_name_split[0]
                         
                         if len(obj_name_total_split) >= 2:
                             obj_model.obj_alias_name = ".".join(obj_name_total_split[1:])
@@ -288,12 +301,9 @@ class BluePrintModel:
                 if hasattr(first_item, 'original_object_name') and first_item.original_object_name:
                     obj_model.display_name = first_item.original_object_name
                 
-                # 每遇到一个obj，都把这个obj加入顺序渲染列表
                 self.ordered_draw_obj_data_model_list.append(obj_model)
             
-            # 存储节点引用以便后续使用
             self.multifile_export_nodes.append(unknown_node)
-            # 需要继续递归解析后面的节点
             self.parse_current_node(unknown_node, chain_key_list)
 
         elif unknown_node.bl_idname == "SSMTNode_DataType":
@@ -500,20 +510,24 @@ class BluePrintModel:
                     obj_model.obj_name = obj_name
                     obj_model.draw_ib = multifile_object_info["draw_ib"]
                     
-                    # 兼容第三代和第四代：优先使用 component，如果没有则使用 index_count
-                    component_value = multifile_object_info.get("component")
-                    if component_value is not None:
-                        obj_model.component_count = int(component_value) if component_value else 0
-                    else:
-                        # 第四代格式使用 index_count
+                    if VersionManager.is_gen4():
                         index_count = multifile_object_info.get("index_count", "0")
                         obj_model.component_count = int(index_count) if index_count else 0
-                    
-                    # 第四代格式需要 first_index 和 index_count
-                    first_index = multifile_object_info.get("first_index")
-                    if first_index is not None:
-                        obj_model.first_index = int(first_index) if first_index else 0
-                        obj_model.index_count = multifile_object_info.get("index_count", "")
+                        
+                        first_index = multifile_object_info.get("first_index")
+                        if first_index is not None:
+                            try:
+                                obj_model.first_index = int(first_index) if first_index else 0
+                                obj_model.index_count = multifile_object_info.get("index_count", "")
+                            except ValueError:
+                                pass
+                    else:
+                        component_value = multifile_object_info.get("component")
+                        if component_value is not None:
+                            obj_model.component_count = int(component_value) if component_value else 0
+                        else:
+                            index_count = multifile_object_info.get("index_count", "0")
+                            obj_model.component_count = int(index_count) if index_count else 0
                     
                     obj_model.obj_alias_name = multifile_object_info["alias_name"]
                     
@@ -521,7 +535,6 @@ class BluePrintModel:
                     if original_name:
                         obj_model.display_name = original_name
                     
-                    # 检查是否使用了最后一个物体
                     if export_index >= len(multifile_node.object_list):
                         LOG.info(f"多文件导出节点在第{export_index + 1}次导出时使用最后一个物体: {obj_name}")
                     else:
