@@ -19,7 +19,7 @@ class ATP_PT_MainPanel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="版本: 1.7.0")
+        layout.label(text="版本: 1.7.1")
 
 
 class ATP_PT_ShapeKeyTools(bpy.types.Panel):
@@ -31,6 +31,10 @@ class ATP_PT_ShapeKeyTools(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_ATP_Main_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 0
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         from . import at_shape_key_control
@@ -56,6 +60,10 @@ class ATP_PT_ShapeKeyOperations(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_ATP_ShapeKeyTools_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 0
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         from . import at_shape_key_control
@@ -117,6 +125,10 @@ class ATP_PT_ShapeKeyCreation(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_ATP_ShapeKeyTools_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 1
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         from . import at_shape_key_creation
@@ -201,6 +213,10 @@ class ATP_PT_ShapeKeyAnimationExport(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 2
 
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         from . import at_shape_key_creation
         
@@ -250,6 +266,10 @@ class ATP_PT_AlembicTools(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_ATP_Main_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 1
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         from . import at_alembic_tools
@@ -301,6 +321,10 @@ class ATP_PT_AnimationFrameSplit(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 2
 
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         from . import at_alembic_tools
         from . import at_utils
@@ -351,6 +375,10 @@ class ATP_PT_Automation(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 3
 
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.atp_props
@@ -377,6 +405,10 @@ class ATP_PT_AutomationShapeKeyExport(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_ATP_Automation_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 0
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         from . import at_shape_key_export
@@ -420,6 +452,10 @@ class ATP_PT_AutomationBufferMerge(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_ATP_Automation_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 1
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         from . import at_animation_export

@@ -103,6 +103,10 @@ class BMTP_BoneControlPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 0
 
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.bmtp_props
@@ -142,6 +146,10 @@ class BMTP_WeightControlPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 1
 
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         pass
 
@@ -155,6 +163,10 @@ class BMTP_WeightOperationPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_BMTP_WeightControl_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 0
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout
@@ -224,6 +236,10 @@ class BMTP_WeightManagePanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_BMTP_WeightControl_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 1
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout
@@ -311,6 +327,10 @@ class BMTP_ModelControlPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 2
 
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.bmtp_props
@@ -331,6 +351,10 @@ class BMTP_MeshEditPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_BMTP_ModelControl_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 0
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout
@@ -361,6 +385,10 @@ class BMTP_UVToolsPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_BMTP_ModelControl_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 1
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout
@@ -395,6 +423,10 @@ class BMTP_SceneCleanPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_BMTP_Main_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 3
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout
@@ -446,6 +478,10 @@ class BMTP_CollectionLinkerPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 4
     
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.bmtp_props
@@ -488,6 +524,10 @@ class BMTP_ModifierToolsPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 5
     
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.bmtp_props
@@ -566,6 +606,10 @@ class TT_DDSConversionPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_TT_Main_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 0
+    
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
     
     def draw(self, context):
         layout = self.layout
@@ -655,6 +699,10 @@ class TT_NormalMapPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 1
     
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+    
     def draw(self, context):
         layout = self.layout
         props = context.scene.texture_tools_props
@@ -690,6 +738,10 @@ class TT_ColorBakePanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_TT_Main_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 2
+    
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
     
     def draw(self, context):
         layout = self.layout
@@ -750,6 +802,10 @@ class TT_AlphaExtractPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 3
     
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+    
     def draw(self, context):
         layout = self.layout
         props = context.scene.texture_tools_props
@@ -779,6 +835,10 @@ class TT_MaterialToolsPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_TT_Main_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 4
+    
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
     
     def draw(self, context):
         layout = self.layout
@@ -810,6 +870,10 @@ class TT_LightmapPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_TT_Main_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 5
+    
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
     
     def draw(self, context):
         layout = self.layout
@@ -844,6 +908,10 @@ class TT_MaterialPreviewPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_TT_Main_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 6
+    
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
     
     def draw(self, context):
         layout = self.layout
