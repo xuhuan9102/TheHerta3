@@ -29,6 +29,10 @@ class VGToolsPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_Toolkit_Panel'
     bl_order = 0
 
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         layout = self.layout
         self._draw_vertex_group_rename(layout, context)
@@ -80,6 +84,10 @@ class BMTP_MainPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_Toolkit_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 1
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         pass
@@ -524,6 +532,10 @@ class TT_MainPanel(bpy.types.Panel):
     bl_parent_id = 'VIEW3D_PT_Herta_Toolkit_Panel'
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 2
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
 
     def draw(self, context):
         layout = self.layout

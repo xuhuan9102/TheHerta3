@@ -13,6 +13,10 @@ class ATP_PT_MainPanel(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 3
 
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, 'herta_show_toolkit', False)
+
     def draw(self, context):
         layout = self.layout
         layout.label(text="版本: 1.7.0")

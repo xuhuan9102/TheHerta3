@@ -17,6 +17,7 @@ class SKE_AutomationPipeline:
         self.scene = self.context.scene
         self.target_objects = []
         self.max_shape_key_slots = 0
+        self.errors = []
 
     def _wait_for_step_delay(self):
         """步骤间暂停"""
@@ -124,13 +125,90 @@ class SKE_AutomationPipeline:
         else:
             print(f"    [Warning] 未在 '{export_path}' 中找到 'Buffer' 文件夹。")
 
+    def _validate_and_clean_shape_keys(self):
+        """前置验证：检测并移除损坏的形态键（无效指针等），防止导出流程中断"""
+        print("  [Validate] 正在检查形态键数据完整性...")
+        total_removed = 0
+
+        for obj in list(self.target_objects):
+            if not obj.data:
+                continue
+            sk = getattr(obj.data, 'shape_keys', None)
+            if not sk:
+                continue
+
+            keys_to_remove = []
+            for kb in sk.key_blocks:
+                if kb == sk.reference_key:
+                    continue
+                try:
+                    _ = kb.name
+                    _ = kb.value
+                    _ = kb.mute
+                    _ = kb.slider_min
+                    _ = kb.slider_max
+                except Exception:
+                    keys_to_remove.append(kb)
+                    continue
+
+                try:
+                    rel_key = kb.relative_key
+                    if rel_key is None:
+                        keys_to_remove.append(kb)
+                        print(f"    [Validate] 发现无效 relative_key: '{kb.name}' (物体: {obj.name})")
+                        continue
+                    _ = rel_key.name
+                except Exception:
+                    keys_to_remove.append(kb)
+                    print(f"    [Validate] 发现损坏的 relative_key 指针: '{kb.name}' (物体: {obj.name})")
+                    continue
+
+                try:
+                    data = kb.data
+                    if data is not None:
+                        for vert in data:
+                            _ = vert.co
+                            break
+                except Exception:
+                    keys_to_remove.append(kb)
+                    print(f"    [Validate] 发现损坏的形态键数据: '{kb.name}' (物体: {obj.name})")
+                    continue
+
+            for kb in keys_to_remove:
+                try:
+                    kb_name = kb.name
+                    obj.shape_key_remove(kb)
+                    total_removed += 1
+                    print(f"    [Validate] 已移除损坏形态键 '{kb_name}' (物体: {obj.name})")
+                except Exception as clean_err:
+                    print(f"    [Validate] 移除形态键失败: {clean_err}")
+
+        if total_removed > 0:
+            try:
+                bpy.ops.outliner.orphans_purge(do_recursive=True)
+                print(f"  [Validate] 已清理孤立数据，共移除 {total_removed} 个损坏形态键。")
+            except Exception:
+                print(f"  [Validate] 共移除 {total_removed} 个损坏形态键，孤立数据清理跳过。")
+        else:
+            print("  [Validate] 所有形态键数据完整，无需清理。")
+
     def set_all_shape_keys(self, value):
         """将所有目标物体上的所有形态键值设为指定值"""
         for obj in self.target_objects:
             if obj.data and obj.data.shape_keys:
                 for kb in obj.data.shape_keys.key_blocks:
                     if kb != obj.data.shape_keys.reference_key:
-                        kb.value = value
+                        try:
+                            kb.value = value
+                        except Exception as e:
+                            err_msg = f"设置形态键值失败: '{kb.name}' (物体: {obj.name}): {e}"
+                            print(f"    [Error] {err_msg}")
+                            self.errors.append(err_msg)
+                            try:
+                                obj.shape_key_remove(kb)
+                                self.errors.append(f"已自动移除损坏形态键: '{kb.name}' (物体: {obj.name})")
+                            except Exception:
+                                pass
     
     def _safe_save_mainfile(self):
         """安全保存工程文件，自动处理损坏的形态键等无效数据"""
@@ -152,6 +230,8 @@ class SKE_AutomationPipeline:
                         continue
                     keys_to_remove = []
                     for kb in sk.key_blocks:
+                        if kb == sk.reference_key:
+                            continue
                         try:
                             _test = kb.name
                             _test = kb.value
@@ -160,6 +240,27 @@ class SKE_AutomationPipeline:
                             _test = kb.slider_max
                         except Exception:
                             keys_to_remove.append(kb)
+                            continue
+
+                        try:
+                            rel_key = kb.relative_key
+                            if rel_key is None:
+                                keys_to_remove.append(kb)
+                                continue
+                            _ = rel_key.name
+                        except Exception:
+                            keys_to_remove.append(kb)
+                            continue
+
+                        try:
+                            data = kb.data
+                            if data is not None:
+                                for vert in data:
+                                    _ = vert.co
+                                    break
+                        except Exception:
+                            keys_to_remove.append(kb)
+                            continue
 
                     for kb in keys_to_remove:
                         try:
@@ -251,6 +352,18 @@ class SKE_AutomationPipeline:
             print(f"  [Init] 检测到最多 {self.max_shape_key_slots} 个形态键槽位。")
             self._wait_for_step_delay()
 
+            print("\n--- [步骤 1.5] 验证形态键数据完整性 ---")
+            self._validate_and_clean_shape_keys()
+
+            self.max_shape_key_slots = 0
+            for obj in self.target_objects:
+                if obj.data and obj.data.shape_keys:
+                    num_keys = len(obj.data.shape_keys.key_blocks)
+                    if num_keys > 1:
+                        self.max_shape_key_slots = max(self.max_shape_key_slots, num_keys - 1)
+            print(f"  [Init] 清理后重新计算形态键槽位数: {self.max_shape_key_slots}")
+            self._wait_for_step_delay()
+
             print("\n--- [新增步骤] 分类形态键并输出报告 ---")
             self._classify_and_write_shape_keys()
             self._wait_for_step_delay()
@@ -288,7 +401,17 @@ class SKE_AutomationPipeline:
                     if obj.data and obj.data.shape_keys:
                         if len(obj.data.shape_keys.key_blocks) > slot_index:
                             key_block = obj.data.shape_keys.key_blocks[slot_index]
-                            key_block.value = 1.0
+                            try:
+                                key_block.value = 1.0
+                            except Exception as sk_err:
+                                err_msg = f"激活形态键失败: '{key_block.name}' (物体: {obj.name}): {sk_err}"
+                                print(f"    [Error] {err_msg}")
+                                self.errors.append(err_msg)
+                                try:
+                                    obj.shape_key_remove(key_block)
+                                    self.errors.append(f"已自动移除损坏形态键: '{key_block.name}' (物体: {obj.name})")
+                                except Exception:
+                                    pass
 
                 self.select_objects_from_node_tree(self.props.ske_node_tree_name)
                 self._wait_for_step_delay()
@@ -341,6 +464,11 @@ class ATP_OT_ShapeKeyExport(bpy.types.Operator):
         except Exception as e:
             self.report({'ERROR'}, f"形态键导出流程失败: {e}")
             return {'CANCELLED'}
+
+        if pipeline.errors:
+            for err in pipeline.errors:
+                self.report({'WARNING'}, err)
+
         return {'FINISHED'}
 
 
