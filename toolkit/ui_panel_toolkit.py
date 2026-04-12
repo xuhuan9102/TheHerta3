@@ -73,6 +73,18 @@ class VGToolsPanel(bpy.types.Panel):
         sub_box.label(text="清理工具:")
         sub_box.prop(props, "vg_cleanup_remove_zero")
         sub_box.operator("toolkit.clean_vertex_groups", text="执行清理")
+        
+        box = layout.box()
+        box.label(text="数字格式化工具", icon='LINENUMBERS_ON')
+
+        sub_box = box.box()
+        row = sub_box.row()
+        row.prop(props, "vg_merge_sync_bones")
+        row.operator("toolkit.merge_vg_by_prefix", icon='AUTOMERGE_ON', text="按数字前缀合并")
+
+        sub_box = box.box()
+        sub_box.operator("toolkit.remove_non_numeric_vg", icon='REMOVE', text="删除非数字组")
+        sub_box.operator("toolkit.fill_vg_number_gaps", icon='LINENUMBERS_ON', text="填充数字组空缺")
 
 
 class BMTP_MainPanel(bpy.types.Panel):
