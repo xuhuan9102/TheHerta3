@@ -1,7 +1,9 @@
 import bpy
 import bmesh
 import numpy
-
+import shutil
+import re
+import os
 from bpy.props import BoolProperty,  CollectionProperty
 
 from ..utils.obj_utils import ObjUtils
@@ -9,6 +11,7 @@ from ..utils.collection_utils import CollectionUtils
 from ..utils.vertexgroup_utils import VertexGroupUtils
 from ..utils.shapekey_utils import ShapeKeyUtils
 from ..utils.algorithm_utils import AlgorithmUtils
+from ..config.main_config import GlobalConfig
 
 class ModelSplitByLoosePart(bpy.types.Operator):
     bl_idname = "panel_model.split_by_loose_part"
@@ -621,6 +624,9 @@ class PanelModelProcess(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.operator(SSMT_OT_CleanUnusedWorkspaceFolders.bl_idname, icon='TRASH')
+        layout = self.layout
+
         layout.operator(ModelResetLocation.bl_idname)
         layout.operator(MMTResetRotation.bl_idname)
         layout.operator(ModelDeleteLoosePoint.bl_idname)
@@ -707,6 +713,81 @@ class CatterRightClickMenu(bpy.types.Menu):
         layout.operator(RecalculateCOLORWithVectorNormalizedNormal.bl_idname)
         
 
+class SSMT_OT_CleanUnusedWorkspaceFolders(bpy.types.Operator):
+    """删除工作空间中不在当前 Blender 场景内的模型文件夹"""
+    bl_idname = "ssmt.clean_unused_workspace_folders"
+    bl_label = "清除本地工作空间无关模型文件"
+    bl_description = "删除掉不在当前blender工程文件的大纲列表里的本地工作空间内的其他模型文件夹"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_confirm(self, event)
+
+    def execute(self, context):
+        # 获取工作空间路径
+        workspace_path = GlobalConfig.path_workspace_folder()
+        if not workspace_path or not os.path.exists(workspace_path):
+            self.report({'ERROR'}, "工作空间路径无效，请检查SSMT配置")
+            return {'CANCELLED'}
+
+        # 从当前场景所有物体中提取有效的哈希目录名
+        valid_folders = set()
+        for obj in bpy.data.objects:
+            # 只处理网格物体（通常导入的模型都是网格）
+            if obj.type != 'MESH':
+                continue
+            folder_name = self._extract_folder_name_from_object(obj.name)
+            if folder_name:
+                valid_folders.add(folder_name)
+
+        if not valid_folders:
+            self.report({'WARNING'}, "当前场景中没有找到任何有效的模型物体，未执行删除")
+            return {'CANCELLED'}
+
+        # 扫描工作空间下的所有子文件夹，找出格式匹配的文件夹
+        all_subdirs = [d for d in os.listdir(workspace_path) 
+                       if os.path.isdir(os.path.join(workspace_path, d))]
+        pattern = re.compile(r'^[a-f0-9]{8}-\d+-\d+$')
+        workspace_folders = [d for d in all_subdirs if pattern.match(d)]
+
+        # 找出不在保留列表中的文件夹
+        folders_to_delete = [d for d in workspace_folders if d not in valid_folders]
+
+        if not folders_to_delete:
+            self.report({'INFO'}, "没有需要删除的无关模型文件夹")
+            return {'FINISHED'}
+
+        deleted_count = 0
+        failed_list = []
+        for folder in folders_to_delete:
+            full_path = os.path.join(workspace_path, folder)
+            try:
+                shutil.rmtree(full_path)
+                deleted_count += 1
+                print(f"[SSMT] 已删除无关文件夹: {full_path}")
+            except Exception as e:
+                failed_list.append(folder)
+                print(f"[SSMT] 删除文件夹失败: {full_path}, 错误: {e}")
+
+        if failed_list:
+            self.report({'WARNING'}, f"成功删除 {deleted_count} 个文件夹，{len(failed_list)} 个失败")
+        else:
+            self.report({'INFO'}, f"成功删除 {deleted_count} 个无关模型文件夹")
+
+        return {'FINISHED'}
+
+    def _extract_folder_name_from_object(self, obj_name: str) -> str:
+        """
+        从物体名称中提取对应的文件夹名（格式：8位哈希-数字-数字）
+        例如：0e74012c-48447-0.xxx  -> 0e74012c-48447-0
+        """
+        # 匹配格式：8位十六进制-数字-数字，后面可能跟点号或其他字符
+        match = re.match(r'^([a-f0-9]{8}-\d+-\d+)', obj_name)
+        if match:
+            return match.group(1)
+        return None
+
 
 def menu_func_migoto_right_click(self, context):
     self.layout.separator()
@@ -737,6 +818,7 @@ def register():
     bpy.utils.register_class(ModelVertexGroupRenameByLocation)
     bpy.utils.register_class(ExtractSubmeshOperator)
     bpy.utils.register_class(PanelModelProcess)
+    bpy.utils.register_class(SSMT_OT_CleanUnusedWorkspaceFolders)
 
     bpy.types.VIEW3D_MT_object_context_menu.append(menu_func_migoto_right_click)
 
@@ -781,3 +863,4 @@ def unregister():
     bpy.utils.unregister_class(MergeVertexGroupsWithSameNumber)
     bpy.utils.unregister_class(RemoveUnusedVertexGroupOperator)
     bpy.utils.unregister_class(RemoveAllVertexGroupOperator)
+    bpy.utils.unregister_class(SSMT_OT_CleanUnusedWorkspaceFolders)
