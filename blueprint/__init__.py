@@ -28,4 +28,3 @@ from .blueprint_shader_quick_connect import *
 from .blueprint_node_postprocess_unify_texture import *
 from .blueprint_preset import *
 from .blueprint_node_postprocess_ib_skip import *
-from .blueprint_node_postprocess_shapekey_anim_control import *

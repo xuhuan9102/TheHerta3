@@ -200,7 +200,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                 print(f"[形态键变体] 检测到形态键控制器，共 {len(sk_variant_plan['variants'])} 轮变体导出")
                 print(f"  基准变体(全0): buffer0000")
                 for i, v in enumerate(sk_variant_plan['variants'], 1):
-                    print(f"  变体{i} ({v['sk_name']}): buffer{1000 + v['slot_index']:04d}")
+                    print(f"  变体{i} (槽位 {v['slot_index']}): buffer{1000 + v['slot_index'] + 1:04d}")
         
         use_parallel = Properties_ImportModel.use_parallel_export()
         blend_file_saved = bpy.data.is_saved
@@ -577,15 +577,15 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
     def _build_shapekey_variant_plan(self, obj_node_mapping):
         """从 obj_node_mapping 中构建形态键变体导出计划
         
-        分析哪些物体来自形态键控制器，收集所有唯一的形态键名称，
+        分析哪些物体来自形态键控制器，收集所有唯一的形态键槽序号，
         按槽序号排序后生成变体列表。
         
         Returns:
             dict 或 None:
             {
                 'variants': [
-                    {'sk_name': 'Blink', 'slot_index': 1, ...},
-                    {'sk_name': 'Smile', 'slot_index': 2, ...},
+                    {'slot_index': 0, ...},
+                    {'slot_index': 1, ...},
                 ],
                 'has_base': True,   # 是否有全0基准变体
                 'sk_controllers': [node, ...],  # 涉及的形态键控制器节点
@@ -594,7 +594,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         """
         import collections as _collections
         
-        sk_entries = []       # (sk_name, slot_index, original_obj, node)
+        sk_entries = []       # (slot_index, sk_name, original_obj, node)
         sk_controllers = set()
         non_sk_objects = []
         
@@ -606,7 +606,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                 if sk_name is not None:
                     sk_controllers.add(node)  # 这里只是标记，实际使用时会根据物体查找形态键
                     slot_index = self._get_shapekey_slot_index(obj, sk_name)
-                    sk_entries.append((sk_name, slot_index, obj, node))
+                    sk_entries.append((slot_index, sk_name, obj, node))
                 else:
                     # 基准变体（全0）
                     pass
@@ -616,14 +616,13 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
         if not sk_entries and not sk_controllers:
             return None
         
-        # 按形态键名去重并按槽序号排序
+        # 按槽序号去重并排序
         seen = set()
         unique_variants = []
-        for sk_name, slot_index, obj, node in sorted(sk_entries, key=lambda x: x[1]):
-            if sk_name not in seen:
-                seen.add(sk_name)
+        for slot_index, sk_name, obj, node in sorted(sk_entries, key=lambda x: x[0]):
+            if slot_index not in seen:
+                seen.add(slot_index)
                 unique_variants.append({
-                    'sk_name': sk_name,
                     'slot_index': slot_index,
                 })
         
@@ -680,13 +679,13 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             # ================================================================
             for round_idx, variant in enumerate(variants):
                 variant_num = round_idx + 1  # 1-based
-                buffer_suffix = f"{1000 + (variant['slot_index'] + 1):04d}"
-                sk_name = variant['sk_name']
+                slot_index = variant['slot_index']
+                buffer_suffix = f"{1000 + (slot_index + 1):04d}"
                 
-                print(f"\n--- 变体轮 {variant_num}/{len(variants)}: '{sk_name}' -> Buffer{buffer_suffix} ---\n")
+                print(f"\n--- 变体轮 {variant_num}/{len(variants)}: 槽位 {slot_index} -> Buffer{buffer_suffix} ---\n")
                 
-                # 设置形态键值：目标SK=1, 其余=0
-                self._apply_variant_state(obj_node_mapping, target_sk=sk_name, value=1.0)
+                # 设置形态键值：目标槽位=1, 其余=0
+                self._apply_variant_state(obj_node_mapping, target_slot=slot_index, value=1.0)
                 
                 # 预处理此状态下的物体
                 wm.progress_update(int((variant_num) / total_rounds * 80))
@@ -716,7 +715,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                 
                 self._run_single_export(preview_export_only)
                 
-                print(f"✓ 变体 '{sk_name}' 导出完成 → Buffer{buffer_suffix}")
+                print(f"✓ 变体 '槽位 {slot_index}' 导出完成 → Buffer{buffer_suffix}")
             
             # ================================================================
             # 第2阶段：处理全0基准变体 (原始Buffer → 复制为 buffer0000)
@@ -726,7 +725,7 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             print(f"\n--- 基准轮 {base_round}/{total_rounds}: 全0基准 -> Buffer -> buffer0000 ---\n")
             
             # 设置所有形态键归零
-            self._apply_variant_state(obj_node_mapping, target_sk=None, value=0.0)
+            self._apply_variant_state(obj_node_mapping, target_slot=None, value=0.0)
             
             wm.progress_update(int(total_rounds / total_rounds * 85))
             
@@ -839,13 +838,13 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
                                 except (ReferenceError, ValueError):
                                     pass
     
-    def _apply_variant_state(self, obj_node_mapping, target_sk=None, value=0.0):
+    def _apply_variant_state(self, obj_node_mapping, target_slot=None, value=0.0):
         """
         应用形态键变体状态到所有涉及物体
         
         Args:
             obj_node_mapping: 物体-节点映射
-            target_sk: 目标形态键名（None表示全部归零）
+            target_slot: 目标槽序号（None表示全部归零）
             value: 目标形态键值
         """
         processed_objs = set()
@@ -865,17 +864,13 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
             
             sk = obj.data.shape_keys
             
-            # 保存当前值用于恢复
-            original_vals = {}
-            for kb in sk.key_blocks:
-                original_vals[kb.name] = kb.value
-            
             # 应用变体状态
-            for kb in sk.key_blocks:
+            for i, kb in enumerate(sk.key_blocks):
                 if kb == sk.reference_key:
                     continue
-                if target_sk is not None and kb.name == target_sk:
-                    kb.value = value  # 目标形态键设为指定值
+                slot_idx = i - 1  # 排除 reference_key 后的索引从 0 开始
+                if target_slot is not None and slot_idx == target_slot:
+                    kb.value = value  # 目标槽位的形态键设为指定值
                 else:
                     kb.value = 0.0  # 其余全部归零
             

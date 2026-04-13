@@ -4,6 +4,7 @@ import glob
 import re
 import shutil
 
+from ..config.main_config import GlobalConfig, LogicName
 from .blueprint_node_postprocess_base import SSMTNode_PostProcess_Base
 
 
@@ -11,7 +12,7 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
     '''资源引用＆ini修整：统一材质贴图、清理重复贴图、修改mod配置文件增加易读性'''
     bl_idname = 'SSMTNode_PostProcess_UnifyTexture'
     bl_label = '资源引用＆ini修整'
-    bl_description = '扫描并修改 INI 文件，将所有 TextureOverride 中的 RabbitFx 贴图引用统一为全局资源块，并支持从 Object Info 节点的替换名称自动重命名 INI 块'
+    bl_description = '扫描并修改 INI 文件，将所有 TextureOverride 中的 RabbitFx 贴图引用统一为全局资源块，并支持从 Object Info 节点的替换名称自动重命名 INI 块；自动根据当前 SSMT 运行模式选择 EFMI/ZZMI 处理。'
 
     create_backup: bpy.props.BoolProperty(
         name="创建备份",
@@ -33,6 +34,12 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
     light_map_path: bpy.props.StringProperty(
         name="光照贴图",
         description="自定义光照贴图文件（将复制到 Texture/LightMap.dds）",
+        subtype='FILE_PATH',
+        default=""
+    )
+    material_map_path: bpy.props.StringProperty(
+        name="MaterialMap 贴图",
+        description="自定义 MaterialMap 贴图文件（将复制到 Texture/MaterialMap.dds）",
         subtype='FILE_PATH',
         default=""
     )
@@ -64,10 +71,14 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
         box.prop(self, "diffuse_map_path", text="漫反射")
         box.prop(self, "normal_map_path", text="法线")
         box.prop(self, "light_map_path", text="光照")
+        box.prop(self, "material_map_path", text="MaterialMap")
         box.prop(self, "fx_map_path", text="FXMap")
         box.prop(self, "glow_map_path", text="GlowMap")
         box.label(text="留空则使用原有文件，不复制", icon='INFO')
         box.label(text="注：只有设置了路径的贴图才会被统一引用", icon='INFO')
+
+        mode = self.get_texture_mode()
+        layout.label(text=f"当前贴图处理模式：{mode}", icon='INFO')
 
         layout.separator()
         layout.label(text="此操作会：", icon='INFO')
@@ -153,6 +164,42 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
                              rf'post Resource_{new}\2', content)
         return content
 
+    def get_texture_mode(self):
+        """根据当前 SSMT 插件运行逻辑选择贴图处理模式。"""
+        logic_name = getattr(GlobalConfig, 'logic_name', '') or ''
+        if not logic_name:
+            try:
+                GlobalConfig.read_from_main_json()
+            except Exception:
+                pass
+            logic_name = getattr(GlobalConfig, 'logic_name', '') or ''
+
+        if not logic_name:
+            try:
+                GlobalConfig.read_from_main_json_ssmt4()
+            except Exception:
+                pass
+            logic_name = getattr(GlobalConfig, 'logic_name', '') or ''
+
+        if logic_name == LogicName.ZZMI:
+            return 'ZZMI'
+        return 'EFMI'
+
+    def _use_zzmi_mode(self):
+        return self.get_texture_mode() == 'ZZMI'
+
+    def _get_material_map_source(self):
+        if self.material_map_path:
+            return self.material_map_path
+        if self._use_zzmi_mode():
+            if self.fx_map_path and self.glow_map_path:
+                print("[UnifyTexture] ZZMI 模式下同时设置了 FXMap 和 GlowMap，优先使用 FXMap 作为 MaterialMap")
+            return self.fx_map_path or self.glow_map_path
+        return None
+
+    def _should_use_material_map_resource(self):
+        return bool(self.material_map_path) or (self._use_zzmi_mode() and bool(self._get_material_map_source()))
+
     # =========================================================================
     # 后处理执行入口
     # =========================================================================
@@ -234,6 +281,8 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
             global_resources.add('Resource_NormalMap')
         if self.light_map_path:
             global_resources.add('Resource_LightMap')
+        if self._should_use_material_map_resource():
+            global_resources.add('Resource_MaterialMap')
         if self.fx_map_path:
             global_resources.add('Resource_FXMap')
         if self.glow_map_path:
@@ -299,66 +348,96 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
         """判断一个TextureOverride块是否需要处理贴图（即是否包含ib/vb等渲染资源）"""
         for line in block_lines:
             stripped = line.strip()
-            if stripped.startswith(('ib =', 'vb0 =', 'vb1 =', 'vb2 =', 'vb3 =', 'drawindexedinstanced =')):
+            if stripped.startswith(('ib =', 'vb0 =', 'vb1 =', 'vb2 =', 'vb3 =', 'drawindexedinstanced =', 'drawindexed =', 'draw =')):
                 return True
         return False
+
+    def _has_ib(self, block_lines):
+        """判断块是否包含索引缓冲（IB），即是否为IB块"""
+        for line in block_lines:
+            if line.strip().startswith('ib ='):
+                return True
+        return False
+
+    def _is_texture_override_directive(self, stripped_line):
+        return (
+            stripped_line.startswith('Resource\\RabbitFx\\') or
+            stripped_line.startswith('Resource\\RabbitFX\\') or
+            stripped_line.startswith('ps-t3 =') or
+            stripped_line.startswith('ps-t4 =') or
+            stripped_line.startswith('ps-t5 =') or
+            stripped_line.startswith('ps-t6 =') or
+            stripped_line.startswith('run = CommandList\\EFMIv1\\OverrideTextures') or
+            stripped_line.startswith('run = CommandList\\RabbitFx\\SetTextures') or
+            stripped_line.startswith('run = CommandList\\RabbitFX\\Run')
+        )
 
     def process_texture_override_block(self, header, block_lines):
         """
         处理 TextureOverride 块：
         1. 跳过没有 ib/vb 的块（纯粹的 skip 块）
-        2. 提取头部（hash, match_*, handling）和渲染资源（ib, vb, draw...）
-        3. 重新生成标准的贴图处理部分（三个 run 命令 + 用户设置的贴图引用）
-        4. 按正确顺序组合：头部 + 贴图处理 + 渲染资源
+        2. 如果没有配置任何自定义贴图，则原样返回块内容
+        3. 如果不是 IB 块（没有 ib），则不添加贴图引用（VB 块不需要）
+        4. 移除旧的贴图引用指令，插入统一的当前模式贴图指令
+        5. 保留 draw、if/endif、注释等原始行
         """
-        # 检查是否为需要渲染的网格块
         if not self._needs_texture_processing(block_lines):
-            # 不需要处理，原样返回
             return [header] + block_lines
 
-        head_lines = []      # 存储 hash, match_*, handling 等行
-        resource_lines = []  # 存储 ib, vb, draw, 注释等行
-        # 其他行（旧的 run, 贴图引用）将被丢弃
+        if not (self.diffuse_map_path or self.normal_map_path or self.light_map_path or self.material_map_path or self.fx_map_path or self.glow_map_path):
+            return [header] + block_lines
+
+        if not self._has_ib(block_lines):
+            # VB 块，不添加贴图引用
+            return [header] + block_lines
+
+        head_lines = []
+        preserved_lines = []
 
         for line in block_lines:
             stripped = line.strip()
             if stripped.startswith(('hash =', 'match_first_index =', 'match_index_count =', 'handling =')):
                 head_lines.append(line)
-            elif stripped.startswith(('ib =', 'vb0 =', 'vb1 =', 'vb2 =', 'vb3 =', 'drawindexedinstanced =', ';')):
-                resource_lines.append(line)
-            # 忽略其他所有行（旧的 run 和贴图引用）
+            elif self._is_texture_override_directive(stripped):
+                continue
+            else:
+                preserved_lines.append(line)
 
-        # 确保头部行末尾有换行（可选，但保持格式）
         if head_lines and not head_lines[-1].endswith('\n'):
             head_lines[-1] += '\n'
 
-        # 构建新的贴图处理部分
         texture_block = []
-        # 第一个 run
-        texture_block.append('run = CommandList\\EFMIv1\\OverrideTextures\n')
-        # 用户设置的贴图引用
-        if self.diffuse_map_path:
-            texture_block.append('Resource\\RabbitFx\\Diffuse = ref Resource_DiffuseMap\n')
-        if self.normal_map_path:
-            texture_block.append('Resource\\RabbitFx\\NormalMap = ref Resource_NormalMap\n')
-        if self.light_map_path:
-            texture_block.append('Resource\\RabbitFx\\LightMap = ref Resource_LightMap\n')
-        if self.fx_map_path:
-            texture_block.append('Resource\\RabbitFX\\FXMap = ref Resource_FXMap\n')
-        if self.glow_map_path:
-            texture_block.append('Resource\\RabbitFX\\GlowMap = ref Resource_GlowMap\n')
-        # 第二个 run
-        texture_block.append('run = CommandList\\RabbitFx\\SetTextures\n')
-        # 第三个 run
-        texture_block.append('run = CommandList\\RabbitFX\\Run\n')
+        if self._use_zzmi_mode():
+            if self.diffuse_map_path:
+                texture_block.append('ps-t3 = Resource-DiffuseMap\n')
+            if self.normal_map_path:
+                texture_block.append('ps-t4 = Resource-NormalMap\n')
+            if self._get_material_map_source():
+                texture_block.append('ps-t5 = Resource-MaterialMap\n')
+            if self.light_map_path:
+                texture_block.append('ps-t6 = Resource-LightMap\n')
+        else:
+            texture_block.append('run = CommandList\\EFMIv1\\OverrideTextures\n')
+            if self.diffuse_map_path:
+                texture_block.append('Resource\\RabbitFx\\Diffuse = ref Resource_DiffuseMap\n')
+            if self.normal_map_path:
+                texture_block.append('Resource\\RabbitFx\\NormalMap = ref Resource_NormalMap\n')
+            if self.light_map_path:
+                texture_block.append('Resource\\RabbitFx\\LightMap = ref Resource_LightMap\n')
+            if self.material_map_path:
+                texture_block.append('Resource\\RabbitFX\\MaterialMap = ref Resource_MaterialMap\n')
+            if self.fx_map_path:
+                texture_block.append('Resource\\RabbitFX\\FXMap = ref Resource_FXMap\n')
+            if self.glow_map_path:
+                texture_block.append('Resource\\RabbitFX\\GlowMap = ref Resource_GlowMap\n')
+            texture_block.append('run = CommandList\\RabbitFx\\SetTextures\n')
+            texture_block.append('run = CommandList\\RabbitFX\\Run\n')
 
-        # 组合最终输出
         result = [header]
         result.extend(head_lines)
         result.extend(texture_block)
-        result.extend(resource_lines)
+        result.extend(preserved_lines)
 
-        # 确保最后有一个空行（可选）
         if result and not result[-1].endswith('\n'):
             result[-1] += '\n'
         return result
@@ -366,45 +445,54 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
 
     def append_global_texture_defs(self, lines):
         """在文件末尾添加全局贴图定义块，仅添加用户已设置的贴图"""
-        # 检查是否已存在全局定义块（通过检查是否存在任意一个用户设置的资源）
-        need_append = False
-        for res_name in ['Resource_DiffuseMap', 'Resource_NormalMap', 'Resource_LightMap', 'Resource_FXMap', 'Resource_GlowMap']:
-            if res_name in lines and any(line.strip() == f'[{res_name}]' for line in lines):
-                # 已存在，跳过追加
-                print(f"[UnifyTexture] 全局贴图定义已存在，跳过追加")
-                return lines
+        if self._use_zzmi_mode():
+            res_format = 'Resource-{}'
+        else:
+            res_format = 'Resource_{}'
 
-        # 构建要追加的内容
         append_lines = []
         if self.diffuse_map_path:
             append_lines.append(';MARK:ResourceTexture\n')
-            append_lines.append('[Resource_DiffuseMap]\n')
+            append_lines.append(f'[{res_format.format("DiffuseMap")}]\n')
+            append_lines.append('type = Texture2D\n')
             append_lines.append('filename = Texture/DiffuseMap.dds\n')
             append_lines.append('\n')
         if self.normal_map_path:
-            if not append_lines:  # 如果前面没有添加过标记，则添加
+            if not append_lines:
                 append_lines.append(';MARK:ResourceTexture\n')
-            append_lines.append('[Resource_NormalMap]\n')
+            append_lines.append(f'[{res_format.format("NormalMap")}]\n')
+            append_lines.append('type = Texture2D\n')
             append_lines.append('filename = Texture/NormalMap.dds\n')
             append_lines.append('\n')
         if self.light_map_path:
             if not append_lines:
                 append_lines.append(';MARK:ResourceTexture\n')
-            append_lines.append('[Resource_LightMap]\n')
+            append_lines.append(f'[{res_format.format("LightMap")}]\n')
+            append_lines.append('type = Texture2D\n')
             append_lines.append('filename = Texture/LightMap.dds\n')
             append_lines.append('\n')
-        if self.fx_map_path:
+        if self._should_use_material_map_resource():
             if not append_lines:
                 append_lines.append(';MARK:ResourceTexture\n')
-            append_lines.append('[Resource_FXMap]\n')
-            append_lines.append('filename = Texture/FXMap.dds\n')
+            append_lines.append(f'[{res_format.format("MaterialMap")}]\n')
+            append_lines.append('type = Texture2D\n')
+            append_lines.append('filename = Texture/MaterialMap.dds\n')
             append_lines.append('\n')
-        if self.glow_map_path:
-            if not append_lines:
-                append_lines.append(';MARK:ResourceTexture\n')
-            append_lines.append('[Resource_GlowMap]\n')
-            append_lines.append('filename = Texture/GlowMap.dds\n')
-            append_lines.append('\n')
+        if not self._use_zzmi_mode():
+            if self.fx_map_path:
+                if not append_lines:
+                    append_lines.append(';MARK:ResourceTexture\n')
+                append_lines.append(f'[{res_format.format("FXMap")}]\n')
+                append_lines.append('type = Texture2D\n')
+                append_lines.append('filename = Texture/FXMap.dds\n')
+                append_lines.append('\n')
+            if self.glow_map_path:
+                if not append_lines:
+                    append_lines.append(';MARK:ResourceTexture\n')
+                append_lines.append(f'[{res_format.format("GlowMap")}]\n')
+                append_lines.append('type = Texture2D\n')
+                append_lines.append('filename = Texture/GlowMap.dds\n')
+                append_lines.append('\n')
 
         if append_lines:
             if lines and lines[-1].strip() != '':
@@ -424,10 +512,13 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
             global_resources.add('Resource_NormalMap')
         if self.light_map_path:
             global_resources.add('Resource_LightMap')
-        if self.fx_map_path:
-            global_resources.add('Resource_FXMap')
-        if self.glow_map_path:
-            global_resources.add('Resource_GlowMap')
+        if self._should_use_material_map_resource():
+            global_resources.add('Resource_MaterialMap')
+        if not self._use_zzmi_mode():
+            if self.fx_map_path:
+                global_resources.add('Resource_FXMap')
+            if self.glow_map_path:
+                global_resources.add('Resource_GlowMap')
 
         for ini_file in ini_files:
             try:
@@ -449,8 +540,8 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
                             i += 1
                         if filename_line:
                             file_rel = filename_line.split('=', 1)[1].strip()
-                            if file_rel.startswith('Texture/'):
-                                abs_path = os.path.abspath(os.path.join(os.path.dirname(ini_file), file_rel.replace('/', os.sep)))
+                            if file_rel.startswith('Texture/') or file_rel.startswith('Texture\\'):
+                                abs_path = os.path.abspath(os.path.join(os.path.dirname(ini_file), file_rel.replace('/', os.sep).replace('\\', os.sep)))
                                 if os.path.exists(abs_path):
                                     # 如果这个资源不是用户设置的全局资源，则标记删除
                                     if block_name not in global_resources:
@@ -469,9 +560,19 @@ class SSMTNode_PostProcess_UnifyTexture(SSMTNode_PostProcess_Base):
             (self.diffuse_map_path, "DiffuseMap.dds"),
             (self.normal_map_path, "NormalMap.dds"),
             (self.light_map_path, "LightMap.dds"),
-            (self.fx_map_path, "FXMap.dds"),
-            (self.glow_map_path, "GlowMap.dds"),
+            (self.material_map_path, "MaterialMap.dds"),
         ]
+
+        if self._use_zzmi_mode():
+            if not self.material_map_path:
+                material_source = self._get_material_map_source()
+                if material_source:
+                    mappings.append((material_source, "MaterialMap.dds"))
+        else:
+            mappings.extend([
+                (self.fx_map_path, "FXMap.dds"),
+                (self.glow_map_path, "GlowMap.dds"),
+            ])
 
         for src_path, dest_name in mappings:
             if src_path and os.path.isfile(src_path):

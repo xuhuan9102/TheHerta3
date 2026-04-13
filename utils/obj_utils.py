@@ -645,18 +645,29 @@ class ObjUtils:
                 for vg in obj.vertex_groups:
                     vg.lock_weight = False
 
-            # 进入权重编辑模式（如果需要）
-            bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
-            
-            # 确保该对象是活动的，并且被选中
-            bpy.context.view_layer.objects.active = obj
-            obj.select_set(True)
-            
-            # 对所有顶点组应用 Normalize All
-            bpy.ops.object.vertex_group_normalize_all()
+            try:
+                # 进入权重编辑模式（如果需要）
+                bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+                
+                # 确保该对象是活动的，并且被选中
+                bpy.context.view_layer.objects.active = obj
+                obj.select_set(True)
+                
+                # 对所有顶点组应用 Normalize All
+                bpy.ops.object.vertex_group_normalize_all()
 
-            # 回到物体模式
-            bpy.ops.object.mode_set(mode='OBJECT')
+                # 回到物体模式
+                bpy.ops.object.mode_set(mode='OBJECT')
+            except RuntimeError as e:
+                if "全部组均已锁定" in str(e):
+                    print(f"警告: 对象 {obj.name} 的顶点组权重无法归一化（可能所有权重已为最大值且唯一），跳过。")
+                else:
+                    print(f"归一化失败: {e}")
+                # 确保退出权重模式
+                try:
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                except:
+                    pass
         else:
             print("没有找到合适的网格对象来执行规范化操作。")
 

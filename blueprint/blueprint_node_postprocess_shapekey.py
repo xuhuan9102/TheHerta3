@@ -25,14 +25,19 @@ def clear_name_mapping_cache():
     print("[ShapeKey] 已清除名称映射缓存")
 
 
+def _active_slot_setting_index_update(self, context):
+    if hasattr(self, '_ensure_slot_setting'):
+        self._ensure_slot_setting(self.active_slot_setting_index)
+
+
 # -------------------------------------------------------------------------
-# 属性组：槽位条目和槽位设置
+# 属性组：分组条目和分组设置
 # -------------------------------------------------------------------------
 class SSMT_ShapeKeySlotEntry(bpy.types.PropertyGroup):
-    """槽位条目：一个物体上的一个形态键，归属到指定槽位"""
+    """分组条目：一个物体上的一个形态键，归属到指定分组"""
     slot_index: bpy.props.IntProperty(
-        name="槽位编号",
-        description="该形态键所属的Mod槽位编号（1~N）",
+        name="分组编号",
+        description="该形态键所属的Mod分组编号（1~N）",
         default=1,
         min=1
     )
@@ -47,8 +52,8 @@ class SSMT_ShapeKeySlotEntry(bpy.types.PropertyGroup):
 
 
 class SSMT_SlotSettings(bpy.types.PropertyGroup):
-    """槽位设置：自动播放参数和备注"""
-    slot_index: bpy.props.IntProperty(name="槽位编号", default=1, min=1)
+    """分组设置：自动播放参数和备注"""
+    slot_index: bpy.props.IntProperty(name="分组编号", default=1, min=1)
     
     enable_auto_playback: bpy.props.BoolProperty(
         name="启用自动播放",
@@ -95,29 +100,29 @@ class SSMT_SlotSettings(bpy.types.PropertyGroup):
     )
     remark: bpy.props.StringProperty(
         name="备注",
-        description="该槽位的别名或备注，将写入INI配置文件",
+        description="该分组的别名或备注，将写入INI配置文件",
         default=""
     )
 
 
 class SSMT_OT_ShapeKeySetSlot(bpy.types.Operator):
-    """设置形态键的槽位编号"""
+    """设置形态键的分组编号"""
     bl_idname = "ssmt.shapekey_set_slot"
-    bl_label = "设置槽位"
-    bl_description = "设置该形态键归属的Mod槽位编号"
+    bl_label = "设置分组"
+    bl_description = "设置该形态键归属的Mod分组编号"
     bl_options = {'REGISTER', 'INTERNAL'}
 
     node_name: bpy.props.StringProperty()
     object_name: bpy.props.StringProperty()
     shapekey_name: bpy.props.StringProperty()
-    slot_index: bpy.props.IntProperty(name="槽位编号", min=1, default=1)
+    slot_index: bpy.props.IntProperty(name="分组编号", min=1, default=1)
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "slot_index", text="槽位编号")
+        layout.prop(self, "slot_index", text="分组编号")
 
     def execute(self, context):
         node = self._get_node(context)
@@ -138,7 +143,7 @@ class SSMT_OT_ShapeKeySetSlot(bpy.types.Operator):
             entry.shapekey_name = self.shapekey_name
             entry.slot_index = self.slot_index
 
-        self.report({'INFO'}, f"已设置 {self.object_name} / {self.shapekey_name} 为槽位 {self.slot_index}")
+        self.report({'INFO'}, f"已设置 {self.object_name} / {self.shapekey_name} 为分组 {self.slot_index}")
         return {'FINISHED'}
 
     def _get_node(self, context):
@@ -155,7 +160,7 @@ class SSMT_OT_ShapeKeySetSlot(bpy.types.Operator):
 # 主节点类
 # -------------------------------------------------------------------------
 class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
-    '''形态键配置后处理节点：支持多形态叠加混合的INI配置，可选自动播放动画，支持手动配置Mod槽位'''
+    '''形态键配置后处理节点：支持多形态叠加混合的INI配置，可选自动播放动画，支持手动配置Mod分组'''
     bl_idname = 'SSMTNode_PostProcess_ShapeKey'
     bl_label = '形态键配置'
     bl_description = '读取分类文本或手动配置，生成支持多形态叠加混合的INI配置'
@@ -215,20 +220,16 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         max=1000
     )
 
-    # 槽位设置集合
+    # 分组设置集合
     slot_settings: bpy.props.CollectionProperty(type=SSMT_SlotSettings)
     active_slot_setting_index: bpy.props.IntProperty(
-        name="活动槽位",
-        description="当前编辑的槽位编号",
+        name="活动分组",
+        description="当前编辑的分组编号",
         default=1,
-        min=1
+        min=1,
+        update=_active_slot_setting_index_update
     )
-    export_slot_index: bpy.props.IntProperty(
-        name="导出槽位",
-        description="导出时使用哪个槽位的自动播放参数",
-        default=1,
-        min=1
-    )
+
 
     auto_playback_cycle_mode: bpy.props.EnumProperty(
         name="循环模式",
@@ -241,7 +242,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         default='FORWARD'
     )
 
-    # 手动槽位条目集合（通过 ssmt.shapekey_set_slot 添加）
+    # 手动分组条目集合（通过 ssmt.shapekey_set_slot 添加）
     slot_entries: bpy.props.CollectionProperty(type=SSMT_ShapeKeySlotEntry)
 
     def apply_name_mapping(self, mapping):
@@ -274,6 +275,36 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         if len(self.slot_settings) == 0:
             default = self.slot_settings.add()
             default.slot_index = 1
+
+    def _find_slot_setting(self, slot_index):
+        for s in self.slot_settings:
+            if s.slot_index == slot_index:
+                return s
+        return None
+
+    def _ensure_slot_setting(self, slot_index):
+        setting = self._find_slot_setting(slot_index)
+        if setting is None:
+            setting = self.slot_settings.add()
+            setting.slot_index = slot_index
+        return setting
+
+    def _build_playback_group_map(self, slot_to_name_to_objects):
+        entry_map = {(entry.object_name, entry.shapekey_name): entry.slot_index for entry in self.slot_entries}
+        normalized_entry_map = {
+            (entry.object_name, entry.shapekey_name.strip().lower()): entry.slot_index
+            for entry in self.slot_entries
+        }
+        object_slot_group_map = {}
+        for slot, name_data in slot_to_name_to_objects.items():
+            for sk_name, objs in name_data.items():
+                norm_sk_name = sk_name.strip().lower()
+                for obj_name in objs:
+                    group = entry_map.get((obj_name, sk_name))
+                    if group is None:
+                        group = normalized_entry_map.get((obj_name, norm_sk_name), 1)
+                    object_slot_group_map[(obj_name, slot)] = group
+        return object_slot_group_map
 
     # -------------------------------------------------------------------------
     # 从上游形态键控制器读取预览数据
@@ -362,36 +393,26 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         
         layout.separator()
         main_box = layout.box()
-        main_box.label(text="槽位设置", icon='PREFERENCES')
+        main_box.label(text="分组设置", icon='PREFERENCES')
         
-        if len(self.slot_settings) == 0:
-            main_box.label(text="提示：暂无槽位设置，请重新加载节点或使用默认值", icon='INFO')
-        else:
-            row = main_box.row(align=True)
-            row.prop(self, "active_slot_setting_index", text="编辑槽位")
-            row = main_box.row(align=True)
-            row.prop(self, "export_slot_index", text="导出槽位")
-            
-            current_setting = None
-            for s in self.slot_settings:
-                if s.slot_index == self.active_slot_setting_index:
-                    current_setting = s
-                    break
-            if current_setting is None:
-                main_box.label(text=f"错误：槽位 {self.active_slot_setting_index} 无设置", icon='ERROR')
-            else:
-                main_box.prop(current_setting, "enable_auto_playback")
-                if current_setting.enable_auto_playback:
-                    row = main_box.row()
-                    row.prop(current_setting, "auto_playback_frame_count")
-                    row.prop(current_setting, "auto_playback_step_frames")
-                    main_box.prop(current_setting, "auto_playback_cycle_mode", text="循环模式")
-                    row = main_box.row()
-                    row.prop(current_setting, "auto_playback_speed_min", text="速度范围最小")
-                    row.prop(current_setting, "auto_playback_speed_max", text="最大")
-                
-                main_box.separator()
-                main_box.prop(current_setting, "remark", text="槽位别名备注")
+        row = main_box.row(align=True)
+        row.prop(self, "active_slot_setting_index", text="编辑分组")
+
+        
+        current_setting = self._ensure_slot_setting(self.active_slot_setting_index)
+        main_box.label(text=f"当前分组: {current_setting.slot_index}")
+        main_box.prop(current_setting, "enable_auto_playback")
+        if current_setting.enable_auto_playback:
+            row = main_box.row()
+            row.prop(current_setting, "auto_playback_frame_count")
+            row.prop(current_setting, "auto_playback_step_frames")
+            main_box.prop(current_setting, "auto_playback_cycle_mode", text="循环模式")
+            row = main_box.row()
+            row.prop(current_setting, "auto_playback_speed_min", text="速度范围最小")
+            row.prop(current_setting, "auto_playback_speed_max", text="最大")
+
+        main_box.separator()
+        main_box.prop(current_setting, "remark", text="分组别名备注")
 
         layout.separator()
         box = layout.box()
@@ -424,7 +445,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                             break
                     row_item = subcol.row(align=True)
                     row_item.label(text=f"   ↳ {sk_name}", icon='SHAPEKEY_DATA')
-                    op = row_item.operator("ssmt.shapekey_set_slot", text=f"槽位 {slot_value}")
+                    op = row_item.operator("ssmt.shapekey_set_slot", text=f"分组 {slot_value}")
                     op.node_name = self.name
                     op.object_name = obj_name
                     op.shapekey_name = sk_name
@@ -441,18 +462,18 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
     # -------------------------------------------------------------------------
     def _build_slot_data(self):
         """返回 (slot_to_name_to_objects, unique_hashes, hash_to_objects, all_objects)
-        优先使用手动配置的 slot_entries，如果为空则使用自动检测（控制器或分类文本）。
+        优先使用自动检测（控制器或分类文本），仅在自动检测失败时退回到手动配置的 slot_entries。
+        手动配置仅用于后续播放分组映射，不会改变前端形态键生成的槽位结构。
         """
+        controller_data = self._get_shapekey_data_from_controller()
+        if controller_data:
+            return controller_data
+        classification_text_obj = next((t for t in bpy.data.texts if "Shape_Key_Classification" in t.name), None)
+        if classification_text_obj:
+            return self._parse_classification_text_final(classification_text_obj.as_string())
         if self.slot_entries:
             return self._build_slot_data_from_manual()
-        else:
-            controller_data = self._get_shapekey_data_from_controller()
-            if controller_data:
-                return controller_data
-            classification_text_obj = next((t for t in bpy.data.texts if "Shape_Key_Classification" in t.name), None)
-            if classification_text_obj:
-                return self._parse_classification_text_final(classification_text_obj.as_string())
-            return (OrderedDict(), [], OrderedDict(), [])
+        return (OrderedDict(), [], OrderedDict(), [])
 
     def _build_slot_data_from_manual(self):
         slot_to_name_to_objects = OrderedDict()
@@ -591,7 +612,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         for line in text_content.splitlines():
             line = line.strip()
             if not line or line.startswith('#'): continue
-            slot_match = re.search(r'槽位\s*(\d+):', line)
+            slot_match = re.search(r'分组\s*(\d+):', line)
             if slot_match:
                 current_slot = int(slot_match.group(1))
                 if current_slot not in slot_to_name_to_objects: slot_to_name_to_objects[current_slot] = OrderedDict()
@@ -716,7 +737,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                 else:
                     print(f"    [WARNING] 找不到形态键文件，pattern: {pattern}")
             output_dir = os.path.join(mod_export_path, folder_name)
-            print(f"  处理槽位 {slot} (哈希: {h}, 实际文件哈希: {actual_hash}, 前缀: {h_prefix})...")
+            print(f"  处理分组 {slot} (哈希: {h}, 实际文件哈希: {actual_hash}, 前缀: {h_prefix})...")
             if not all(os.path.exists(p) for p in [base_path, shapekey_path]):
                 print(f"    -> 跳过：找不到基础或形态键文件 for hash {h}, slot {slot}")
                 print(f"       基础路径: {base_path} (存在: {os.path.exists(base_path)})")
@@ -838,33 +859,52 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             print(f"写入INI文件失败: {e}")
 
     def _get_vertex_attrs_node(self):
-        if not self.inputs[0].is_linked:
-            return None
-        source_node = self.inputs[0].links[0].from_node
-        if source_node.bl_idname == 'SSMTNode_PostProcess_VertexAttrs':
-            return source_node
-        if source_node.inputs[0].is_linked:
-            prev_node = source_node.inputs[0].links[0].from_node
-            if prev_node.bl_idname == 'SSMTNode_PostProcess_VertexAttrs':
-                return prev_node
+        """在所有输入插槽中查找顶点属性定义节点，支持穿透中间后处理节点"""
+        for socket in self.inputs:
+            if not socket.is_linked:
+                continue
+            node = socket.links[0].from_node
+            # 直接命中
+            if node.bl_idname == 'SSMTNode_PostProcess_VertexAttrs':
+                return node
+            # 如果中间有其他后处理节点，检查其第一个输入
+            if hasattr(node, 'inputs') and node.inputs:
+                first_input = node.inputs[0]
+                if first_input.is_linked:
+                    upstream = first_input.links[0].from_node
+                    if upstream.bl_idname == 'SSMTNode_PostProcess_VertexAttrs':
+                        return upstream
         return None
 
     def _get_vertex_struct_definition_for_object(self, vertex_attrs_node, obj_name):
-        """根据物体名称获取顶点结构体定义（优先使用物体独立配置）"""
+        """根据物体名称获取顶点结构体定义（优先使用物体独立配置，基于哈希值匹配）"""
+        # 默认结构体定义（40字节）
+        DEFAULT_STRUCT = "struct VertexAttributes {\n    float3 position;\n    float3 normal;\n    float4 tangent;\n};"
+        
         if not vertex_attrs_node:
-            return "struct VertexAttributes {\n    float3 position;\n    float3 normal;\n    float4 tangent;\n};"
+            return DEFAULT_STRUCT
         
-        # 尝试从 objects_config 中查找
+        # 提取当前物体的哈希值
+        obj_hash = self._extract_hash_from_name(obj_name)
+        
+        # 遍历独立配置列表，通过哈希值匹配
         for cfg in vertex_attrs_node.objects_config:
-            if cfg.object_name == obj_name and cfg.vertex_attributes and len(cfg.vertex_attributes) > 0:
-                struct_lines = ["struct VertexAttributes {"]
-                for item in cfg.vertex_attributes:
-                    if item.attr_type and item.attr_name:
-                        struct_lines.append(f"    {item.attr_type} {item.attr_name};")
-                struct_lines.append("};")
-                return "\n".join(struct_lines)
+            cfg_hash = self._extract_hash_from_name(cfg.object_name)
+            if obj_hash and cfg_hash and obj_hash == cfg_hash:
+                if cfg.vertex_attributes and len(cfg.vertex_attributes) > 0:
+                    struct_lines = ["struct VertexAttributes {"]
+                    for item in cfg.vertex_attributes:
+                        if item.attr_type and item.attr_name:
+                            struct_lines.append(f"    {item.attr_type} {item.attr_name};")
+                    struct_lines.append("};")
+                    print(f"[ShapeKey] 为物体 '{obj_name}' 使用独立顶点配置 (哈希: {obj_hash})")
+                    return "\n".join(struct_lines)
+                else:
+                    print(f"[ShapeKey] 物体 '{obj_name}' 的独立配置为空，回退到全局定义")
+                    break
         
-        # 回退到全局配置
+        # 没有独立配置或配置无效，回退到全局属性定义
+        print(f"[ShapeKey] 物体 '{obj_name}' 未找到独立顶点配置，使用全局定义")
         return vertex_attrs_node.get_vertex_struct_definition()
 
     def _get_shader_template_name(self):
@@ -899,7 +939,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             return vertex_attrs_node.get_vertex_struct_definition()
         return "struct VertexAttributes {\n    float3 position;\n    float3 normal;\n    float4 tangent;\n};"
 
-    def _update_shader_file(self, shader_path, hash_slot_data, use_packed, use_delta, slot_list, hash_unique_objects, use_optimized=False, vertex_struct=None):
+    def _update_shader_file(self, shader_path, hash_slot_data, use_packed, use_delta, slot_list, hash_unique_objects, use_optimized=False, vertex_struct=None, object_slot_group_map=None):
         try:
             with open(shader_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -908,12 +948,33 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             if vertex_struct:
                 content = re.sub(r"struct VertexAttributes\s*\{[^}]*\};", vertex_struct, content, flags=re.DOTALL)
             
-            slot_to_freq_def = {slot: f"FREQ{i+1}" for i, slot in enumerate(slot_list)}
+            if object_slot_group_map is None:
+                object_slot_group_map = {}
+
+            group_list = []
+            for slot, objs in hash_slot_data.items():
+                for obj in objs:
+                    group_list.append(object_slot_group_map.get((obj, slot), slot))
+            group_list = sorted(OrderedDict.fromkeys(group_list))
+            if not group_list:
+                group_list = slot_list
+
+            group_to_freq_macro = {group: f"FREQ{i+1}" for i, group in enumerate(group_list)}
+            slot_to_freq_def = {}
+            for slot, objs in hash_slot_data.items():
+                groups = sorted({object_slot_group_map.get((obj, slot), slot) for obj in objs})
+                if len(groups) == 1:
+                    slot_to_freq_def[slot] = group_to_freq_macro[groups[0]]
+                else:
+                    slot_to_freq_def[slot] = group_to_freq_macro[groups[0]]
+                    if not use_optimized:
+                        print(f"[ShapeKey] 警告：槽 {slot} 在同一哈希内存在多个播放组，仅在优化查找模式下才能准确支持。")
+
             obj_to_range_defs = {obj: (f"START{i+1}", f"END{i+1}") for i, obj in enumerate(hash_unique_objects)}
             
-            define_lines = [f"// --- Shared Animation Intensity (per Slot) ---\n// From index {self.INTENSITY_START_INDEX} onwards"]
-            for i, slot in enumerate(slot_list):
-                define_lines.append(f"#define FREQ{i+1} IniParams[{self.INTENSITY_START_INDEX + i}].x // Slot {slot}")
+            define_lines = [f"// --- Shared Animation Intensity (per Playback Group) ---\n// From index {self.INTENSITY_START_INDEX} onwards"]
+            for i, group in enumerate(group_list):
+                define_lines.append(f"#define {group_to_freq_macro[group]} IniParams[{self.INTENSITY_START_INDEX + i}].x // Group {group}")
             if not use_optimized:
                 define_lines.extend([f"\n// --- Per-Object Vertex Ranges ---\n// From index {self.VERTEX_RANGE_START_INDEX} onwards"])
                 for i, obj_name in enumerate(hash_unique_objects):
@@ -974,7 +1035,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             with open(shader_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             mode_str = f"紧凑:{'是' if use_packed else '否'}, 增量(仅位置):{'是' if use_delta else '否'}, 优化查找:{'是' if use_optimized else '否'}"
-            print(f"成功更新着色器 ({mode_str})，支持 {len(slot_list)} 个槽位。")
+            print(f"成功更新着色器 ({mode_str})，支持 {len(group_list)} 个播放组。")
             return True
         except Exception as e:
             print(f"更新着色器文件失败: {e}")
@@ -982,20 +1043,30 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             traceback.print_exc()
             return False
 
-    def _generate_vertex_freq_index_buffers(self, mod_export_path, hash_val, hash_slot_data, slot_list, vertex_count, calculated_ranges):
+    def _generate_vertex_freq_index_buffers(self, mod_export_path, hash_val, hash_slot_data, slot_list, vertex_count, calculated_ranges, object_slot_group_map=None):
         if not NUMPY_AVAILABLE:
             print("Numpy库未找到，无法生成FREQ索引缓冲区")
             return False
+        if object_slot_group_map is None:
+            object_slot_group_map = {}
+
         slot_to_index = {slot: i for i, slot in enumerate(slot_list)}
-        print(f"    [DEBUG] 槽位到FREQ索引映射: {slot_to_index}")
+        group_list = []
+        for slot, objects in hash_slot_data.items():
+            for obj_name in objects:
+                group_list.append(object_slot_group_map.get((obj_name, slot), slot))
+        group_list = sorted(OrderedDict.fromkeys(group_list))
+        group_to_index = {group: i for i, group in enumerate(group_list)}
+
+        print(f"    [DEBUG] 分组到FREQ索引映射: {slot_to_index}")
+        print(f"    [DEBUG] 播放组到索引映射: {group_to_index}")
         print(f"    [DEBUG] calculated_ranges 键: {list(calculated_ranges.keys())}")
         num_slots = len(slot_list)
         freq_indices = np.full(vertex_count * num_slots, 255, dtype=np.uint32)
         for slot, objects in hash_slot_data.items():
             if slot not in slot_to_index:
                 continue
-            freq_idx = slot_to_index[slot]
-            slot_index = freq_idx
+            slot_index = slot_to_index[slot]
             slot_map_files = {}
             for obj_name in objects:
                 obj_hash = self._extract_hash_from_name(obj_name)
@@ -1032,7 +1103,9 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                     continue
                 start_v = max(0, min(start_v, vertex_count - 1))
                 end_v = max(0, min(end_v, vertex_count - 1))
-                print(f"        [DEBUG] 物体 '{obj_name}' 设置顶点 {start_v}-{end_v} 为 FREQ索引 {freq_idx}")
+                group = object_slot_group_map.get((obj_name, slot), slot)
+                freq_idx = group_to_index.get(group, 0)
+                print(f"        [DEBUG] 物体 '{obj_name}' 设置顶点 {start_v}-{end_v} 为 播放组索引 {freq_idx} (组 {group})")
                 index_map = slot_map_files.get(obj_hash)
                 if index_map is not None:
                     for v in range(start_v, end_v + 1):
@@ -1049,101 +1122,9 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         output_path = os.path.join(output_dir, f"{hash_val}-Position_freq_indices.buf")
         with open(output_path, 'wb') as f:
             f.write(freq_indices.tobytes())
-        print(f"    生成FREQ索引缓冲区: {os.path.basename(output_path)} (顶点数: {vertex_count}, 槽位数: {num_slots})")
+        print(f"    生成FREQ索引缓冲区: {os.path.basename(output_path)} (顶点数: {vertex_count}, 分组数: {num_slots})")
         return num_slots
 
-    def _add_auto_playback_logic(self, sections, slot_to_var):
-        if not self.enable_auto_playback:
-            return
-        if '[Constants]' not in sections:
-            sections['[Constants]'] = []
-        const_lines = sections['[Constants]']
-        const_content = "\n".join(const_lines)
-
-        frame_count = self.auto_playback_frame_count
-        step = self.auto_playback_step_frames
-        mode = self.auto_playback_cycle_mode
-        speed_min = self.auto_playback_speed_min
-        speed_max = self.auto_playback_speed_max
-
-        auto_vars = [
-            "global $auto_play_enabled = 1",
-            "global $auxTime = 0",
-            "global $shapekey_frame = 0",
-            f"global $frameEnd_min = {speed_min}",
-            f"global $frameEnd_max = {speed_max}",
-            f"global $frameEnd = {frame_count}",
-        ]
-        if mode == 'PINGPONG':
-            auto_vars.append("global $pingpong_dir = 1")
-
-        for var_line in auto_vars:
-            if var_line.split('=')[0].strip() not in const_content:
-                const_lines.append(var_line)
-
-        playback_code = []
-        playback_code.append("; ========== AUTO PLAYBACK (generated by ShapeKey node) ==========")
-        playback_code.append("if ($auto_play_enabled == 1)")
-        playback_code.append("    $auxTime = $auxTime + 1")
-        playback_code.append(f"    if ($auxTime % {step} == 0)")
-
-        if mode == 'FORWARD':
-            playback_code.extend([
-                "        if ($shapekey_frame < $frameEnd)",
-                "            $shapekey_frame = $shapekey_frame + 1",
-                "        else",
-                "            $shapekey_frame = 0",
-                "        endif"
-            ])
-        elif mode == 'REVERSE':
-            playback_code.extend([
-                "        if ($shapekey_frame < $frameEnd)",
-                "            $shapekey_frame = $shapekey_frame + 1",
-                "        else",
-                "            $shapekey_frame = 0",
-                "        endif"
-            ])
-        else:
-            playback_code.extend([
-                "        $shapekey_frame = $shapekey_frame + $pingpong_dir",
-                "        if ($shapekey_frame >= $frameEnd)",
-                "            $shapekey_frame = $frameEnd",
-                "            $pingpong_dir = -1",
-                "        endif",
-                "        if ($shapekey_frame <= 0)",
-                "            $shapekey_frame = 0",
-                "            $pingpong_dir = 1",
-                "        endif"
-            ])
-
-        playback_code.append("    endif")
-        playback_code.append("")
-        for slot, var_name in slot_to_var.items():
-            if mode == 'FORWARD':
-                expr = f"$shapekey_frame / $frameEnd"
-            elif mode == 'REVERSE':
-                expr = f"($frameEnd - $shapekey_frame) / $frameEnd"
-            else:
-                expr = f"$shapekey_frame / $frameEnd"
-            playback_code.append(f"    {var_name} = {expr}")
-        playback_code.append("endif")
-        playback_code.append("; ========== END AUTO PLAYBACK ==========")
-
-        if '[Present]' not in sections:
-            sections['[Present]'] = []
-        present_lines = sections['[Present]']
-        insert_pos = 0
-        for i, line in enumerate(present_lines):
-            stripped = line.strip()
-            if stripped and not stripped.startswith(';'):
-                insert_pos = i
-                break
-            else:
-                insert_pos = i + 1
-        for code_line in reversed(playback_code):
-            present_lines.insert(insert_pos, code_line)
-
-        print(f"[ShapeKey] 已添加自动播放逻辑 (模式={mode}, 基础帧数={frame_count}, 速度范围={speed_min}-{speed_max})")
 
     def _find_source_object_info_node(self, node):
         if node is None:
@@ -1209,30 +1190,26 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             print("[ShapeKey] 未找到任何原始物体")
             return None
 
-        sk_to_objects = {}
+        slot_to_name_to_objects = OrderedDict()
         for obj in original_objects:
-            if not obj.data or not obj.data.shape_keys:
+            if obj.type != 'MESH' or not obj.data.shape_keys:
                 continue
             ref = obj.data.shape_keys.reference_key
-            for kb in obj.data.shape_keys.key_blocks:
-                if kb == ref:
-                    continue
+            keys = [kb for kb in obj.data.shape_keys.key_blocks if kb != ref]
+            for idx, kb in enumerate(keys):
+                slot = idx + 1          # slot 编号从 1 开始
                 sk_name = kb.name
                 obj_name = obj.name
-                if sk_name not in sk_to_objects:
-                    sk_to_objects[sk_name] = []
-                if obj_name not in sk_to_objects[sk_name]:
-                    sk_to_objects[sk_name].append(obj_name)
 
-        if not sk_to_objects:
-            print("[ShapeKey] 原始物体没有形态键变体")
-            return None
+                if slot not in slot_to_name_to_objects:
+                    slot_to_name_to_objects[slot] = OrderedDict()
+                if sk_name not in slot_to_name_to_objects[slot]:
+                    slot_to_name_to_objects[slot][sk_name] = []
+                if obj_name not in slot_to_name_to_objects[slot][sk_name]:
+                    slot_to_name_to_objects[slot][sk_name].append(obj_name)
 
-        slot_to_name_to_objects = OrderedDict()
-        slot_index = 1
-        for sk_name, obj_list in sk_to_objects.items():
-            slot_to_name_to_objects[slot_index] = {sk_name: obj_list}
-            slot_index += 1
+        # 按 slot 编号排序，确保顺序
+        slot_to_name_to_objects = OrderedDict(sorted(slot_to_name_to_objects.items()))
 
         all_objects = [obj.name for obj in original_objects]
         hash_to_objects = OrderedDict()
@@ -1253,6 +1230,7 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
         print(f"形态键配置后处理节点开始执行，Mod导出路径: {mod_export_path}")
 
         slot_to_name_to_objects, unique_hashes, hash_to_objects, all_objects = self._build_slot_data()
+        playback_group_map = self._build_playback_group_map(slot_to_name_to_objects)
 
         if not slot_to_name_to_objects:
             print("未找到形态键数据（自动检测和手动配置均为空），跳过后处理")
@@ -1291,15 +1269,20 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             # 注意：不再调用 vertex_attrs_node._sync_objects_config()
             # 避免修改用户的顶点属性配置
 
-            # 构建每个哈希对应的顶点结构体定义（基于该哈希下的代表物体）
+            # 构建对象级别的顶点结构体定义，并为每个哈希选择一个代表定义
             hash_to_struct_def = {}
+            obj_to_struct_def = {}
+            for h, obj_names in hash_to_objects.items():
+                for obj_name in obj_names:
+                    struct_def = self._get_vertex_struct_definition_for_object(vertex_attrs_node, obj_name)
+                    obj_to_struct_def[obj_name] = struct_def
+                    if h not in hash_to_struct_def:
+                        hash_to_struct_def[h] = struct_def
+                    elif hash_to_struct_def[h] != struct_def:
+                        print(f"[ShapeKey] 注意: hash {h} 下物体 {obj_name} 的顶点属性定义与已有定义不同，保留第一种定义。")
+
             for h in unique_hashes:
-                sample_objs = hash_to_objects.get(h, [])
-                if sample_objs:
-                    sample_obj_name = sample_objs[0]
-                    struct_def = self._get_vertex_struct_definition_for_object(vertex_attrs_node, sample_obj_name)
-                    hash_to_struct_def[h] = struct_def
-                else:
+                if h not in hash_to_struct_def:
                     if vertex_attrs_node:
                         hash_to_struct_def[h] = vertex_attrs_node.get_vertex_struct_definition()
                     else:
@@ -1418,10 +1401,10 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                     hash_prefix = self._extract_hash_prefix(hash_val)
                     vertex_count = vertex_counts.get(hash_prefix, 10000)
                     actual_file_hash = hash_to_actual_file_hash.get(hash_val, hash_val)
-                    self._generate_vertex_freq_index_buffers(mod_export_path, actual_file_hash, hash_slot_objects, slot_list, vertex_count, calculated_ranges)
+                    self._generate_vertex_freq_index_buffers(mod_export_path, actual_file_hash, hash_slot_objects, slot_list, vertex_count, calculated_ranges, playback_group_map)
 
                 struct_def = hash_to_struct_def.get(hash_val)
-                if not self._update_shader_file(hash_to_shader_paths[hash_val], hash_slot_objects, use_packed, use_delta, slot_list, hash_unique_objects, use_optimized, struct_def):
+                if not self._update_shader_file(hash_to_shader_paths[hash_val], hash_slot_objects, use_packed, use_delta, slot_list, hash_unique_objects, use_optimized, struct_def, playback_group_map):
                     print(f"更新哈希 {hash_val} 的着色器文件失败")
 
             if '[Constants]' not in sections:
@@ -1431,15 +1414,16 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             vars_to_define = set()
 
             existing_param_names = set()
-            slot_to_var = {}
-            for slot in all_slots:
-                var_name = self._create_safe_var_name(f"slot{slot}", prefix="$Freq_", existing_names=existing_param_names)
-                slot_to_var[slot] = var_name
+            group_to_var = {}
+            all_groups = sorted(set(playback_group_map.values())) if playback_group_map else sorted(set(all_slots))
+            for group in all_groups:
+                var_name = self._create_safe_var_name(f"group{group}", prefix="$Freq_", existing_names=existing_param_names)
+                group_to_var[group] = var_name
 
-            constants_lines.append("\n; --- Auto-generated Shape Key Intensity Controls (per Slot) ---")
-            for slot, var_name in slot_to_var.items():
+            constants_lines.append("\n; --- Auto-generated Shape Key Intensity Controls (per Playback Group) ---")
+            for group, var_name in group_to_var.items():
                 if var_name not in constants_content:
-                    constants_lines.append(f"; 控制槽位 {slot} 的形态键强度")
+                    constants_lines.append(f"; 控制分组 {group} 的形态键强度")
                     constants_lines.append(f"global persist {var_name} = 0.0")
 
             constants_lines.append("\n; --- Auto-generated Vertex Ranges for Shape Keys ---")
@@ -1481,37 +1465,24 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
             if 'if $active0 == 1' not in present_content:
                 present_lines.extend(['if $active0 == 1', *[f"    run = CustomShader_{h}_Anim" for h in unique_hashes], 'endif'])
 
-            export_setting = None
-            for s in self.slot_settings:
-                if s.slot_index == self.export_slot_index:
-                    export_setting = s
-                    break
-            if export_setting is None and len(self.slot_settings) > 0:
-                export_setting = self.slot_settings[0]
-
-            if export_setting and export_setting.enable_auto_playback:
-                old_enable = self.enable_auto_playback
-                old_frame = self.auto_playback_frame_count
-                old_step = self.auto_playback_step_frames
-                old_mode = self.auto_playback_cycle_mode
-                old_min = self.auto_playback_speed_min
-                old_max = self.auto_playback_speed_max
-
-                self.enable_auto_playback = export_setting.enable_auto_playback
-                self.auto_playback_frame_count = export_setting.auto_playback_frame_count
-                self.auto_playback_step_frames = export_setting.auto_playback_step_frames
-                self.auto_playback_cycle_mode = export_setting.auto_playback_cycle_mode
-                self.auto_playback_speed_min = export_setting.auto_playback_speed_min
-                self.auto_playback_speed_max = export_setting.auto_playback_speed_max
-
-                self._add_auto_playback_logic(sections, slot_to_var)
-
-                self.enable_auto_playback = old_enable
-                self.auto_playback_frame_count = old_frame
-                self.auto_playback_step_frames = old_step
-                self.auto_playback_cycle_mode = old_mode
-                self.auto_playback_speed_min = old_min
-                self.auto_playback_speed_max = old_max
+            # 为每个启用了自动播放的分组生成独立的自动播放逻辑
+            for setting in self.slot_settings:
+                if setting.enable_auto_playback:
+                    group_id = setting.slot_index
+                    # 获取该分组对应的强度变量名
+                    var_name = group_to_var.get(group_id)
+                    if var_name is None:
+                        continue
+                    self._add_auto_playback_logic_for_group(
+                        sections, 
+                        group_id, 
+                        var_name,
+                        setting.auto_playback_frame_count,
+                        setting.auto_playback_step_frames,
+                        setting.auto_playback_cycle_mode,
+                        setting.auto_playback_speed_min,
+                        setting.auto_playback_speed_max
+                    )
 
             hash_to_slots = {
                 h: sorted([s for s, nd in slot_to_name_to_objects.items() if any(h in o for n in nd for o in nd[n])])
@@ -1538,10 +1509,14 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
                     slot_list = sorted(hash_slot_objects.keys())
                     hash_unique_objects = list(OrderedDict.fromkeys(obj for slot, objs in hash_slot_objects.items() for obj in objs))
 
-                    block_lines = ["\n    ; --- Shared Intensity Controls (per Slot) ---"]
-                    for i, slot in enumerate(slot_list):
-                        var_name = slot_to_var.get(slot, f"$Freq_unknown_{slot}")
-                        block_lines.append(f"    x{self.INTENSITY_START_INDEX + i} = {var_name} \n; Slot {slot}")
+                    hash_groups = sorted({playback_group_map.get((obj, slot), slot) for slot, objs in hash_slot_objects.items() for obj in objs})
+                    if not hash_groups:
+                        hash_groups = slot_list
+
+                    block_lines = ["\n    ; --- Shared Intensity Controls (per Playback Group) ---"]
+                    for i, group in enumerate(hash_groups):
+                        var_name = group_to_var.get(group, f"$Freq_unknown_{group}")
+                        block_lines.append(f"    x{self.INTENSITY_START_INDEX + i} = {var_name} \n; Group {group}")
                     block_lines.append("\n    ; --- Per-Object Vertex Range Controls ---")
                     for i, obj_name in enumerate(hash_unique_objects):
                         if obj_name in calculated_ranges and calculated_ranges[obj_name][0] is not None:
@@ -1673,7 +1648,107 @@ class SSMTNode_PostProcess_ShapeKey(SSMTNode_PostProcess_Base):
 
         print("形态键配置后处理节点执行完成")
 
+    def _add_auto_playback_logic_for_group(self, sections, group_id, intensity_var, frame_count, step_frames, cycle_mode, speed_min, speed_max):
+        """为指定分组生成独立的自动播放逻辑"""
+        if '[Constants]' not in sections:
+            sections['[Constants]'] = []
+        const_lines = sections['[Constants]']
+        const_content = "\n".join(const_lines)
 
+        # 为每个分组生成唯一的变量名前缀
+        prefix = f"group{group_id}"
+        auto_enabled_var = f"$auto_play_enabled_{prefix}"
+        aux_time_var = f"$auxTime_{prefix}"
+        frame_var = f"$shapekey_frame_{prefix}"
+        frame_end_var = f"$frameEnd_{prefix}"
+        frame_end_min_var = f"$frameEnd_min_{prefix}"
+        frame_end_max_var = f"$frameEnd_max_{prefix}"
+        pingpong_dir_var = f"$pingpong_dir_{prefix}" if cycle_mode == 'PINGPONG' else None
+
+        # 添加常量定义（如果不存在）
+        auto_vars = [
+            f"global persist {auto_enabled_var} = 1",          # 自动播放开关 — 需保存
+            f"global {aux_time_var} = 0",                      # 内部计时器 — 不需保存
+            f"global {frame_var} = 0",                         # 内部帧计数器 — 不需保存
+            f"global persist {frame_end_min_var} = {speed_min}", # 速度范围 — 需保存
+            f"global persist {frame_end_max_var} = {speed_max}", # 速度范围 — 需保存
+            f"global persist {frame_end_var} = {frame_count}",   # 当前帧数上限 — 需保存
+        ]
+        if cycle_mode == 'PINGPONG':
+            auto_vars.append(f"global {pingpong_dir_var} = 1")  # 内部方向标记 — 不需保存
+
+        for var_line in auto_vars:
+            if var_line.split('=')[0].strip() not in const_content:
+                const_lines.append(var_line)
+
+        # 生成 Present 中的逻辑代码
+        playback_code = []
+        playback_code.append(f"; ========== AUTO PLAYBACK FOR GROUP {group_id} ==========")
+        playback_code.append(f"if ({auto_enabled_var} == 1)")
+        playback_code.append(f"    {aux_time_var} = {aux_time_var} + 1")
+        playback_code.append(f"    if ({aux_time_var} % {step_frames} == 0)")
+
+        if cycle_mode == 'FORWARD':
+            playback_code.extend([
+                f"        if ({frame_var} < {frame_end_var})",
+                f"            {frame_var} = {frame_var} + 1",
+                f"        else",
+                f"            {frame_var} = 0",
+                f"        endif"
+            ])
+        elif cycle_mode == 'REVERSE':
+            playback_code.extend([
+                f"        if ({frame_var} < {frame_end_var})",
+                f"            {frame_var} = {frame_var} + 1",
+                f"        else",
+                f"            {frame_var} = 0",
+                f"        endif"
+            ])
+        else:  # PINGPONG
+            playback_code.extend([
+                f"        {frame_var} = {frame_var} + {pingpong_dir_var}",
+                f"        if ({frame_var} >= {frame_end_var})",
+                f"            {frame_var} = {frame_end_var}",
+                f"            {pingpong_dir_var} = -1",
+                f"        endif",
+                f"        if ({frame_var} <= 0)",
+                f"            {frame_var} = 0",
+                f"            {pingpong_dir_var} = 1",
+                f"        endif"
+            ])
+
+        playback_code.append("    endif")
+        playback_code.append("")
+
+        # 计算强度值并赋给该分组的强度变量
+        if cycle_mode == 'FORWARD':
+            expr = f"{frame_var} / {frame_end_var}"
+        elif cycle_mode == 'REVERSE':
+            expr = f"({frame_end_var} - {frame_var}) / {frame_end_var}"
+        else:
+            expr = f"{frame_var} / {frame_end_var}"
+        playback_code.append(f"    {intensity_var} = {expr}")
+
+        playback_code.append("endif")
+        playback_code.append(f"; ========== END AUTO PLAYBACK GROUP {group_id} ==========")
+
+        # 插入到 [Present] 开头
+        if '[Present]' not in sections:
+            sections['[Present]'] = []
+        present_lines = sections['[Present]']
+        insert_pos = 0
+        for i, line in enumerate(present_lines):
+            stripped = line.strip()
+            if stripped and not stripped.startswith(';'):
+                insert_pos = i
+                break
+            else:
+                insert_pos = i + 1
+        for code_line in reversed(playback_code):
+            present_lines.insert(insert_pos, code_line)
+
+        print(f"[ShapeKey] 已为分组 {group_id} 添加独立自动播放逻辑 (模式={cycle_mode}, 帧数={frame_count}, 速度范围={speed_min}-{speed_max})")
+        
 # =============================================================================
 # 注册所有类
 # =============================================================================

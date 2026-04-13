@@ -433,7 +433,6 @@ class SSMT_MT_NodeMenu_ShapeKey(bpy.types.Menu):
         
         layout = self.layout
         layout.operator("node.add_node", text="形态键控制器", icon='SHAPEKEY_DATA').type = "SSMTNode_ShapeKeyController"
-        layout.operator("node.add_node", text="形态键自动播放", icon='SHAPEKEY_DATA').type = "SSMTNode_PostProcess_ShapeKeyAnimControl"
 
 class SSMT_OT_AddCommonKeySwitches(bpy.types.Operator):
     '''Add 9 Toggle Key nodes (CTRL 1-9), group them and connect to Output'''

@@ -219,7 +219,13 @@ class SSMTNode_Object_Info(SSMTNodeBase):
                 if len(obj_name_split) >= 3:
                     self.draw_ib = obj_name_split[0]
                     self.index_count = obj_name_split[1]
-                    self.first_index = obj_name_split[2]
+                    first_index_raw = obj_name_split[2]
+                    # 检查 first_index 是否为数字
+                    if first_index_raw.isdigit():
+                        self.first_index = first_index_raw
+                    else:
+                        print(f"[Warning] 物体 '{self.object_name}' 的 FirstIndex 字段 '{first_index_raw}' 不是数字，已自动设为 0。建议将别名放在点号之后，例如 '...-0.别名'")
+                        self.first_index = "0"
                     self.component = obj_name_split[1]
                     self.prefix = obj_name_total_split[0]
                 

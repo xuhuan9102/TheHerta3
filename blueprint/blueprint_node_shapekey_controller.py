@@ -21,7 +21,6 @@ class SSMTNode_ShapeKeyController(SSMTNodeBase):
     def init(self, context):
         self.inputs.new('SSMTSocketObject', "Input 1")
         self.outputs.new('SSMTSocketObject', "Output")
-        self.outputs.new('SSMTSocketObject', "顶点属性定义")
         self.outputs.new('SSMTSocketObject', "形态键配置")
         self.width = 300
 

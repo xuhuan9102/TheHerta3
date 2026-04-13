@@ -477,7 +477,13 @@ class SSMTNode_MultiFile_Export(SSMTNodeBase):
             if len(non_empty_parts) >= 2:
                 item.index_count = non_empty_parts[1]
             if len(non_empty_parts) >= 3:
-                item.first_index = non_empty_parts[2]
+                first_index_raw = non_empty_parts[2]
+                # 检查 first_index 是否为数字
+                if first_index_raw.isdigit():
+                    item.first_index = first_index_raw
+                else:
+                    print(f"[Warning] 多文件导出物体 '{object_name}' 的 FirstIndex 字段 '{first_index_raw}' 不是数字，已自动设为 0")
+                    item.first_index = "0"
         elif "-" in object_name:
             prefix_parts = object_name.split("-")
             if len(prefix_parts) >= 1:

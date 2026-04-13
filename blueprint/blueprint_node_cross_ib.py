@@ -12,11 +12,23 @@ class CrossIBMatchMode:
     INDEX_COUNT = 'INDEX_COUNT'
     INDEX_COUNT_LABEL = '通过 IndexCount 识别'
     
+    IB_HASH = 'IB_HASH'
+    IB_HASH_LABEL = '通过 IB Hash 识别 (ZZMI)'
+    
     @classmethod
     def get_items(cls):
         return [
             (cls.INDEX_COUNT, cls.INDEX_COUNT_LABEL, "通过 match_index_count 参数进行匹配"),
+            (cls.IB_HASH, cls.IB_HASH_LABEL, "通过 IB Hash 和 FirstIndex/Component 识别 (ZZMI 格式)"),
         ]
+    
+    @classmethod
+    def get_items_for_logic_name(cls, logic_name):
+        if logic_name == 'EFMI':
+            return [(cls.INDEX_COUNT, cls.INDEX_COUNT_LABEL, "通过 match_index_count 参数进行匹配")]
+        elif logic_name == 'ZZMI':
+            return [(cls.IB_HASH, cls.IB_HASH_LABEL, "通过 IB Hash 和 FirstIndex/Component 识别 (ZZMI 格式)")]
+        return [(cls.INDEX_COUNT, cls.INDEX_COUNT_LABEL, "通过 match_index_count 参数进行匹配")]
 
 
 class CrossIBItem(PropertyGroup):
@@ -217,6 +229,12 @@ class SSMTNode_CrossIB(SSMTNodeBase):
         default=True
     )
     
+    vb_slot_204: BoolProperty(
+        name="204",
+        description="源块 VB 槽位 204",
+        default=True
+    )
+    
     current_logic_name: StringProperty(
         name="当前运行模式",
         description="当前游戏的运行模式",
@@ -248,6 +266,11 @@ class SSMTNode_CrossIB(SSMTNodeBase):
                 self.cross_ib_method = available_methods[0]
         else:
             self.cross_ib_method = ''
+        
+        if logic_name == 'ZZMI':
+            self.match_mode = CrossIBMatchMode.IB_HASH
+        elif logic_name == 'EFMI':
+            self.match_mode = CrossIBMatchMode.INDEX_COUNT
 
     def draw_buttons(self, context, layout):
         logic_name = self._get_current_logic_name()
@@ -279,6 +302,7 @@ class SSMTNode_CrossIB(SSMTNodeBase):
             row.label(text="源块:")
             row.prop(self, "vb_slot_200", text="200")
             row.prop(self, "vb_slot_201", text="201")
+            row.prop(self, "vb_slot_204", text="204")
             
             row = box_vb.row()
             row.label(text="目标块:")
@@ -286,17 +310,32 @@ class SSMTNode_CrossIB(SSMTNodeBase):
             row.prop(self, "vb_slot_203", text="203")
         
         box = layout.box()
-        box.label(text="跨IB映射列表 (源IndexCount >> 目标IndexCount)", icon='ARROW_LEFTRIGHT')
         
-        for i, item in enumerate(self.cross_ib_list):
-            row = box.row(align=True)
-            row.prop(item, "source_index_count", text="源")
-            row.label(text=">>")
-            row.prop(item, "target_index_count", text="目标")
+        if logic_name == "ZZMI":
+            box.label(text="跨IB映射列表 (源IB >> 目标IB)", icon='ARROW_LEFTRIGHT')
+            box.label(text="格式: IBHash-FirstIndex (SSMT4) 或 IBHash-Component (SSMT3)", icon='INFO')
             
-            op = row.operator("ssmt.cross_ib_remove_item", text="", icon='X')
-            op.node_name = self.name
-            op.item_index = i
+            for i, item in enumerate(self.cross_ib_list):
+                row = box.row(align=True)
+                row.prop(item, "source_ib", text="源")
+                row.label(text=">>")
+                row.prop(item, "target_ib", text="目标")
+                
+                op = row.operator("ssmt.cross_ib_remove_item", text="", icon='X')
+                op.node_name = self.name
+                op.item_index = i
+        else:
+            box.label(text="跨IB映射列表 (源IndexCount >> 目标IndexCount)", icon='ARROW_LEFTRIGHT')
+            
+            for i, item in enumerate(self.cross_ib_list):
+                row = box.row(align=True)
+                row.prop(item, "source_index_count", text="源")
+                row.label(text=">>")
+                row.prop(item, "target_index_count", text="目标")
+                
+                op = row.operator("ssmt.cross_ib_remove_item", text="", icon='X')
+                op.node_name = self.name
+                op.item_index = i
         
         row = layout.row()
         op = row.operator("ssmt.cross_ib_add_item", text="添加映射", icon='ADD')
@@ -326,6 +365,8 @@ class SSMTNode_CrossIB(SSMTNodeBase):
             vb_slots.append("200")
         if self.vb_slot_201:
             vb_slots.append("201")
+        if self.vb_slot_204:
+            vb_slots.append("204")
         
         if not vb_slots:
             return ""
@@ -368,15 +409,31 @@ class SSMTNode_CrossIB(SSMTNodeBase):
 
     def get_ib_mapping_dict(self):
         ib_mapping = {}
+        match_mode = self.match_mode
+        
         for item in self.cross_ib_list:
-            if item.source_index_count and item.target_index_count:
-                source_key = f"indexcount_{item.source_index_count}"
-                if source_key not in ib_mapping:
-                    ib_mapping[source_key] = []
-                
-                target_key = f"indexcount_{item.target_index_count}"
-                if target_key not in ib_mapping[source_key]:
-                    ib_mapping[source_key].append(target_key)
+            if match_mode == CrossIBMatchMode.IB_HASH:
+                if item.source_ib and item.target_ib:
+                    source_ib_hash, source_first_index = CrossIBItem.parse_ib_with_first_index(item.source_ib)
+                    target_ib_hash, target_first_index = CrossIBItem.parse_ib_with_first_index(item.target_ib)
+                    
+                    source_key = f"{source_ib_hash}_{source_first_index}"
+                    if source_key not in ib_mapping:
+                        ib_mapping[source_key] = []
+                    
+                    target_key = f"{target_ib_hash}_{target_first_index}"
+                    if target_key not in ib_mapping[source_key]:
+                        ib_mapping[source_key].append(target_key)
+            else:
+                if item.source_index_count and item.target_index_count:
+                    source_key = f"indexcount_{item.source_index_count}"
+                    if source_key not in ib_mapping:
+                        ib_mapping[source_key] = []
+                    
+                    target_key = f"indexcount_{item.target_index_count}"
+                    if target_key not in ib_mapping[source_key]:
+                        ib_mapping[source_key].append(target_key)
+        
         return ib_mapping
 
     def get_match_mode(self):

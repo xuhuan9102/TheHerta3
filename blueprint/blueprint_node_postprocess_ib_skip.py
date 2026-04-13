@@ -2,10 +2,11 @@ import bpy
 import re
 import os
 import glob
-from bpy.props import StringProperty, CollectionProperty, IntProperty
+from bpy.props import StringProperty, CollectionProperty, IntProperty, EnumProperty
 from bpy.types import PropertyGroup, Operator
 
 from .blueprint_node_postprocess_base import SSMTNode_PostProcess_Base
+from ..config.main_config import LogicName
 
 
 # -----------------------------------------------------------------------------
@@ -61,22 +62,36 @@ class IBSkipItem(PropertyGroup):
         default="",
         update=lambda self, ctx: self._on_object_name_changed(ctx)
     )
-    hash_value: StringProperty(name="Hash", default="", get=lambda self: self._get_hash())
-    index_count: StringProperty(name="IndexCount", default="", get=lambda self: self._get_index_count())
+    manual_hash: StringProperty(
+        name="Hash",
+        description="手动指定Hash值，优先于从物体名称解析",
+        default=""
+    )
+    manual_index_count: StringProperty(
+        name="IndexCount",
+        description="手动指定 IndexCount，优先于从物体名称解析",
+        default=""
+    )
     custom_name: StringProperty(
         name="节名",
         description="自定义节名后缀（可选）",
         default=""
     )
 
-    def _get_hash(self):
+    def get_hash(self):
+        manual = self.manual_hash.strip()
+        if manual:
+            return manual
         obj = bpy.data.objects.get(self.object_name)
         if obj:
             hash_val, _, _ = parse_object_name(obj.name)
             return hash_val
         return ""
 
-    def _get_index_count(self):
+    def get_index_count(self):
+        manual = self.manual_index_count.strip()
+        if manual:
+            return manual
         obj = bpy.data.objects.get(self.object_name)
         if obj:
             _, idx, _ = parse_object_name(obj.name)
@@ -84,6 +99,11 @@ class IBSkipItem(PropertyGroup):
         return ""
 
     def _on_object_name_changed(self, context):
+        obj = bpy.data.objects.get(self.object_name)
+        if obj:
+            hash_val, idx, _ = parse_object_name(obj.name)
+            self.manual_hash = hash_val
+            self.manual_index_count = idx
         node = context.node if hasattr(context, 'node') else None
         if node and hasattr(node, '_check_and_add_new_item'):
             node._check_and_add_new_item()
@@ -123,6 +143,11 @@ class SSMT_OT_IBSkip_RemoveItem(Operator):
     index: IntProperty()
 
     def execute(self, context):
+        # 禁止删除第一个固定条目
+        if self.index == 0:
+            self.report({'WARNING'}, "不能删除固定的内部虚拟物体条目")
+            return {'CANCELLED'}
+
         tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
         if not tree:
             return {'CANCELLED'}
@@ -134,44 +159,21 @@ class SSMT_OT_IBSkip_RemoveItem(Operator):
         return {'FINISHED'}
 
 
-class SSMT_OT_IBSkip_MoveUp(Operator):
-    bl_idname = "ssmt.ib_skip_move_up"
-    bl_label = "上移"
-    bl_description = "将选中条目向上移动"
-    bl_options = {'REGISTER', 'INTERNAL'}
-
-    node_name: StringProperty()
-    index: IntProperty()
-
-    def execute(self, context):
-        tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
-        if not tree:
-            return {'CANCELLED'}
-        node = tree.nodes.get(self.node_name)
-        if node and hasattr(node, 'skip_items') and self.index > 0:
-            node.skip_items.move(self.index, self.index - 1)
-            node.active_index = self.index - 1
-        return {'FINISHED'}
-
-
-class SSMT_OT_IBSkip_MoveDown(Operator):
-    bl_idname = "ssmt.ib_skip_move_down"
-    bl_label = "下移"
-    bl_description = "将选中条目向下移动"
-    bl_options = {'REGISTER', 'INTERNAL'}
-
-    node_name: StringProperty()
-    index: IntProperty()
-
-    def execute(self, context):
-        tree = getattr(context.space_data, "edit_tree", None) or getattr(context.space_data, "node_tree", None)
-        if not tree:
-            return {'CANCELLED'}
-        node = tree.nodes.get(self.node_name)
-        if node and hasattr(node, 'skip_items') and self.index < len(node.skip_items) - 1:
-            node.skip_items.move(self.index, self.index + 1)
-            node.active_index = self.index + 1
-        return {'FINISHED'}
+class SSMT_UL_IBSkipList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row(align=True)
+            if index == 0:
+                row.enabled = False
+            row.prop_search(item, "object_name", bpy.data, "objects", text="")
+            row.prop(item, "manual_hash", text="")
+            row.prop(item, "manual_index_count", text="")
+            row.prop(item, "custom_name", text="")
+            op = row.operator("ssmt.ib_skip_remove_item", text="", icon='BLANK1' if index == 0 else 'X')
+            op.node_name = data.name if hasattr(data, 'name') else ""
+            op.index = index
+        elif self.layout_type == 'GRID':
+            layout.prop_search(item, "object_name", bpy.data, "objects", text="")
 
 
 # -----------------------------------------------------------------------------
@@ -190,6 +192,17 @@ class SSMTNode_PostProcess_IBSkip(SSMTNode_PostProcess_Base):
         update=lambda self, ctx: self.update_node_width([self.global_prefix])
     )
 
+    mode: EnumProperty(
+        name="模式",
+        description="选择生成模式：EFMI（支持 match_index_count）或 ZZMI（不使用 match_index_count）",
+        items=[
+            ('EFMI', 'EFMI', '终末地模式 - 支持 match_index_count 参数'),
+            ('ZZMI', 'ZZMI', '绝区零模式 - 不使用 match_index_count 参数'),
+        ],
+        default='EFMI',
+        # update=lambda self, ctx: self.update_node_width([self.mode])
+    )
+
     skip_items: CollectionProperty(type=IBSkipItem)
     active_index: IntProperty(default=0)
 
@@ -197,77 +210,72 @@ class SSMTNode_PostProcess_IBSkip(SSMTNode_PostProcess_Base):
 
     def init(self, context):
         super().init(context)
+        # 确保至少有一个条目，且第一条为内部虚拟物体
         if len(self.skip_items) == 0:
             self.skip_items.add()
-        self.width = 420   # 更宽，容纳更多内容
+        # 设置第一个条目为固定虚拟物体（仅当该条目为空或未配置时）
+        first_item = self.skip_items[0]
+        if not first_item.object_name and not first_item.manual_hash and not first_item.custom_name:
+            first_item.object_name = "物体"
+            first_item.manual_hash = "哈希值"
+            first_item.manual_index_count = "index_count"
+            first_item.custom_name = "备注"
+        self.width = 420
 
     def draw_buttons(self, context, layout):
         # 全局设置
         box = layout.box()
         box.label(text="全局设置", icon='PREFERENCES')
-        box.prop(self, "global_prefix", text="")
+        box.prop(self, "mode", text="模式")
+        box.prop(self, "global_prefix", text="前缀")
         box.label(text="提示：条目自定义节名优先级更高", icon='INFO')
+        box.label(text="第一条为固定虚拟物体示例，不可删除", icon='INFO')
 
         # 跳过物体列表
         box = layout.box()
         box.label(text="跳过物体列表", icon='OBJECT_DATA')
 
-        # 使用 column_flow 实现紧凑网格
-        flow = box.column_flow(columns=1, align=True)
+        box.template_list(
+            "SSMT_UL_IBSkipList",
+            "",
+            self,
+            "skip_items",
+            self,
+            "active_index",
+            rows=6,
+            type='DEFAULT'
+        )
 
-        # 表头行
-        header = flow.row(align=True)
-        header.label(text="物体", icon='OBJECT_DATA')
-        header.label(text="Hash")
-        header.label(text="IndexCount")
-        header.label(text="节名")
-        header.label(text="")  # 操作按钮占位
-
-        for i, item in enumerate(self.skip_items):
-            row = flow.row(align=True)
-
-            # 物体选择器（限制最大宽度）
-            sub_row = row.row(align=True)
-            sub_row.prop_search(item, "object_name", bpy.data, "objects", text="")
-            # 自动提取的 Hash
-            row.label(text=item.hash_value[:8] if item.hash_value else "-")
-            # IndexCount
-            row.label(text=item.index_count if item.index_count else "-")
-            # 自定义节名（较短输入框）
-            row.prop(item, "custom_name", text="")
-            # 操作按钮组
-            op_row = row.row(align=True)
-            if i > 0:
-                op = op_row.operator("ssmt.ib_skip_move_up", text="", icon='TRIA_UP')
-                op.node_name = self.name
-                op.index = i
-            if i < len(self.skip_items) - 1:
-                op = op_row.operator("ssmt.ib_skip_move_down", text="", icon='TRIA_DOWN')
-                op.node_name = self.name
-                op.index = i
-            op = op_row.operator("ssmt.ib_skip_remove_item", text="", icon='X')
-            op.node_name = self.name
-            op.index = i
-
-        # 添加按钮
         add_row = box.row()
         op = add_row.operator("ssmt.ib_skip_add_item", text="添加物体", icon='ADD')
         op.node_name = self.name
 
-        # 自动添加新行
+        # 自动添加新行（当最后一个条目有内容时）
         self._check_and_add_new_item()
 
     def _check_and_add_new_item(self):
         if self._adding_new_item:
             return
+        # 列表为空时添加一个空条目（理论上不会发生，因第一条固定）
         if len(self.skip_items) == 0:
+            self._adding_new_item = True
+            self.skip_items.add()
+            self._adding_new_item = False
             return
+        # 检查最后一个条目是否有内容（跳过第一个固定条目，从索引1开始检查自动添加）
         last_item = self.skip_items[-1]
-        if last_item.object_name and last_item.object_name.strip():
-            if last_item.object_name.strip() != "":
-                self._adding_new_item = True
-                self.skip_items.add()
-                self._adding_new_item = False
+        # 如果最后一个条目不是第一个（即列表长度>1）且最后一个条目非空，则添加新行
+        if len(self.skip_items) > 1 and (
+            (last_item.object_name and last_item.object_name.strip()) or
+            (last_item.manual_hash and last_item.manual_hash.strip()) or
+            (last_item.manual_index_count and last_item.manual_index_count.strip()) or
+            (last_item.custom_name and last_item.custom_name.strip())
+        ):
+            self._adding_new_item = True
+            self.skip_items.add()
+            self._adding_new_item = False
+        # 如果列表只有第一个固定条目，且该条目的内容被用户清空，不自动添加（避免无限添加）
+        # 用户可手动点击“添加物体”来新增条目
 
     def _generate_section_name(self, item, obj_name):
         if item.custom_name and item.custom_name.strip():
@@ -288,19 +296,27 @@ class SSMTNode_PostProcess_IBSkip(SSMTNode_PostProcess_Base):
         print(f"IB跳过后处理节点开始执行，Mod导出路径: {mod_export_path}")
 
         valid_items = []
-        for item in self.skip_items:
-            obj = bpy.data.objects.get(item.object_name)
-            if not obj:
-                print(f"  跳过无效物体: {item.object_name}")
-                continue
-            hash_val, idx_count, _ = parse_object_name(obj.name)
+        # 从第二条开始处理（跳过第一个固定条目）
+        for item in self.skip_items[1:]:
+            manual_hash = item.manual_hash.strip() if item.manual_hash else ""
+            manual_index = item.manual_index_count.strip() if item.manual_index_count else ""
+            obj = bpy.data.objects.get(item.object_name) if item.object_name else None
+            obj_name = obj.name if obj else item.object_name
+
+            hash_val = manual_hash
+            index_count = manual_index
+            if obj and (not hash_val or not index_count):
+                parsed_hash, parsed_index, _ = parse_object_name(obj.name)
+                if not hash_val:
+                    hash_val = parsed_hash
+                if not index_count:
+                    index_count = parsed_index
+
             if not hash_val:
-                print(f"  无法从物体 '{obj.name}' 提取 hash，跳过")
+                print(f"  跳过条目缺少Hash，物体/手动值: '{item.object_name or '—'}'，请填写Hash或选择有效物体")
                 continue
-            if not idx_count:
-                print(f"  无法从物体 '{obj.name}' 提取 IndexCount，跳过")
-                continue
-            valid_items.append((item, obj.name, hash_val, idx_count))
+
+            valid_items.append((item, obj_name or "", hash_val, index_count))
 
         if not valid_items:
             print("没有有效的跳过物体，操作终止")
@@ -330,7 +346,9 @@ class SSMTNode_PostProcess_IBSkip(SSMTNode_PostProcess_Base):
             section_name = self._generate_section_name(item, obj_name)
             new_lines.append(f"[TextureOverride_{section_name}]")
             new_lines.append(f"hash = {hash_val}")
-            new_lines.append(f"match_index_count = {idx_count}")
+            # EFMI 模式使用 match_index_count，ZZMI 模式不使用
+            if self.mode == 'EFMI' and idx_count:
+                new_lines.append(f"match_index_count = {idx_count}")
             new_lines.append("handling = skip")
             new_lines.append("")
 
@@ -347,8 +365,7 @@ classes = (
     IBSkipItem,
     SSMT_OT_IBSkip_AddItem,
     SSMT_OT_IBSkip_RemoveItem,
-    SSMT_OT_IBSkip_MoveUp,
-    SSMT_OT_IBSkip_MoveDown,
+    SSMT_UL_IBSkipList,
     SSMTNode_PostProcess_IBSkip,
 )
 

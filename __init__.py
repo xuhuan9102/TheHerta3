@@ -33,7 +33,6 @@ from .blueprint import blueprint_shader_quick_connect
 from .blueprint import blueprint_node_postprocess_unify_texture
 from .blueprint import blueprint_preset
 from .blueprint import blueprint_node_postprocess_ib_skip
-from .blueprint import blueprint_node_postprocess_shapekey_anim_control
 
 # 第四代导出模块
 try:
@@ -194,7 +193,6 @@ def register():
     blueprint_node_postprocess_unify_texture.register()
     blueprint_preset.register()
     blueprint_node_postprocess_ib_skip.register()
-    blueprint_node_postprocess_shapekey_anim_control.register()
 
 
 
@@ -228,8 +226,8 @@ def unregister():
     blueprint_node_postprocess_unify_texture.unregister()
     blueprint_preset.unregister()
     blueprint_node_postprocess_ib_skip.unregister()
-    blueprint_node_postprocess_shapekey_anim_control.unregister()
-    
+
+
     ui_panel_import.unregister()
     ui_panel_sword.unregister()
     ui_panel_model.unregister()

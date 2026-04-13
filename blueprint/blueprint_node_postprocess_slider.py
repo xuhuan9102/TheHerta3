@@ -58,6 +58,43 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
         default=False
     )
 
+    # 滑块尺寸设置
+    slider_width: bpy.props.FloatProperty(
+        name="滑块宽度",
+        description="每个滑块手柄的宽度（归一化屏幕坐标）",
+        default=0.025,
+        min=0.001,
+        max=1.0,
+        precision=4,
+        step=0.1
+    )
+    slider_height: bpy.props.FloatProperty(
+        name="滑块高度",
+        description="每个滑块手柄的高度（归一化屏幕坐标）",
+        default=0.042,
+        min=0.001,
+        max=1.0,
+        precision=4,
+        step=0.1
+    )
+    button_width: bpy.props.FloatProperty(
+        name="按钮宽度",
+        description="每个滑块左侧按钮的宽度",
+        default=0.025,
+        min=0.001,
+        max=1.0,
+        precision=4,
+        step=0.1
+    )
+    button_height: bpy.props.FloatProperty(
+        name="按钮高度",
+        description="每个滑块左侧按钮的高度",
+        default=0.045,
+        min=0.001,
+        max=1.0,
+        precision=4,
+        step=0.1
+    )
     
     # 新增：角色检测相关属性
     target_object: bpy.props.StringProperty(
@@ -99,6 +136,13 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
     right_bar_image: bpy.props.StringProperty(
         name="右进度条图片",
         description="滑块右侧进度条图片（将保存为 res/3.png）",
+        subtype='FILE_PATH',
+        default=""
+    )
+    # 新增：按钮图片
+    button_image: bpy.props.StringProperty(
+        name="按钮图片",
+        description="滑块左侧按钮图片（将保存为 res/4.png）",
         subtype='FILE_PATH',
         default=""
     )
@@ -159,6 +203,16 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
         box.prop(self, "auto_play_toggle_key", text="自动播放开关")
         box.prop(self, "auto_play_key_global", text="全局生效")
 
+        # UI尺寸设置
+        box = layout.box()
+        box.label(text="UI尺寸设置", icon='PROPERTIES')
+        col = box.column(align=True)
+        col.prop(self, "slider_width")
+        col.prop(self, "slider_height")
+        col.separator()
+        col.prop(self, "button_width")
+        col.prop(self, "button_height")
+
         # 角色检测设置
         box = layout.box()
         box.label(text="角色检测设置", icon='VIEWZOOM')
@@ -177,8 +231,8 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
         box.prop(self, "slider_handle_image", text="滑块")
         box.prop(self, "left_bar_image", text="左进度条")
         box.prop(self, "right_bar_image", text="右进度条")
+        box.prop(self, "button_image", text="按钮")   # 新增：按钮图片设置
         box.label(text="留空则使用插件内置默认图片", icon='INFO')
-
 
     def execute_postprocess(self, mod_export_path):
         print(f"滑块面板后处理节点开始执行，Mod导出路径: {mod_export_path}")
@@ -224,11 +278,13 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             else:
                 print(f"警告: 未找到 'draw_2d.hlsl' 模板, 滑块UI可能无法显示。")
 
+            # 图片资源映射（标准文件名 -> 自定义路径）【注意：按钮图片不在通用映射中处理，改为批量复制】
             image_mappings = [
                 ("0.png", self.background_image),
                 ("1.png", self.slider_handle_image),
                 ("2.png", self.left_bar_image),
                 ("3.png", self.right_bar_image),
+                # ("4.png", self.button_image),  # 已移除，按钮图片采用批量复制逻辑
             ]
             for std_name, custom_path in image_mappings:
                 dest_path = os.path.join(dest_res_dir, std_name)
@@ -237,6 +293,43 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
                     print(f"已复制自定义图片: {custom_path} -> {std_name}")
                 else:
                     self._copy_default_image(std_name, dest_res_dir, source_asset_dir)
+
+            # ---------- 新增：按钮图片批量复制（根据滑块数量） ----------
+            # 先读取 INI 以获取滑块数量（需提前解析一次 Constants）
+            sections_temp = self._read_ini_to_ordered_dict(target_ini_file)
+            if not sections_temp:
+                print(f"无法读取INI文件以获取参数数量: {target_ini_file}")
+                return
+
+            freq_params_temp = set()
+            param_pattern_temp = re.compile(r'^\s*global(?:\s+persist)?\s+(\$Freq_[^\s=]+)')
+            if '[Constants]' in sections_temp:
+                for line in sections_temp['[Constants]']:
+                    match = param_pattern_temp.match(line)
+                    if match:
+                        freq_params_temp.add(match.group(1))
+            num_sliders = len(freq_params_temp)
+
+            if num_sliders == 0:
+                print("在INI文件的[Constants]块中未找到任何形态键强度参数，按钮图片无需复制。")
+                # 但仍可继续执行后续（不会生成滑块）
+            else:
+                # 确定按钮图片源路径
+                if self.button_image and os.path.isfile(self.button_image):
+                    src_button_img = self.button_image
+                else:
+                    src_button_img = os.path.join(source_asset_dir, "4.png")
+
+                if os.path.exists(src_button_img):
+                    for i in range(1, num_sliders + 1):
+                        dest_name = f"4_{i}.png"
+                        dest_path = os.path.join(dest_res_dir, dest_name)
+                        shutil.copy2(src_button_img, dest_path)
+                        print(f"已复制按钮图片: {dest_name}")
+                else:
+                    print(f"警告: 按钮源图片不存在 {src_button_img}，按钮可能无法显示。")
+            # --------------------------------------------------------
+
         except Exception as e:
             print(f"准备和复制资源文件时出错: {e}")
             return
@@ -265,8 +358,58 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
 
         print(f"找到 {num_sliders} 个形态键强度参数，开始生成滑块面板...")
 
+        # --------------------------------------------------------------
+        # 扫描分组自动播放变量，判断是否为多组独立模式
+        # --------------------------------------------------------------
+        group_ids = set()
+        frame_end_vars = {}
+        frame_end_min_vars = {}
+        frame_end_max_vars = {}
+        multi_group_mode = False
+
+        if '[Constants]' in sections:
+            const_lines = sections['[Constants]']
+            const_text = "\n".join(const_lines)
+            # 匹配 global $auto_play_enabled_group1 = 1 或 global persist $auto_play_enabled_group1 = 1
+            for m in re.finditer(r'^\s*global(?:\s+persist)?\s+\$auto_play_enabled_group(\d+)', const_text, re.MULTILINE):
+                group_id = int(m.group(1))
+                group_ids.add(group_id)
+            for m in re.finditer(r'^\s*global(?:\s+persist)?\s+\$frameEnd_group(\d+)', const_text, re.MULTILINE):
+                group_id = int(m.group(1))
+                frame_end_vars[group_id] = f"$frameEnd_group{group_id}"
+            for m in re.finditer(r'^\s*global(?:\s+persist)?\s+\$frameEnd_min_group(\d+)', const_text, re.MULTILINE):
+                group_id = int(m.group(1))
+                frame_end_min_vars[group_id] = f"$frameEnd_min_group{group_id}"
+            for m in re.finditer(r'^\s*global(?:\s+persist)?\s+\$frameEnd_max_group(\d+)', const_text, re.MULTILINE):
+                group_id = int(m.group(1))
+                frame_end_max_vars[group_id] = f"$frameEnd_max_group{group_id}"
+
+        if group_ids:
+            multi_group_mode = True
+            group_ids = sorted(group_ids)
+            print(f"[SliderPanel] 检测到多组自动播放变量，组号: {group_ids}")
+        else:
+            print("[SliderPanel] 未检测到分组自动播放变量，使用兼容模式（全局自动播放）")
+
+        # 构建滑块索引到分组编号的映射（仅多组模式下使用）
+        slider_to_group = {}
+        if multi_group_mode:
+            for idx, var_name in enumerate(sorted_freq_params):
+                m = re.match(r'\$Freq_group(\d+)', var_name)
+                if m:
+                    slider_to_group[idx] = int(m.group(1))
+                else:
+                    print(f"[SliderPanel] 警告：强度变量名 '{var_name}' 无法解析分组编号，该滑块将仅控制强度。")
+        # --------------------------------------------------------------
+
+        # 获取用户设置的尺寸
+        slider_w = self.slider_width
+        slider_h = self.slider_height
+        btn_w = self.button_width
+        btn_h = self.button_height
+
         # 计算UI几何
-        child_height = 0.03
+        child_height = slider_h  # 直接使用滑块高度
         top_bottom_padding = 0.03
         spacing = 0.02
         total_slider_height = num_sliders * child_height
@@ -291,7 +434,7 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
         # 1. 准备 constants 补充内容
         constants_additions.extend([
             "; --- UI 几何与位置配置 (由滑块面板生成) ---",
-            "global $base_width0 = 0.3",
+            "global $base_width0 = 0.34",           # 修改：加宽背景以包含左侧按钮
             f"global $base_height0 = {parent_height:.4f}",
             "global $set_x0 = 0.5", "global $set_y0 = 0.5",
         ])
@@ -299,8 +442,16 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             current_y_offset = top_bottom_padding + (i - 1) * (child_height + spacing) + (child_height / 2)
             relative_y = current_y_offset / parent_height
             constants_additions.extend([
-                f"global $base_width{i} = 0.02", f"global $base_height{i} = 0.03",
-                f"global $set_rel_x{i} = 0.5", f"global $fixed_rel_y{i} = {relative_y:.4f}",
+                f"global $base_width{i} = {slider_w:.4f}",
+                f"global $base_height{i} = {slider_h:.4f}",
+                f"global $set_rel_x{i} = 0.5",
+                f"global $fixed_rel_y{i} = {relative_y:.4f}",
+                # 按钮几何变量
+                f"global $btn_width{i} = {btn_w:.4f}",
+                f"global $btn_height{i} = {btn_h:.4f}",
+                f"global $btn_x{i}",
+                f"global $btn_y{i}",
+                f"global $btn_pressed{i} = 0",
             ])
         constants_additions.extend([
             "global $active", "global $help", "global $max_zoom = 5.0", "global $min_zoom = 0.1",
@@ -309,11 +460,16 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             "global $drag_x = 0", "global $drag_y = 0",
             "global persist $img0_x = 0", "global persist $img0_y = 0", "global persist $zoom0 = 1.0",
             "global $norm_width0", "global $norm_height0",
-            "global $auto_play_enabled = 1",
-            "global $frameEnd = 60",
-            "global $frameEnd_min = 30",
-            "global $frameEnd_max = 120",
+            "global $btn_click_processed = 0",   # 修复面板关闭问题
         ])
+        # 根据模式决定是否添加全局自动播放变量（兼容模式需要）
+        if not multi_group_mode:
+            constants_additions.extend([
+                "global persist $auto_play_enabled = 1",
+                "global persist $frameEnd = 60",
+                "global persist $frameEnd_min = 30",
+                "global persist $frameEnd_max = 120",
+            ])
         for i in range(1, num_sliders + 1):
             constants_additions.extend([
                 f"global persist $rel_x{i} = 0", f"global persist $zoom{i} = 1.0",
@@ -341,6 +497,9 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
         other_sections["[ResourceSliderHandle]"] = ["filename = ./res/1.png"]
         other_sections["[ResourceLeftBar]"] = ["filename = ./res/2.png"]
         other_sections["[ResourceRightBar]"] = ["filename = ./res/3.png"]
+        # 按钮图片资源：改为按滑块数量生成独立资源段
+        for i in range(1, num_sliders + 1):
+            other_sections[f"[ResourcePlayPauseButton{i}]"] = [f"filename = ./res/4_{i}.png"]
 
         # 4. 快捷键和命令列表段
         reset_lines = ["$img0_x = 0", "$img0_y = 0", "$zoom0 = 1.0"]
@@ -362,7 +521,18 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
         other_sections["[KeyToggleAutoPlay]"] = auto_play_key_lines
         other_sections["[CommandListZoomIn]"] = zoom_in_lines
         other_sections["[CommandListZoomOut]"] = zoom_out_lines
-        other_sections["[CommandListToggleAutoPlay]"] = ["$auto_play_enabled = 1 - $auto_play_enabled"]
+
+        # 自动播放开关命令（多组模式 vs 兼容模式）
+        if multi_group_mode:
+            toggle_lines = [f"$auto_play_enabled_group{gid} = 1 - $auto_play_enabled_group{gid}" for gid in group_ids]
+            other_sections["[CommandListToggleAutoPlay]"] = toggle_lines
+            # 为每个分组生成独立的切换命令，供按钮使用
+            for gid in group_ids:
+                other_sections[f"[CommandListToggleAutoPlayGroup{gid}]"] = [
+                    f"$auto_play_enabled_group{gid} = 1 - $auto_play_enabled_group{gid}"
+                ]
+        else:
+            other_sections["[CommandListToggleAutoPlay]"] = ["$auto_play_enabled = 1 - $auto_play_enabled"]
 
         # 5. 准备滑块逻辑（追加到现有 [Present] 末尾）
         present_additions.append("post $active = 0")
@@ -375,7 +545,8 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             present_additions.append(f"    $norm_height{i} = $base_height{i} * $zoom{i}")
         present_additions.append("\n    ; --- 2. 计算子级的拖拽边界 ---")
         for i in range(1, num_sliders + 1):
-            present_additions.append(f"    $min_rel_x{i} = $norm_width0 * 0.05")
+            # 修改：滑块轨道左边界以按钮宽度为基准，使背景能够包含按钮
+            present_additions.append(f"    $min_rel_x{i} = $btn_width{i} + 0.02")
             present_additions.append(f"    $max_rel_x{i} = ($norm_width0 * 0.95) - $norm_width{i}")
             present_additions.append(f"    $range_x{i} = $max_rel_x{i} - $min_rel_x{i}")
         present_additions.append("\n    ; --- 3. 位置初始化 ---")
@@ -387,9 +558,43 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             present_additions.append(f"    if $rel_x{i} == 0")
             present_additions.append(f"        $rel_x{i} = $min_rel_x{i} + ($set_rel_x{i} * $range_x{i})")
             present_additions.append("    endif")
-        present_additions.append("\n    ; --- 4. 拖拽逻辑与位置更新 ---")
+        present_additions.append("\n    ; --- 4. 计算滑块和按钮位置 ---")
+        for i in range(1, num_sliders + 1):
+            present_additions.append(f"    $rel_y{i} = ($fixed_rel_y{i} * $norm_height0) - ($norm_height{i} / 2)")
+            present_additions.append(f"    $img{i}_x = $img0_x + $rel_x{i}")
+            present_additions.append(f"    $img{i}_y = $img0_y + $rel_y{i}")
+            # 按钮位置固定相对于面板，放在滑块轨道最左侧，向左偏移量增加
+            present_additions.append(f"    $btn_x{i} = $img0_x + $min_rel_x{i} - $btn_width{i} - 0.01")
+            present_additions.append(f"    $btn_y{i} = $img{i}_y + ($norm_height{i} - $btn_height{i}) * 0.5")
+
+        present_additions.append("\n    ; --- 5. 按钮按下/弹起检测（防连击，且不关闭面板） ---")
+        present_additions.append("    $btn_click_processed = 0")
+        present_additions.append("    if $mouse_clicked && $is_dragging == 0")
+        for i in range(1, num_sliders + 1):
+            gid = slider_to_group.get(i-1)
+            if gid is not None and gid in group_ids:
+                present_additions.append(f"        if cursor_x > $btn_x{i} && cursor_x < $btn_x{i} + $btn_width{i} && cursor_y > $btn_y{i} && cursor_y < $btn_y{i} + $btn_height{i}")
+                present_additions.append(f"            $btn_pressed{i} = 1")
+                present_additions.append(f"            $btn_click_processed = 1")
+                present_additions.append(f"        endif")
+        present_additions.append("    else")
+        present_additions.append("        if $is_dragging == 0")
+        for i in range(1, num_sliders + 1):
+            gid = slider_to_group.get(i-1)
+            if gid is not None and gid in group_ids:
+                present_additions.append(f"            if $btn_pressed{i} == 1")
+                present_additions.append(f"                if cursor_x > $btn_x{i} && cursor_x < $btn_x{i} + $btn_width{i} && cursor_y > $btn_y{i} && cursor_y < $btn_y{i} + $btn_height{i}")
+                present_additions.append(f"                    run = CommandListToggleAutoPlayGroup{gid}")
+                present_additions.append(f"                endif")
+                present_additions.append(f"                $btn_pressed{i} = 0")
+                present_additions.append(f"            endif")
+        present_additions.append("        endif")
+        present_additions.append("    endif")
+
+        present_additions.append("\n    ; --- 6. 拖拽逻辑与位置更新 ---")
         present_additions.append("    if $mouse_clicked")
         present_additions.append("        if $is_dragging == 0")
+        # 滑块拖拽检测
         for i in range(num_sliders, 0, -1):
             prefix = "if" if i == num_sliders else "            else if"
             present_additions.append(f"            {prefix} cursor_x > $img{i}_x && cursor_x < $img{i}_x + $norm_width{i} && cursor_y > $img{i}_y && cursor_y < $img{i}_y + $norm_height{i}")
@@ -400,7 +605,9 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
         present_additions.append("                $drag_x = cursor_x - $img0_x")
         present_additions.append("                $drag_y = cursor_y - $img0_y")
         present_additions.append("            else")
-        present_additions.append("                $click_outside = 1")
+        present_additions.append("                if $btn_click_processed == 0")
+        present_additions.append("                    $click_outside = 1")
+        present_additions.append("                endif")
         present_additions.append("            endif")
         present_additions.append("        endif")
         present_additions.append("    else")
@@ -423,12 +630,8 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             present_additions.append(f"            $rel_x{i-1} = $max_rel_x{i-1}")
             present_additions.append(f"        endif")
         present_additions.append("    endif")
-        present_additions.append("\n    ; --- 5. 计算最终绝对位置 (滑块) ---")
-        for i in range(1, num_sliders + 1):
-            present_additions.append(f"    $rel_y{i} = ($fixed_rel_y{i} * $norm_height0) - ($norm_height{i} / 2)")
-            present_additions.append(f"    $img{i}_x = $img0_x + $rel_x{i}")
-            present_additions.append(f"    $img{i}_y = $img0_y + $rel_y{i}")
-        present_additions.append("\n    ; --- 6. 计算进度条的几何信息 ---")
+
+        present_additions.append("\n    ; --- 7. 计算进度条的几何信息 ---")
         for i in range(1, num_sliders + 1):
             present_additions.append(f"    $slider{i}_center_x = $img{i}_x + ($norm_width{i} * 0.5)")
             present_additions.append(f"    $left_bar{i}_height = $norm_height{i} * 0.5")
@@ -439,22 +642,46 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             present_additions.append(f"    $right_bar{i}_y = $left_bar{i}_y")
             present_additions.append(f"    $right_bar{i}_x = $slider{i}_center_x")
             present_additions.append(f"    $right_bar{i}_width = ($img0_x + $norm_width0 * 0.95) - $right_bar{i}_x")
-        present_additions.append("\n    ; --- 7. 计算映射参数并链接到形态键强度或播放速度 ---")
+        present_additions.append("\n    ; --- 8. 计算映射参数并链接到形态键强度或播放速度 ---")
         present_additions.append("    ; 当自动播放开启时，只有当前被拖拽的滑块控制播放速度；关闭时所有滑块控制各自形态键强度")
         present_additions.append("    $dragged_slider = 0")
         present_additions.append("    if $is_dragging >= 2")
         present_additions.append("        $dragged_slider = $is_dragging - 1")
         present_additions.append("    endif")
-        for i in range(1, num_sliders + 1):
-            present_additions.append(f"    $param{i} = ($rel_x{i} - $min_rel_x{i}) / $range_x{i}")
-            present_additions.append(f"    if ($auto_play_enabled == 1)")
-            present_additions.append(f"        if ($dragged_slider == {i})")
-            present_additions.append(f"            $frameEnd = $frameEnd_min + $param{i} * ($frameEnd_max - $frameEnd_min)")
-            present_additions.append(f"        endif")
-            present_additions.append(f"    else")
-            present_additions.append(f"        {sorted_freq_params[i-1]} = $param{i}")
-            present_additions.append(f"    endif")
-        present_additions.append("\n    ; --- 8. 执行渲染 (按层级) ---")
+
+        # 核心滑块映射逻辑（多组模式 vs 兼容模式）
+        if multi_group_mode:
+            for i in range(1, num_sliders + 1):
+                gid = slider_to_group.get(i - 1)
+                present_additions.append(f"    $param{i} = ($rel_x{i} - $min_rel_x{i}) / $range_x{i}")
+                if gid is not None:
+                    present_additions.append(f"    ; 分组 {gid}")
+                    if gid in group_ids:
+                        present_additions.append(f"    if ($auto_play_enabled_group{gid} == 1)")
+                        present_additions.append(f"        if ($dragged_slider == {i})")
+                        present_additions.append(f"            $frameEnd_group{gid} = $frameEnd_max_group{gid} - $param{i} * ($frameEnd_max_group{gid} - $frameEnd_min_group{gid})")
+                        present_additions.append(f"        endif")
+                        present_additions.append(f"    else")
+                        present_additions.append(f"        {sorted_freq_params[i-1]} = $param{i}")
+                        present_additions.append(f"    endif")
+                    else:
+                        present_additions.append(f"    {sorted_freq_params[i-1]} = $param{i}")
+                else:
+                    present_additions.append(f"    {sorted_freq_params[i-1]} = $param{i}")
+        else:
+            # 兼容模式：使用全局变量
+            for i in range(1, num_sliders + 1):
+                present_additions.append(f"    $param{i} = ($rel_x{i} - $min_rel_x{i}) / $range_x{i}")
+                present_additions.append(f"    if ($auto_play_enabled == 1)")
+                present_additions.append(f"        if ($dragged_slider == {i})")
+                present_additions.append(f"            $frameEnd = $frameEnd_max - $param{i} * ($frameEnd_max - $frameEnd_min)")
+                present_additions.append(f"        endif")
+                present_additions.append(f"    else")
+                present_additions.append(f"        {sorted_freq_params[i-1]} = $param{i}")
+                present_additions.append(f"    endif")
+        # --------------------------------------------------------------
+
+        present_additions.append("\n    ; --- 9. 执行渲染 (按层级) ---")
         present_additions.append("    ; 渲染父级 (最底层)")
         present_additions.append("    ps-t100 = ResourceImageToRender0")
         present_additions.append("    x87 = $norm_width0")
@@ -475,6 +702,19 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
             present_additions.append(f"    y87 = $right_bar{i}_height")
             present_additions.append(f"    z87 = $right_bar{i}_x")
             present_additions.append(f"    w87 = $right_bar{i}_y")
+            present_additions.append(f"    run = CustomShaderDraw")
+        # 渲染按钮（使用独立资源名）
+        for i in range(1, num_sliders + 1):
+            present_additions.append(f"\n    ; 渲染播放/暂停按钮{i}")
+            present_additions.append(f"    ps-t100 = ResourcePlayPauseButton{i}")
+            present_additions.append(f"    x87 = $btn_width{i}")
+            present_additions.append(f"    y87 = $btn_height{i}")
+            present_additions.append(f"    z87 = $btn_x{i}")
+            present_additions.append(f"    if $btn_pressed{i} == 1")
+            present_additions.append(f"        w87 = $btn_y{i} + 0.002")
+            present_additions.append(f"    else")
+            present_additions.append(f"        w87 = $btn_y{i}")
+            present_additions.append(f"    endif")
             present_additions.append(f"    run = CustomShaderDraw")
         for i in range(1, num_sliders + 1):
             present_additions.append(f"\n    ; 渲染滑块{i} (最顶层)")
@@ -535,12 +775,14 @@ class SSMTNode_PostProcess_SliderPanel(SSMTNode_PostProcess_Base):
 
         # 写回整个 INI 文件
         try:
-            # 使用已有的写入方法（注意：需要保留原始文件中的注释和顺序，但重写会丢失原有顺序？由于我们直接修改 sections 字典并写回，原有顺序会保持（因为 OrderedDict），但新增的段会追加在末尾）
-            # 为了安全，先读取原文件内容中的非段部分（如文件头注释）保留，但 sections 已经包含了所有段，写回时会丢失文件头注释。简单起见，直接写回 sections，大部分情况没问题。
             self._write_ordered_dict_to_ini(sections, target_ini_file, "")
             print(f"滑块控制面板配置已合并到: {os.path.basename(target_ini_file)}")
             print(f"共生成 {num_sliders} 个滑块")
-            print(f"自动播放开关快捷键已添加: {auto_play_key} (全局模式: {self.auto_play_key_global})")
+            if multi_group_mode:
+                print(f"多组自动播放模式已启用，每个滑块左侧已添加独立播放/暂停按钮（固定位置，防连击）")
+                print(f"全局快捷键 {auto_play_key} 同时控制所有分组")
+            else:
+                print(f"自动播放开关快捷键已添加: {auto_play_key} (全局模式)")
         except Exception as e:
             print(f"写入INI文件失败: {e}")
             import traceback
