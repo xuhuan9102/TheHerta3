@@ -246,8 +246,11 @@ def register():
         except Exception as e:
             print(f"[TheHerta3]   注册TT属性失败: {op_class.__name__} - {e}")
     
-    bpy.utils.register_class(tt_material_preview_list[0])
-    print(f"[TheHerta3]   已注册TT材质预览项: {tt_material_preview_list[0].__name__}")
+    try:
+        bpy.utils.register_class(tt_material_preview_list[0])
+        print(f"[TheHerta3]   已注册TT材质预览项: {tt_material_preview_list[0].__name__}")
+    except Exception as e:
+        print(f"[TheHerta3]   注册TT材质预览项失败: {tt_material_preview_list[0].__name__} - {e}")
     
     bpy.types.Scene.texture_tools_props = bpy.props.PointerProperty(type=tt_properties_list[-1])
     bpy.types.Scene.material_preview_list = bpy.props.CollectionProperty(type=tt_material_preview_list[0])
@@ -381,74 +384,47 @@ def register():
         except Exception as e:
             print(f"[TheHerta3]   注册AT缓冲合并失败: {op_class.__name__} - {e}")
     
-    bpy.utils.register_class(ToolkitPanel)
-    bpy.utils.register_class(VGToolsPanel)
-    bpy.utils.register_class(BMTP_MainPanel)
-    bpy.utils.register_class(BMTP_BoneControlPanel)
-    bpy.utils.register_class(BMTP_WeightControlPanel)
-    bpy.utils.register_class(BMTP_WeightOperationPanel)
-    bpy.utils.register_class(BMTP_WeightManagePanel)
-    bpy.utils.register_class(BMTP_ModelControlPanel)
-    bpy.utils.register_class(BMTP_MeshEditPanel)
-    bpy.utils.register_class(BMTP_UVToolsPanel)
-    bpy.utils.register_class(BMTP_SceneCleanPanel)
-    bpy.utils.register_class(BMTP_CollectionLinkerPanel)
-    bpy.utils.register_class(BMTP_ModifierToolsPanel)
-    bpy.utils.register_class(TT_MainPanel)
-    bpy.utils.register_class(TT_DDSConversionPanel)
-    bpy.utils.register_class(TT_NormalMapPanel)
-    bpy.utils.register_class(TT_ColorBakePanel)
-    bpy.utils.register_class(TT_AlphaExtractPanel)
-    bpy.utils.register_class(TT_MaterialToolsPanel)
-    bpy.utils.register_class(TT_LightmapPanel)
-    bpy.utils.register_class(TT_MaterialPreviewPanel)
+    for panel_class in [ToolkitPanel, VGToolsPanel, BMTP_MainPanel, BMTP_BoneControlPanel, BMTP_WeightControlPanel,
+                        BMTP_WeightOperationPanel, BMTP_WeightManagePanel, BMTP_ModelControlPanel, BMTP_MeshEditPanel,
+                        BMTP_UVToolsPanel, BMTP_SceneCleanPanel, BMTP_CollectionLinkerPanel, BMTP_ModifierToolsPanel,
+                        TT_MainPanel, TT_DDSConversionPanel, TT_NormalMapPanel, TT_ColorBakePanel, TT_AlphaExtractPanel,
+                        TT_MaterialToolsPanel, TT_LightmapPanel, TT_MaterialPreviewPanel]:
+        try:
+            bpy.utils.register_class(panel_class)
+            print(f"[TheHerta3]   已注册面板: {panel_class.__name__}")
+        except Exception as e:
+            print(f"[TheHerta3]   注册面板失败: {panel_class.__name__} - {e}")
     
-    bpy.utils.register_class(ATP_PT_MainPanel)
-    bpy.utils.register_class(ATP_PT_ShapeKeyTools)
-    bpy.utils.register_class(ATP_PT_AlembicTools)
-    bpy.utils.register_class(ATP_PT_AnimationFrameSplit)
-    bpy.utils.register_class(ATP_PT_Automation)
-    bpy.utils.register_class(ATP_PT_ShapeKeyOperations)
-    bpy.utils.register_class(ATP_PT_ShapeKeyCreation)
-    bpy.utils.register_class(ATP_PT_ShapeKeyAnimationExport)
-    bpy.utils.register_class(ATP_PT_AutomationShapeKeyExport)
-    bpy.utils.register_class(ATP_PT_AutomationBufferMerge)
+    for panel_class in [ATP_PT_MainPanel, ATP_PT_ShapeKeyTools, ATP_PT_AlembicTools, ATP_PT_AnimationFrameSplit,
+                        ATP_PT_Automation, ATP_PT_ShapeKeyOperations, ATP_PT_ShapeKeyCreation,
+                        ATP_PT_ShapeKeyAnimationExport, ATP_PT_AutomationShapeKeyExport, ATP_PT_AutomationBufferMerge]:
+        try:
+            bpy.utils.register_class(panel_class)
+            print(f"[TheHerta3]   已注册动画面板: {panel_class.__name__}")
+        except Exception as e:
+            print(f"[TheHerta3]   注册动画面板失败: {panel_class.__name__} - {e}")
     
     print("[TheHerta3] 工具集注册完成")
 
 def unregister():
-    bpy.utils.unregister_class(ATP_PT_AutomationBufferMerge)
-    bpy.utils.unregister_class(ATP_PT_AutomationShapeKeyExport)
-    bpy.utils.unregister_class(ATP_PT_ShapeKeyAnimationExport)
-    bpy.utils.unregister_class(ATP_PT_ShapeKeyCreation)
-    bpy.utils.unregister_class(ATP_PT_ShapeKeyOperations)
-    bpy.utils.unregister_class(ATP_PT_Automation)
-    bpy.utils.unregister_class(ATP_PT_AnimationFrameSplit)
-    bpy.utils.unregister_class(ATP_PT_AlembicTools)
-    bpy.utils.unregister_class(ATP_PT_ShapeKeyTools)
-    bpy.utils.unregister_class(ATP_PT_MainPanel)
+    for panel_class in [ATP_PT_AutomationBufferMerge, ATP_PT_AutomationShapeKeyExport, ATP_PT_ShapeKeyAnimationExport,
+                        ATP_PT_ShapeKeyCreation, ATP_PT_ShapeKeyOperations, ATP_PT_Automation,
+                        ATP_PT_AnimationFrameSplit, ATP_PT_AlembicTools, ATP_PT_ShapeKeyTools, ATP_PT_MainPanel]:
+        try:
+            bpy.utils.unregister_class(panel_class)
+        except Exception:
+            pass
     
-    bpy.utils.unregister_class(TT_MaterialPreviewPanel)
-    bpy.utils.unregister_class(TT_LightmapPanel)
-    bpy.utils.unregister_class(TT_MaterialToolsPanel)
-    bpy.utils.unregister_class(TT_AlphaExtractPanel)
-    bpy.utils.unregister_class(TT_ColorBakePanel)
-    bpy.utils.unregister_class(TT_NormalMapPanel)
-    bpy.utils.unregister_class(TT_DDSConversionPanel)
-    bpy.utils.unregister_class(TT_MainPanel)
-    bpy.utils.unregister_class(BMTP_ModifierToolsPanel)
-    bpy.utils.unregister_class(BMTP_CollectionLinkerPanel)
-    bpy.utils.unregister_class(BMTP_SceneCleanPanel)
-    bpy.utils.unregister_class(BMTP_UVToolsPanel)
-    bpy.utils.unregister_class(BMTP_MeshEditPanel)
-    bpy.utils.unregister_class(BMTP_ModelControlPanel)
-    bpy.utils.unregister_class(BMTP_WeightManagePanel)
-    bpy.utils.unregister_class(BMTP_WeightOperationPanel)
-    bpy.utils.unregister_class(BMTP_WeightControlPanel)
-    bpy.utils.unregister_class(BMTP_BoneControlPanel)
-    bpy.utils.unregister_class(BMTP_MainPanel)
-    bpy.utils.unregister_class(VGToolsPanel)
-    bpy.utils.unregister_class(ToolkitPanel)
+    for panel_class in [TT_MaterialPreviewPanel, TT_LightmapPanel, TT_MaterialToolsPanel, TT_AlphaExtractPanel,
+                        TT_ColorBakePanel, TT_NormalMapPanel, TT_DDSConversionPanel, TT_MainPanel,
+                        BMTP_ModifierToolsPanel, BMTP_CollectionLinkerPanel, BMTP_SceneCleanPanel,
+                        BMTP_UVToolsPanel, BMTP_MeshEditPanel, BMTP_ModelControlPanel, BMTP_WeightManagePanel,
+                        BMTP_WeightOperationPanel, BMTP_WeightControlPanel, BMTP_BoneControlPanel, BMTP_MainPanel,
+                        VGToolsPanel, ToolkitPanel]:
+        try:
+            bpy.utils.unregister_class(panel_class)
+        except Exception:
+            pass
     
     for op_class in reversed(at_buffer_merge_list):
         try:
@@ -566,7 +542,10 @@ def unregister():
     if hasattr(bpy.types.Scene, 'texture_tools_props'):
         del bpy.types.Scene.texture_tools_props
     
-    bpy.utils.unregister_class(tt_material_preview_list[0])
+    try:
+        bpy.utils.unregister_class(tt_material_preview_list[0])
+    except Exception:
+        pass
     
     for op_class in reversed(tt_properties_list):
         try:
