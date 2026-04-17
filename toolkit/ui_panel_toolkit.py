@@ -896,6 +896,7 @@ class TT_LightmapPanel(bpy.types.Panel):
         info_box.label(text="光照模板说明:", icon='INFO')
         col = info_box.column(align=True)
         col.label(text="为选中的网格物体创建LightMap和MaterialMap材质。")
+        col.label(text="材质名称自动使用活动物体的第一个材质名。")
         col.label(text="仅创建材质节点，不生成UV层。")
         
         box = layout.box()
