@@ -319,10 +319,6 @@ class ModModelEFMI:
             ("ShaderOverridevs1005", "1b835d0e8dbbfb8f", "203"),
             ("ShaderOverridevs1006", "06c94dd56f447210", "204"),
             ("ShaderOverridevs1007", "f47b1f797f5831d0", "204"),
-            ("ShaderOverridevs1008", "c4e7c530806e7424", "203"),
-            ("ShaderOverridevs1009", "06c94dd56f447210", "204"),
-            ("ShaderOverridevs1010", "c568b3b3834b0e7f", "204"),
-            ("ShaderOverridevs1011", "0ba16985f9f74f8d", "204"),
         ]
         
         
