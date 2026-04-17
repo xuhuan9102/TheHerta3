@@ -653,6 +653,9 @@ class ObjUtils:
         cls.select_obj(obj)
 
         if obj and obj.type == 'MESH':
+            if len(obj.vertex_groups) == 0:
+                raise RuntimeError(f"物体 '{obj.name}' 没有顶点组，无法执行归一化操作")
+            
             if bpy.context.mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
             
