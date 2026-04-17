@@ -64,15 +64,19 @@ class BMTP_OT_SetVertexColor(bpy.types.Operator):
         color_rgba = props.vc_color[:]
         for obj in selected_objects:
             mesh = obj.data
-            color_attr = mesh.color_attributes.active_color or \
-                         mesh.color_attributes.new(name="COLOR", type='BYTE_COLOR', domain='CORNER')
+            color_attr = mesh.color_attributes.active_color
+            if not color_attr or color_attr.domain != 'CORNER':
+                if color_attr:
+                    mesh.color_attributes.remove(color_attr)
+                color_attr = mesh.color_attributes.new(name="COLOR", type='BYTE_COLOR', domain='CORNER')
+            
             num_loops = len(mesh.loops)
-            color_data = np.zeros(num_loops * 4, dtype=np.float32)
             if props.vc_mode == 'ALPHA_ONLY':
+                color_data = np.zeros(num_loops * 4, dtype=np.float32)
                 color_attr.data.foreach_get("color", color_data)
                 color_data[3::4] = color_rgba[3]
             else:
-                color_data = np.tile(color_rgba, num_loops)
+                color_data = np.tile(color_rgba, num_loops).astype(np.float32)
             color_attr.data.foreach_set("color", color_data)
             mesh.update()
         self.report({'INFO'}, f"顶点色操作完成，处理了 {len(selected_objects)} 个对象")
