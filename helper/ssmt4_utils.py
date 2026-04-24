@@ -117,16 +117,16 @@ class SSMT4Utils:
     def parse_ssmt4_folder_name(folder_name: str) -> Optional[Dict[str, str]]:
         """
         解析SSMT4格式的文件夹名称
-        
+
         Args:
             folder_name: SSMT4格式的文件夹名称，如 "DrawIB-IndexCount-FirstIndex"
-            
+
         Returns:
             包含draw_ib、index_count、first_index、unique_str的字典，如果不是SSMT4格式则返回None
         """
         if not SSMT4Utils.is_ssmt4_format(folder_name):
             return None
-        
+
         parts = folder_name.split("-")
         if len(parts) >= 3:
             return {
@@ -136,6 +136,54 @@ class SSMT4Utils:
                 "unique_str": folder_name
             }
         return None
+    
+    @staticmethod
+    def is_ssmt4_object_name(obj_name: str) -> bool:
+        """
+        检测物体名称是否符合SSMT4格式
+
+        Args:
+            obj_name: 物体名称
+
+        Returns:
+            bool: 如果符合SSMT4格式则返回True，否则返回False
+        """
+        if not obj_name:
+            return False
+        
+        # 检查是否包含至少两个连字符
+        parts = obj_name.split("-")
+        if len(parts) < 3:
+            return False
+        
+        # 检查是否包含点分隔符（可选）
+        if "." in obj_name:
+            prefix_part = obj_name.split(".", 1)[0]
+            parts = prefix_part.split("-")
+            return len(parts) >= 3
+        
+        return True
+    
+    @staticmethod
+    def detect_export_mode_by_object_names(object_names: list) -> bool:
+        """
+        根据物体名称检测导出模式
+
+        Args:
+            object_names: 物体名称列表
+
+        Returns:
+            bool: 如果检测到SSMT4格式的物体名称则返回True，否则返回False
+        """
+        if not object_names:
+            return False
+        
+        # 检查是否有任何物体名称符合SSMT4格式
+        for obj_name in object_names:
+            if SSMT4Utils.is_ssmt4_object_name(obj_name):
+                return True
+        
+        return False
     
     @staticmethod
     def _has_type_subfolder(folder_path: str) -> bool:

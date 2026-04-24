@@ -321,8 +321,32 @@ class SSMTGenerateModBlueprint(bpy.types.Operator):
 
                 # 强兼支持
                 elif GlobalConfig.logic_name == LogicName.EFMI:
-                    from ..games.efmi import ModModelEFMI
+                    # 自动检测导出模式
+                    from ..helper.ssmt4_utils import SSMT4Utils
+                    
+                    # 首先创建蓝图模型来获取物体名称
+                    from ..common.export.blueprint_model_v4 import BluePrintModel_V4
+                    branch_model = BluePrintModel_V4()
+                    tree = BlueprintExportHelper.get_current_blueprint_tree()
+                    if tree:
+                        branch_model.initialize_from_tree(tree)
+                    
+                    # 从蓝图模型中获取物体名称
+                    object_names = []
+                    for obj_model in branch_model.ordered_draw_obj_data_model_list:
+                        object_names.append(obj_model.obj_name)
+                    
+                    auto_detect_ssmt4 = SSMT4Utils.detect_export_mode_by_object_names(object_names)
+                    
+                    # 如果用户明确设置了SSMT4模式，则使用用户设置
                     use_ssmt4 = Properties_ImportModel.use_ssmt4()
+                    if not use_ssmt4:
+                        # 如果用户没有设置，则使用自动检测结果
+                        use_ssmt4 = auto_detect_ssmt4
+                    
+                    print(f"[GenerateMod] 导出模式: {'SSMT4' if use_ssmt4 else 'SSMT3'}")
+                    
+                    from ..games.efmi import ModModelEFMI
                     migoto_mod_model = ModModelEFMI(skip_buffer_export=preview_export_only, use_ssmt4=use_ssmt4)
                     migoto_mod_model.generate_unity_vs_config_ini()
 
@@ -1572,7 +1596,19 @@ class SSMTQuickPartialExport(bpy.types.Operator):
         
         print(f"[QuickExport] 开始快速局部导出，选中物体数量: {len(selected_objects)}")
         
+        # 自动检测导出模式
+        object_names = [obj.name for obj in selected_objects]
+        from ..helper.ssmt4_utils import SSMT4Utils
+        auto_detect_ssmt4 = SSMT4Utils.detect_export_mode_by_object_names(object_names)
+        
+        # 如果用户明确设置了SSMT4模式，则使用用户设置
         use_ssmt4 = Properties_ImportModel.use_ssmt4()
+        if not use_ssmt4:
+            # 如果用户没有设置，则使用自动检测结果
+            use_ssmt4 = auto_detect_ssmt4
+        
+        print(f"[QuickExport] 导出模式: {'SSMT4' if use_ssmt4 else 'SSMT3'}")
+        
         if use_ssmt4:
             GlobalConfig.read_from_main_json_ssmt4()
         else:

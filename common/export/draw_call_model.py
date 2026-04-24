@@ -74,39 +74,86 @@ class ObjRuleName:
         except Exception as e:
             print(f"[ObjRuleName] 读取 Config.json 失败: {e}")
 
-    def __init__(self, obj_name: str):
+    def __init__(self, obj_name: str, strict_mode: bool = True):
         self.obj_name = obj_name
         self.draw_ib = ""
         self.index_count = ""
         self.first_index = ""
         self.obj_alias_name = ""
-        self.objname_parse_error_tips = "Obj名称规则为: DrawIB-IndexCount-FirstIndex.AliasName,例如[67f829fc-2653-0.头发]第一个.前面的内容要符合规则,后面出现的内容是可以自定义的"
+        self.strict_mode = strict_mode
+        
+        if strict_mode:
+            self.objname_parse_error_tips = (
+                "Obj名称规则为: DrawIB-IndexCount-FirstIndex.AliasName,例如[67f829fc-2653-0.头发]\n"
+                "第一个.前面的内容要符合规则,后面出现的内容是可以自定义的\n"
+                "提示: 如果你使用的是第三代格式(DrawIB-Component.Alias)，请关闭 'SSMT4 Alpha测试' 选项"
+            )
+        else:
+            self.objname_parse_error_tips = (
+                "Obj名称规则为: DrawIB-Component.AliasName,例如[67f829fc-1.头发]\n"
+                "第一个.前面的内容要符合规则,后面出现的内容是可以自定义的"
+            )
+        
+        self._parse_obj_name()
+
+        self._try_apply_config_alias()
+    
+    def _parse_obj_name(self):
+        import re
         
         if "." in self.obj_name:
             obj_name_total_split = self.obj_name.split(".", 1)
             prefix_part = obj_name_total_split[0]
             
             if len(obj_name_total_split) < 2:
-                raise Exception("Obj名称解析错误: " + self.obj_name + "  不包含'.'分隔符\n" + self.objname_parse_error_tips)
-            self.obj_alias_name = obj_name_total_split[1] if len(obj_name_total_split) > 1 else ""
+                if self.strict_mode:
+                    raise Exception("Obj名称解析错误: " + self.obj_name + "  不包含'.'分隔符\n" + self.objname_parse_error_tips)
+                else:
+                    self.obj_alias_name = ""
+            else:
+                self.obj_alias_name = obj_name_total_split[1]
             
-            import re
             normalized_prefix = re.sub(r'[(_\[\{]', '-', prefix_part)
-            
             obj_name_split = normalized_prefix.split("-")
-            
             non_empty_parts = [p for p in obj_name_split if p.strip()]
             
-            if len(non_empty_parts) < 3:
-                raise Exception("Obj名称解析错误: " + self.obj_name + "  '-'分隔符数量不足，至少需要2个\n" + self.objname_parse_error_tips + f"\n解析后的部分: {non_empty_parts}")
+            if self.strict_mode:
+                if len(non_empty_parts) < 3:
+                    raise Exception("Obj名称解析错误: " + self.obj_name + "  '-'分隔符数量不足，至少需要2个\n" + self.objname_parse_error_tips + f"\n解析后的部分: {non_empty_parts}")
+                else:
+                    self.draw_ib = non_empty_parts[0]
+                    self.index_count = non_empty_parts[1]
+                    self.first_index = non_empty_parts[2]
             else:
-                self.draw_ib = non_empty_parts[0]
-                self.index_count = non_empty_parts[1]
-                self.first_index = non_empty_parts[2]
+                if len(non_empty_parts) >= 2:
+                    self.draw_ib = non_empty_parts[0]
+                    self.index_count = non_empty_parts[1]
+                    self.first_index = non_empty_parts[2] if len(non_empty_parts) >= 3 else "0"
+                elif len(non_empty_parts) >= 1:
+                    self.draw_ib = non_empty_parts[0]
+                    self.index_count = "0"
+                    self.first_index = "0"
+                else:
+                    if self.strict_mode:
+                        raise Exception("Obj名称解析错误: " + self.obj_name + "  无法解析\n" + self.objname_parse_error_tips)
         else:
-            raise Exception("Obj名称解析错误: " + self.obj_name + "  不包含'.'分隔符\n" + self.objname_parse_error_tips)
-
-        self._try_apply_config_alias()
+            normalized_prefix = re.sub(r'[(_\[\{]', '-', self.obj_name)
+            obj_name_split = normalized_prefix.split("-")
+            non_empty_parts = [p for p in obj_name_split if p.strip()]
+            
+            if self.strict_mode:
+                raise Exception("Obj名称解析错误: " + self.obj_name + "  不包含'.'分隔符\n" + self.objname_parse_error_tips)
+            else:
+                if len(non_empty_parts) >= 2:
+                    self.draw_ib = non_empty_parts[0]
+                    self.index_count = non_empty_parts[1]
+                    self.first_index = non_empty_parts[2] if len(non_empty_parts) >= 3 else "0"
+                elif len(non_empty_parts) >= 1:
+                    self.draw_ib = non_empty_parts[0]
+                    self.index_count = "0"
+                    self.first_index = "0"
+                else:
+                    raise Exception("Obj名称解析错误: " + self.obj_name + "  无法解析\n" + self.objname_parse_error_tips)
 
     def _try_apply_config_alias(self):
         if not self.draw_ib:
@@ -129,13 +176,23 @@ class DrawCallModel:
     vertex_count: int = field(init=False, repr=False, default=0)
     index_offset: int = field(init=False, repr=False, default=0)
     _skip_auto_parse: bool = field(init=False, repr=False, default=False)
+    _strict_mode: bool = field(init=False, repr=False, default=None)
 
     def __post_init__(self):
         if self._skip_auto_parse:
             self.display_name = self.obj_name
             return
+        
+        strict_mode = self._strict_mode
+        if strict_mode is None:
+            try:
+                from ...config.properties_import_model import Properties_ImportModel
+                strict_mode = Properties_ImportModel.use_ssmt4()
+            except Exception:
+                strict_mode = True
+        
         try:
-            obj_rule_name = ObjRuleName(self.obj_name)
+            obj_rule_name = ObjRuleName(self.obj_name, strict_mode=strict_mode)
             self.match_draw_ib = obj_rule_name.draw_ib
             self.match_index_count = obj_rule_name.index_count
             self.match_first_index = obj_rule_name.first_index

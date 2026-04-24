@@ -659,18 +659,30 @@ class ObjUtils:
             if bpy.context.mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
             
-            if cls.is_all_vertex_groups_locked(obj):
-                print(f"警告: 对象 {obj.name} 的所有顶点组均被锁定，正在尝试解锁以执行归一化...")
-                for vg in obj.vertex_groups:
+            # 检查并解锁所有顶点组
+            locked_groups = []
+            for vg in obj.vertex_groups:
+                if vg.lock_weight:
+                    locked_groups.append(vg)
                     vg.lock_weight = False
+            
+            if locked_groups:
+                print(f"警告: 对象 {obj.name} 的 {len(locked_groups)} 个顶点组被锁定，已解锁以执行归一化...")
+                bpy.context.view_layer.update()
             
             bpy.context.view_layer.objects.active = obj
             obj.select_set(True)
             bpy.context.view_layer.update()
             
-            bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
-            bpy.ops.object.vertex_group_normalize_all()
-            bpy.ops.object.mode_set(mode='OBJECT')
+            try:
+                bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+                bpy.ops.object.vertex_group_normalize_all()
+                bpy.ops.object.mode_set(mode='OBJECT')
+            except RuntimeError as e:
+                print(f"执行归一化操作时出错: {e}")
+                # 尝试在OBJECT模式下直接操作
+                bpy.ops.object.mode_set(mode='OBJECT')
+                print(f"已切换到OBJECT模式，跳过归一化操作")
         else:
             print("没有找到合适的网格对象来执行规范化操作。")
 
